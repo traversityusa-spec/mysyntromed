@@ -1,0 +1,1154 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+  addDoc,
+  updateDoc,
+  setDoc,
+  serverTimestamp,
+  type DocumentData,
+  type QuerySnapshot,
+  type Unsubscribe,
+} from 'firebase/firestore';
+import { auth, db } from './firebase';
+import { rtdb } from './firebase';
+import { ref, set, onValue, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
+import { encryption } from './encryption';
+export { db };
+
+const ENCRYPT_MESSAGES = true;
+const CONVERSATION_KEYS_COLLECTION = 'conversation_keys';
+
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+export type UserProfile = {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  role: 'client' | 'admin' | 'specialist';
+  createdAt: Date;
+  updatedAt: Date;
+  isNewUser?: boolean;
+  clinicName?: string;
+  phone?: string;
+  photoURL?: string;
+  assignedSpecialistId?: string;
+  assignedSpecialistName?: string;
+  specialties?: string[];
+  yearsExperience?: number;
+  bio?: string;
+  specialistInviteVerified?: boolean;
+};
+
+export type Message = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  receiverId: string;
+  text: string;
+  read: boolean;
+  status?: 'sent' | 'delivered' | 'read';
+  createdAt: Date;
+  encrypted?: boolean;
+  iv?: string;
+};
+
+export type ConversationKey = {
+  key: string;
+  createdAt: Date;
+  createdBy: string;
+};
+
+export type Request = {
+  id: string;
+  userId: string;
+  type: string;
+  description: string;
+  priority: 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'in_progress' | 'completed';
+  submittedAt: Date;
+  completedAt?: Date;
+  assignedAt?: Date;
+  specialistId?: string;
+  specialistName?: string;
+  clientName?: string;
+  clientEmail?: string;
+  seen?: boolean;
+  assignmentRequestId?: string;
+};
+
+export type ScheduledCall = {
+  id: string;
+  userId: string;
+  title: string;
+  date: Date;
+  specialistId: string;
+  specialistName: string;
+  meetingLink?: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  createdAt: Date;
+};
+
+export type CallSession = {
+  id: string;
+  callerId: string;
+  callerName: string;
+  callerRole: 'client' | 'admin' | 'specialist';
+  receiverId: string;
+  receiverName: string;
+  receiverRole: 'client' | 'admin' | 'specialist';
+  meetingLink: string;
+  status: 'ringing' | 'accepted' | 'rejected' | 'ended';
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ActivityItem = {
+  id: string;
+  userId: string;
+  title: string;
+  type: string;
+  specialistId: string;
+  specialistName: string;
+  status: 'completed' | 'in_progress' | 'pending';
+  createdAt: Date;
+};
+
+export type AppNotification = {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'request' | 'message' | 'call' | 'system' | 'assignment';
+  read: boolean;
+  createdAt: Date;
+};
+
+export type SpecialistRating = {
+  id: string;
+  specialistId: string;
+  clientId: string;
+  rating: number;
+  comment?: string;
+  createdAt: Date;
+};
+
+const getConversationKeyId = (userId1: string, userId2: string): string => {
+  const sorted = [userId1, userId2].sort();
+  return `${sorted[0]}_${sorted[1]}`;
+};
+
+export const conversationKeyService = {
+  async getOrCreateKey(userId1: string, userId2: string): Promise<string> {
+    const keyId = getConversationKeyId(userId1, userId2);
+    const keyRef = doc(db, CONVERSATION_KEYS_COLLECTION, keyId);
+    const keySnap = await getDoc(keyRef);
+
+    if (keySnap.exists() && keySnap.data().key) {
+      return keySnap.data().key;
+    }
+
+    const newKey = await encryption.exportKey(await encryption.generateKey());
+    await setDoc(keyRef, {
+      key: newKey,
+      createdAt: serverTimestamp(),
+      createdBy: userId1,
+    });
+    return newKey;
+  },
+
+  async getKey(userId1: string, userId2: string): Promise<string | null> {
+    const keyId = getConversationKeyId(userId1, userId2);
+    const keyRef = doc(db, CONVERSATION_KEYS_COLLECTION, keyId);
+    const keySnap = await getDoc(keyRef);
+
+    if (keySnap.exists() && keySnap.data().key) {
+      return keySnap.data().key;
+    }
+    return null;
+  },
+};
+
+export const typingService = {
+  setTyping(userId: string, otherUserId: string, isTyping: boolean): void {
+    const typingRef = ref(rtdb, `/typing/${otherUserId}/${userId}`);
+    if (isTyping) {
+      set(typingRef, {
+        typing: true,
+        timestamp: Date.now(),
+      });
+      onDisconnect(typingRef).remove();
+    } else {
+      set(typingRef, null);
+    }
+  },
+
+  subscribeToTyping(userId: string, otherUserId: string, callback: (isTyping: boolean) => void): () => void {
+    const typingRef = ref(rtdb, `/typing/${userId}/${otherUserId}`);
+    const unsub = onValue(typingRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.val();
+        const isStale = Date.now() - data.timestamp > 5000;
+        callback(!isStale && data.typing);
+      } else {
+        callback(false);
+      }
+    });
+    return unsub;
+  },
+};
+
+export const notificationSoundService = {
+  playIncomingSound(): void {
+    try {
+      const ctx = new (window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
+      const playTone = (freq: number, delay: number) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.value = 0.04;
+        g.gain.setValueAtTime(0.04, ctx.currentTime + delay);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + 0.15);
+      };
+      playTone(880, 0);
+      playTone(1100, 0.1);
+      setTimeout(() => ctx.close(), 300);
+    } catch {}
+  },
+
+  playOutgoingSound(): void {
+    try {
+      const ctx = new (window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 600;
+      gain.gain.value = 0.03;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+      osc.onended = () => ctx.close();
+    } catch {}
+  },
+
+  subscribeToSounds(userId: string, callback: (type: 'incoming' | 'outgoing') => void): () => void {
+    const soundRef = ref(rtdb, `/sounds/${userId}`);
+    const unsub = onValue(soundRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.val();
+        if (Date.now() - data.timestamp < 2000) {
+          callback(data.type);
+          set(ref(rtdb, `/sounds/${userId}`), null);
+        }
+      }
+    });
+    return unsub;
+  },
+
+  broadcastSound(targetUserId: string, type: 'incoming' | 'outgoing'): void {
+    set(ref(rtdb, `/sounds/${targetUserId}`), {
+      type,
+      timestamp: Date.now(),
+    });
+  },
+};
+
+export const userService = {
+  async getProfile(uid: string): Promise<UserProfile | null> {
+    const docRef = doc(db, 'users', uid);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        uid: docSnap.id,
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      } as UserProfile;
+    }
+    return null;
+  },
+
+  async createProfile(uid: string, email: string | null, role: string = 'client'): Promise<void> {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      uid,
+      email,
+      role,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      isNewUser: true,
+    }).catch(async () => {
+      await import('firebase/firestore').then(async ({ setDoc }) => {
+        await setDoc(docRef, {
+          uid,
+          email,
+          role,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          isNewUser: true,
+        });
+      });
+    });
+  },
+
+  async updateProfile(uid: string, data: Partial<UserProfile>): Promise<void> {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: serverTimestamp(),
+      isNewUser: false,
+    });
+  },
+
+  async markUserAsOld(uid: string): Promise<void> {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      isNewUser: false,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  subscribeToProfile(uid: string, callback: (profile: UserProfile | null) => void): Unsubscribe {
+    const docRef = doc(db, 'users', uid);
+    return onSnapshot(docRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        callback({
+          uid: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as UserProfile);
+      } else {
+        callback(null);
+      }
+    });
+  },
+  async assignSpecialist(userId: string, specialistId: string, specialistName: string): Promise<void> {
+    const docRef = doc(db, 'users', userId);
+    await updateDoc(docRef, {
+      assignedSpecialistId: specialistId,
+      assignedSpecialistName: specialistName,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  async getAssignedClients(specialistId: string): Promise<UserProfile[]> {
+    const q = query(
+      collection(db, 'users'),
+      where('assignedSpecialistId', '==', specialistId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        uid: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+        updatedAt: data.updatedAt?.toDate?.() || new Date(),
+      } as UserProfile;
+    });
+  },
+
+  subscribeToAssignedClients(specialistId: string, callback: (clients: UserProfile[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'users'),
+      where('assignedSpecialistId', '==', specialistId)
+    );
+    return onSnapshot(q, (snap) => {
+      const clients = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          uid: d.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          updatedAt: data.updatedAt?.toDate?.() || new Date(),
+        } as UserProfile;
+      });
+      callback(clients);
+    });
+  },
+};
+
+export const messageService = {
+  async getConversations(userId: string): Promise<Message[]> {
+    const q = query(
+      collection(db, 'messages'),
+      where('participants', 'array-contains', userId),
+      orderBy('createdAt', 'desc'),
+      limit(200)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+    })) as Message[];
+  },
+
+  async decryptMessage(message: Message, userId: string): Promise<Message> {
+    if (!message.encrypted || !message.iv) {
+      return message;
+    }
+    try {
+      const key = await conversationKeyService.getKey(userId, message.senderId);
+      if (!key) {
+        return message;
+      }
+      const cryptoKey = await encryption.importKey(key);
+      const decryptedText = await encryption.decryptMessage(message.text, message.iv, cryptoKey);
+      return { ...message, text: decryptedText };
+    } catch {
+      return message;
+    }
+  },
+
+  async decryptMessages(messages: Message[], userId: string): Promise<Message[]> {
+    return Promise.all(messages.map((msg) => this.decryptMessage(msg, userId)));
+  },
+
+  subscribeToUserMessages(
+    userId: string,
+    callback: (messages: Message[]) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, 'messages'),
+      where('participants', 'array-contains', userId),
+      orderBy('createdAt', 'desc'),
+      limit(200)
+    );
+
+    return onSnapshot(q, async (snapshot) => {
+      const messages = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Message[];
+
+      if (ENCRYPT_MESSAGES) {
+        const decrypted = await this.decryptMessages(messages, userId);
+        callback(decrypted);
+      } else {
+        callback(messages);
+      }
+    });
+  },
+
+  async getConversation(userId: string, otherUserId: string): Promise<Message[]> {
+    const q = query(
+      collection(db, 'messages'),
+      where('participants', 'array-contains', userId),
+      orderBy('createdAt', 'asc'),
+      limit(200)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          senderId: data.senderId,
+          senderName: data.senderName,
+          senderRole: data.senderRole,
+          receiverId: data.receiverId,
+          text: data.text,
+          read: data.read || false,
+          status: data.status || (data.read ? 'read' : 'sent'),
+          createdAt: data.createdAt?.toDate() || new Date(),
+        } as Message;
+      })
+      .filter((msg) => 
+        (msg.senderId === userId && msg.receiverId === otherUserId) ||
+        (msg.senderId === otherUserId && msg.receiverId === userId)
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  },
+
+  sanitizeText(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/[<>]/g, '').substring(0, 5000);
+  },
+
+  async sendMessage(message: Omit<Message, 'id' | 'createdAt'>): Promise<string> {
+    const sanitizedText = this.sanitizeText(message.text);
+    let finalMessage = { ...message, text: sanitizedText };
+    let encrypted = false;
+
+    if (ENCRYPT_MESSAGES) {
+      try {
+        const key = await conversationKeyService.getOrCreateKey(message.senderId, message.receiverId);
+        const cryptoKey = await encryption.importKey(key);
+        const { encrypted: encryptedText, iv } = await encryption.encryptMessage(message.text, cryptoKey);
+        finalMessage = { ...message, text: encryptedText, iv, encrypted: true };
+        encrypted = true;
+      } catch (err) {
+        console.error('Encryption failed, sending plain text:', err);
+      }
+    }
+
+    const docRef = await addDoc(collection(db, 'messages'), {
+      ...finalMessage,
+      participants: [finalMessage.senderId, finalMessage.receiverId],
+      status: finalMessage.status || 'sent',
+      createdAt: serverTimestamp(),
+    });
+
+    notificationSoundService.broadcastSound(finalMessage.receiverId, 'incoming');
+
+    try {
+      await notificationService.addNotification({
+        userId: finalMessage.receiverId,
+        title: `New Message from ${finalMessage.senderName}`,
+        message: finalMessage.text.length > 50 ? finalMessage.text.substring(0, 50) + '...' : finalMessage.text,
+        type: 'message'
+      });
+
+      const token = await auth.currentUser?.getIdToken();
+      if (token) {
+        const loginUrl = window.location.origin;
+        fetch(`${API_BASE_URL}/api/messages/notify-offline`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            receiverId: finalMessage.receiverId,
+            senderName: finalMessage.senderName,
+            messagePreview: finalMessage.text,
+            loginUrl: loginUrl
+          })
+        }).catch(e => console.error('Error notifying offline user:', e));
+      }
+    } catch (e) {
+      console.error('Failed to send message notifications:', e);
+    }
+
+    return docRef.id;
+  },
+
+  async markDelivered(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+    const { writeBatch } = await import('firebase/firestore');
+    const batch = writeBatch(db);
+    messageIds.forEach((id) => {
+      const refDoc = doc(db, 'messages', id);
+      batch.update(refDoc, { status: 'delivered' });
+    });
+    await batch.commit();
+  },
+
+  async markRead(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+    const { writeBatch } = await import('firebase/firestore');
+    const batch = writeBatch(db);
+    messageIds.forEach((id) => {
+      const refDoc = doc(db, 'messages', id);
+      batch.update(refDoc, { status: 'read', read: true });
+    });
+    await batch.commit();
+  },
+
+  subscribeToConversation(
+    userId: string,
+    otherUserId: string,
+    callback: (messages: Message[]) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, 'messages'),
+      where('participants', 'array-contains', userId),
+      orderBy('createdAt', 'asc')
+    );
+
+    return onSnapshot(q, async (snapshot) => {
+      const messages = snapshot.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            senderId: data.senderId,
+            senderName: data.senderName,
+            senderRole: data.senderRole,
+            receiverId: data.receiverId,
+            text: data.text,
+            read: data.read || false,
+            status: data.status || (data.read ? 'read' : 'sent'),
+            createdAt: data.createdAt?.toDate() || new Date(),
+            iv: data.iv,
+            encrypted: data.encrypted,
+          } as Message;
+        })
+        .filter((msg) =>
+          (msg.senderId === userId && msg.receiverId === otherUserId) ||
+          (msg.senderId === otherUserId && msg.receiverId === userId)
+        )
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+      if (ENCRYPT_MESSAGES) {
+        const decrypted = await this.decryptMessages(messages, userId);
+        callback(decrypted);
+      } else {
+        callback(messages);
+      }
+    });
+  },
+};
+
+export const requestService = {
+  async getRequests(userId: string): Promise<Request[]> {
+    try {
+      const q = query(
+        collection(db, 'requests'),
+        where('userId', '==', userId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
+          completedAt: doc.data().completedAt?.toDate(),
+          seen: doc.data().seen || false,
+        }))
+        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      return [];
+    }
+  },
+
+
+  async createRequest(request: Omit<Request, 'id' | 'submittedAt' | 'status'>): Promise<string> {
+    const currentUid = auth.currentUser?.uid;
+    const resolvedUserId = currentUid || request.userId;
+    if (!resolvedUserId) {
+      throw new Error('Not authenticated');
+    }
+
+    const docRef = await addDoc(collection(db, 'requests'), {
+      ...request,
+      userId: resolvedUserId,
+      status: 'pending',
+      seen: false,
+      submittedAt: serverTimestamp(),
+    });
+
+    try {
+      await addDoc(collection(db, 'activity'), {
+        title: `New request: ${request.type}`,
+        type: request.type,
+        userId: request.userId,
+        specialistId: request.specialistId,
+        specialistName: request.specialistName,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Failed to log activity for request', e);
+    }
+
+    try {
+      await notificationService.notifyAdminsOfNewRequest(
+        request.clientName || request.clientEmail || 'A client',
+        request.clientEmail || '',
+        request.type
+      );
+      await notificationService.notifyClientRequestReceived(resolvedUserId);
+    } catch (e) {
+      console.error('Failed to notify admins of request', e);
+    }
+
+    return docRef.id;
+  },
+
+  async getRequestsForSpecialist(specialistId: string): Promise<Request[]> {
+    try {
+      const q = query(
+        collection(db, 'requests'),
+        where('specialistId', '==', specialistId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
+          completedAt: doc.data().completedAt?.toDate(),
+          assignedAt: doc.data().assignedAt?.toDate?.(),
+          seen: doc.data().seen || false,
+        }))
+        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+    } catch (error) {
+      console.error('Error fetching requests for specialist:', error);
+      return [];
+    }
+  },
+
+  async getAllRequests(): Promise<Request[]> {
+    const q = query(collection(db, 'requests'), orderBy('submittedAt', 'desc'), limit(100));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      submittedAt: doc.data().submittedAt?.toDate() || new Date(),
+      completedAt: doc.data().completedAt?.toDate(),
+      assignedAt: doc.data().assignedAt?.toDate?.(),
+      seen: doc.data().seen || false,
+    })) as Request[];
+  },
+
+  async assignSpecialistToRequest(requestId: string, specialistId: string, specialistName: string): Promise<void> {
+    const docRef = doc(db, 'requests', requestId);
+    await updateDoc(docRef, {
+      specialistId,
+      specialistName,
+      status: 'in_progress',
+      assignedAt: serverTimestamp(),
+    });
+  },
+
+  async completeAssignmentRequest(userId: string, specialistId: string, specialistName: string): Promise<void> {
+    const q = query(
+      collection(db, 'requests'),
+      where('userId', '==', userId),
+      where('type', '==', 'Specialist Assignment'),
+      where('status', '==', 'pending')
+    );
+    const snap = await getDocs(q);
+    const batchUpdates: Promise<void>[] = [];
+    
+    for (const requestDoc of snap.docs) {
+      batchUpdates.push(
+        updateDoc(doc(db, 'requests', requestDoc.id), {
+          specialistId,
+          specialistName,
+          status: 'completed',
+          assignedAt: serverTimestamp(),
+          completedAt: serverTimestamp(),
+        })
+      );
+    }
+    
+    await Promise.all(batchUpdates);
+  },
+
+  subscribeToAllPendingRequests(callback: (requests: Request[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'requests'),
+      orderBy('submittedAt', 'desc'),
+      limit(100)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
+          completedAt: doc.data().completedAt?.toDate(),
+          assignedAt: doc.data().assignedAt?.toDate?.(),
+          seen: doc.data().seen || false,
+        })) as Request[];
+      callback(requests);
+    });
+  },
+
+  subscribeToRequests(userId: string, callback: (requests: Request[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'requests'),
+      where('userId', '==', userId)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
+          completedAt: doc.data().completedAt?.toDate(),
+          assignedAt: doc.data().assignedAt?.toDate?.(),
+          seen: doc.data().seen || false,
+        }))
+        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+      callback(requests);
+    });
+  },
+};
+
+export const callService = {
+  async getUpcomingCalls(userId: string, role: 'client' | 'admin' | 'specialist' = 'client'): Promise<ScheduledCall[]> {
+    const q = query(
+      collection(db, 'calls'),
+      where(role === 'specialist' ? 'specialistId' : 'userId', '==', userId)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      }))
+      .filter((call: any) => call.status === 'scheduled')
+      .sort((a: any, b: any) => a.date.getTime() - b.date.getTime()) as ScheduledCall[];
+  },
+
+  async getPastCalls(userId: string, role: 'client' | 'admin' | 'specialist' = 'client'): Promise<ScheduledCall[]> {
+    const q = query(
+      collection(db, 'calls'),
+      where(role === 'specialist' ? 'specialistId' : 'userId', '==', userId)
+    );
+    const snapshot = await getDocs(q);
+    const calls = snapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      }))
+      .filter((call: any) => call.status === 'completed' || call.status === 'cancelled')
+      .sort((a: any, b: any) => b.date.getTime() - a.date.getTime()) as ScheduledCall[];
+    return calls.slice(0, 20);
+  },
+
+  async scheduleCall(call: Omit<ScheduledCall, 'id' | 'createdAt' | 'status'>): Promise<string> {
+    const array = new Uint8Array(12);
+    crypto.getRandomValues(array);
+    const meetingId = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+    const docRef = await addDoc(collection(db, 'calls'), {
+      ...call,
+      status: 'scheduled',
+      meetingLink: `https://meet.jit.si/mysyntromed-${meetingId}`,
+      createdAt: serverTimestamp(),
+    });
+
+    await addDoc(collection(db, 'activity'), {
+      title: `Call scheduled: ${call.title}`,
+      type: 'Call',
+      userId: call.userId,
+      specialistId: call.specialistId,
+      specialistName: call.specialistName,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    });
+
+    return docRef.id;
+  },
+};
+
+export const liveCallService = {
+  async createSession(input: Omit<CallSession, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Promise<string> {
+    const docRef = await addDoc(collection(db, 'call_sessions'), {
+      ...input,
+      participants: [input.callerId, input.receiverId],
+      status: 'ringing',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return docRef.id;
+  },
+
+  async updateStatus(sessionId: string, status: CallSession['status']): Promise<void> {
+    const docRef = doc(db, 'call_sessions', sessionId);
+    await updateDoc(docRef, { status, updatedAt: serverTimestamp() });
+  },
+
+  subscribeToIncomingCalls(userId: string, callback: (sessions: CallSession[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'call_sessions'),
+      where('receiverId', '==', userId),
+      where('status', '==', 'ringing')
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const sessions = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as CallSession;
+      });
+      callback(sessions);
+    });
+  },
+
+  subscribeToSession(sessionId: string, callback: (session: CallSession | null) => void): Unsubscribe {
+    const docRef = doc(db, 'call_sessions', sessionId);
+    return onSnapshot(docRef, (snap) => {
+      if (!snap.exists()) {
+        callback(null);
+        return;
+      }
+      const data = snap.data();
+      callback({
+        id: snap.id,
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      } as CallSession);
+    });
+  },
+
+  subscribeToUserSessions(userId: string, callback: (sessions: CallSession[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'call_sessions'),
+      where('participants', 'array-contains', userId)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const sessions = snapshot.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+          } as CallSession;
+        })
+        .filter((s) => s.status !== 'ended' && s.status !== 'rejected');
+      callback(sessions);
+    });
+  },
+};
+
+export const activityService = {
+  async addActivity(data: Omit<ActivityItem, 'id' | 'createdAt'>): Promise<string> {
+    const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    const docRef = await addDoc(collection(db, 'activity'), {
+      ...data,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  },
+
+  async getActivity(userId: string, filter: 'today' | 'week' | 'month' = 'week'): Promise<ActivityItem[]> {
+    let startDate = new Date();
+    
+    if (filter === 'today') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (filter === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+    } else {
+      startDate.setMonth(startDate.getMonth() - 1);
+    }
+
+    const q = query(
+      collection(db, 'activity'),
+      where('userId', '==', userId)
+    );
+    
+    const snapshot = await getDocs(q);
+    const activities = snapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      }))
+      .filter((act: any) => act.createdAt >= startDate)
+      .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime()) as ActivityItem[];
+      
+    return activities.slice(0, 50);
+  },
+
+  subscribeToActivity(userId: string, callback: (activity: ActivityItem[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'activity'),
+      where('userId', '==', userId)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const activity = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate() || new Date(),
+        }))
+        .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime()) as ActivityItem[];
+      callback(activity.slice(0, 50));
+    });
+  },
+
+  subscribeToSpecialistActivity(specialistId: string, callback: (activity: ActivityItem[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'activity'),
+      where('specialistId', '==', specialistId)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const activity = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate() || new Date(),
+        }))
+        .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime()) as ActivityItem[];
+      callback(activity.slice(0, 50));
+    });
+  },
+};
+
+export const notificationService = {
+  async addNotification(input: Omit<AppNotification, 'id' | 'createdAt' | 'read'>): Promise<string> {
+    const docRef = await addDoc(collection(db, 'notifications'), {
+      ...input,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  },
+
+  async notifySpecialistAssignment(specialistId: string, clientName: string, clientEmail: string): Promise<void> {
+    await addDoc(collection(db, 'notifications'), {
+      userId: specialistId,
+      title: 'New Client Assignment',
+      message: `You have been assigned to ${clientName || clientEmail}. Check your messages to introduce yourself.`,
+      type: 'assignment',
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  async notifyClientAssignment(clientId: string, specialistName: string, specialistEmail: string): Promise<void> {
+    await addDoc(collection(db, 'notifications'), {
+      userId: clientId,
+      title: 'Specialist Assigned to You',
+      message: `${specialistName} has been assigned as your specialist. You can now message them for assistance.`,
+      type: 'assignment',
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  async notifyAdminsOfNewRequest(clientName: string, clientEmail: string, requestType: string): Promise<void> {
+    const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
+    await Promise.all(
+      adminSnap.docs.map((adminDoc) =>
+        addDoc(collection(db, 'notifications'), {
+          userId: adminDoc.id,
+          title: `New ${requestType} Request`,
+          message: `${clientName || clientEmail} has submitted a ${requestType} request. Please review and assign a specialist.`,
+          type: 'request',
+          read: false,
+          createdAt: serverTimestamp(),
+        })
+      )
+    );
+  },
+
+  async notifyClientRequestReceived(clientId: string): Promise<void> {
+    await addDoc(collection(db, 'notifications'), {
+      userId: clientId,
+      title: 'Request Received',
+      message: 'Your specialist request has been received. An admin will assign a specialist shortly.',
+      type: 'request',
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  async notifyAdminsOfDelayedReply(clientName: string, clientEmail: string, specialistName: string, lastMessageTime: Date): Promise<void> {
+    const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
+    const timeSinceMessage = Math.round((Date.now() - lastMessageTime.getTime()) / 60000);
+    await Promise.all(
+      adminSnap.docs.map((adminDoc) =>
+        addDoc(collection(db, 'notifications'), {
+          userId: adminDoc.id,
+          title: 'Delayed Specialist Response',
+          message: `${clientName || clientEmail} sent a message to ${specialistName} ${timeSinceMessage} minutes ago and has not received a response yet. Consider following up.`,
+          type: 'message',
+          read: false,
+          createdAt: serverTimestamp(),
+        })
+      )
+    );
+  },
+
+  subscribeToNotifications(userId: string, callback: (items: AppNotification[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+    return onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+        } as AppNotification;
+      });
+      callback(items);
+    });
+  },
+
+  async markAllRead(userId: string): Promise<void> {
+    const q = query(collection(db, 'notifications'), where('userId', '==', userId), where('read', '==', false));
+    const snap = await getDocs(q);
+    const { writeBatch } = await import('firebase/firestore');
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+    await batch.commit();
+  },
+
+  async getUnreadCount(userId: string): Promise<number> {
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId),
+      where('read', '==', false)
+    );
+    const snap = await getDocs(q);
+    return snap.size;
+  },
+};
+
+export const ratingService = {
+  async submitRating(input: Omit<SpecialistRating, 'id' | 'createdAt'>): Promise<string> {
+    const docRef = await addDoc(collection(db, 'ratings'), {
+      ...input,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  },
+
+  subscribeToRatings(specialistId: string, callback: (ratings: SpecialistRating[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'ratings'),
+      where('specialistId', '==', specialistId),
+      orderBy('createdAt', 'desc'),
+      limit(100)
+    );
+    return onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+        } as SpecialistRating;
+      });
+      callback(items);
+    });
+  },
+};

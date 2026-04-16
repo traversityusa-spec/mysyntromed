@@ -1,0 +1,33 @@
+# render.yaml - Render Auto-Deploy Configuration
+# Place this file in the ROOT of your repository
+
+services:
+  - type: web
+    name: mysyntromed-backend
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: FRONTEND_ORIGIN
+        value: https://mysyntromed.com
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: SERVICE_ACCOUNT_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: "MySyntroMed <noreply@mysyntromed.com>"

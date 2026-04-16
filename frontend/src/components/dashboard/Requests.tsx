@@ -1,0 +1,369 @@
+import { type FormEvent, useState } from 'react';
+import { AlertTriangle, Check, Clock, Eye, ListTodo, Plus, RefreshCw, X } from 'lucide-react';
+import { useRequests } from '@/lib/dashboard';
+
+const requestTypes = [
+  'Chart Prep',
+  'Patient Follow-Up',
+  'Appointment Scheduling',
+  'Insurance Verification',
+  'Administrative Task',
+  'Other',
+];
+
+const suggestedTasks: Record<string, string[]> = {
+  'Chart Prep': ['Prepare charts for tomorrow', 'Update patient information', 'Review medication lists'],
+  'Patient Follow-Up': ['Call patients for follow-up', 'Send reminder messages', 'Schedule follow-up appointments'],
+  'Appointment Scheduling': ['Schedule new appointments', 'Reschedule existing appointments', 'Confirm patient appointments'],
+  'Insurance Verification': ['Verify insurance coverage', 'Check eligibility', 'Submit prior authorization'],
+  'Administrative Task': ['Update patient records', 'Process paperwork', 'Coordinate with billing'],
+  Other: [],
+};
+
+const priorityColors = {
+  normal: 'bg-slate-100 text-slate-600',
+  high: 'bg-amber-100 text-amber-700',
+  urgent: 'bg-red-100 text-red-700',
+};
+
+const statusIcons = {
+  pending: Clock,
+  in_progress: RefreshCw,
+  completed: Check,
+};
+
+const statusColors = {
+  pending: 'bg-slate-100 text-slate-600',
+  in_progress: 'bg-blue-100 text-blue-700',
+  completed: 'bg-emerald-100 text-emerald-700',
+};
+
+const Requests = () => {
+  const { requests, loading, createRequest, refreshRequests } = useRequests();
+  const [showForm, setShowForm] = useState(false);
+  const [selectedType, setSelectedType] = useState<string>('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+  const [preferredTime, setPreferredTime] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedType || !description) return;
+
+    setSubmitting(true);
+    setError(null);
+    
+    try {
+      await createRequest({
+        type: selectedType,
+        description,
+        priority,
+        preferredTime,
+      });
+      setSubmitted(true);
+      setTimeout(() => {
+        setShowForm(false);
+        setSubmitted(false);
+        setSelectedType('');
+        setDescription('');
+        setPriority('normal');
+        setPreferredTime('');
+      }, 2000);
+    } catch (err) {
+      const error = err as { message?: string; code?: string };
+      const detail = error?.message || error?.code;
+      setError(detail ? `Failed to submit request: ${detail}` : 'Failed to submit request. Please try again.');
+      console.error('Error creating request:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getStatusIcon = (status: 'pending' | 'in_progress' | 'completed') => {
+    const Icon = statusIcons[status];
+    return <Icon size={14} className={status === 'in_progress' ? 'animate-spin' : ''} />;
+  };
+
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Requests</h1>
+          <p className="mt-1 text-slate-600">Submit and track your support requests</p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700"
+        >
+          <Plus size={18} />
+          Create New Request
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-navy-900">Create New Request</h2>
+            <button
+              onClick={() => setShowForm(false)}
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {submitted ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+                <Check size={32} className="text-emerald-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">Request Submitted!</h3>
+              <p className="mt-1 text-sm text-slate-500">Your specialist will begin working on it shortly.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Request Type</label>
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
+                >
+                  <option value="">Select a request type</option>
+                  {requestTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedType && suggestedTasks[selectedType]?.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-slate-700">Suggested tasks:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedTasks[selectedType].map((task) => (
+                      <button
+                        key={task}
+                        type="button"
+                        onClick={() => setDescription(task)}
+                        className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700 hover:bg-teal-100"
+                      >
+                        {task}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  required
+                  rows={4}
+                  placeholder="Describe what you need help with..."
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Priority</label>
+                  <div className="flex gap-2">
+                    {(['normal', 'high', 'urgent'] as const).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPriority(p)}
+                        className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                          priority === p
+                            ? p === 'urgent'
+                              ? 'border-red-300 bg-red-50 text-red-700'
+                              : p === 'high'
+                                ? 'border-amber-300 bg-amber-50 text-amber-700'
+                                : 'border-teal-300 bg-teal-50 text-teal-700'
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {p === 'urgent' && <AlertTriangle size={14} className="mr-1 inline" />}
+                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Preferred Completion Time</label>
+                  <input
+                    type="text"
+                    value={preferredTime}
+                    onChange={(e) => setPreferredTime(e.target.value)}
+                    placeholder="e.g., Today by 5 PM"
+                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || !selectedType || !description}
+                  className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Submit Request
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-navy-900">Requests List</h2>
+            <button
+              onClick={() => refreshRequests()}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <RefreshCw size={18} />
+            </button>
+          </div>
+        </div>
+        
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+          </div>
+        ) : requests && requests.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Request
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Date Submitted
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Priority
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Specialist
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {requests.map((request) => (
+                  <tr key={request.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                          <ListTodo size={18} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-900">{request.type}</p>
+                          <p className="text-sm text-slate-500">{request.description}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
+                      {formatDate(request.submittedAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${priorityColors[request.priority]}`}
+                      >
+                        {request.priority === 'urgent' && <AlertTriangle size={10} />}
+                        {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[request.status]}`}
+                      >
+                        {getStatusIcon(request.status)}
+                        {request.status === 'in_progress'
+                          ? 'In Progress'
+                          : request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
+                      <div className="flex flex-col gap-1">
+                        <span>{request.specialistName || 'Unassigned'}</span>
+                        {request.seen && (
+                          <span className="inline-flex max-w-fit items-center gap-1 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">
+                            <Eye size={10} />
+                            Viewed
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center py-12 text-slate-500">
+            <ListTodo size={48} className="mb-4 text-slate-300" />
+            <p className="text-lg font-medium">No requests yet</p>
+            <p className="mt-1 text-sm">Create your first request to get started</p>
+            <button
+              onClick={() => setShowForm(true)}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+            >
+              <Plus size={16} />
+              Create Request
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Requests;

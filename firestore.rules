@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.role == 'admin' ||
+        getUserRole(request.auth.uid) == 'admin'
+      );
+    }
+    
+    function isSpecialist() {
+      return signedIn() && (
+        request.auth.token.role == 'specialist' ||
+        getUserRole(request.auth.uid) == 'specialist'
+      );
+    }
+    
+    function isClient() {
+      return signedIn() && (
+        request.auth.token.role == 'client' ||
+        getUserRole(request.auth.uid) == 'client'
+      );
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (isOwner(userId) || isAdmin());
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if signedIn() && (request.auth.uid in request.resource.data.participants);
+      allow update: if signedIn() && (request.auth.uid in resource.data.participants);
+      allow delete: if isAdmin();
+    }
+
+    match /requests/{requestId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.specialistId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if isClient();
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.specialistId == request.auth.uid || 
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /calls/{callId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.specialistId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if signedIn();
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.specialistId == request.auth.uid || 
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /call_sessions/{sessionId} {
+      allow read: if signedIn() && (
+        resource.data.callerId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if signedIn();
+      allow update: if signedIn() && (
+        resource.data.callerId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid || 
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /activity/{activityId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if signedIn() && (request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || (signedIn() && request.resource.data.userId == request.auth.uid);
+      allow update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /invite_codes/{codeId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /otp_codes/{otpId} {
+      allow read: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /ratings/{ratingId} {
+      allow read: if signedIn();
+      allow create: if isClient();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /presence/{presenceId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == presenceId;
+      allow update: if signedIn() && request.auth.uid == presenceId;
+      allow delete: if signedIn() && request.auth.uid == presenceId;
+    }
+
+    match /conversation_keys/{keyId} {
+      allow read: if signedIn() && (
+        request.auth.uid in [keyId.split('_')[0], keyId.split('_')[1]] ||
+        isAdmin()
+      );
+      allow write: if signedIn() && (
+        request.auth.uid in [keyId.split('_')[0], keyId.split('_')[1]] ||
+        isAdmin()
+      );
+    }
+
+    match /fcm_tokens/{tokenId} {
+      allow read: if false;
+      allow create: if signedIn() && request.auth.uid == tokenId;
+      allow update: if signedIn() && request.auth.uid == tokenId;
+      allow delete: if signedIn() && request.auth.uid == tokenId;
+    }
+  }
+}

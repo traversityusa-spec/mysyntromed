@@ -1,0 +1,1347 @@
+import { useState, useEffect, type FormEvent, useCallback } from 'react';
+import { collection, limit, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { db, userService, requestService, notificationService, activityService } from '@/lib/firestore';
+import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
+import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useAuth } from '@/lib/AuthContext';
+
+const generatePassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+  const length = 14;
+  let password = '';
+  const array = new Uint32Array(length);
+  crypto.getRandomValues(array);
+  for (let i = 0; i < length; i++) {
+    password += chars[array[i] % chars.length];
+  }
+  return password;
+};
+
+const CreateUserModal = ({ 
+  isOpen, 
+  onClose, 
+  role, 
+  onSuccess 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  role: 'client' | 'specialist';
+  onSuccess: (msg: string) => void;
+}) => {
+  const { user } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+
+  const handleAutoGenerate = () => {
+    const newPassword = generatePassword();
+    setPassword(newPassword);
+  };
+
+  const handleCopyEmail = () => {
+    navigator.clipboard.writeText(email);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  };
+
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(password);
+    setPasswordCopied(true);
+    setTimeout(() => setPasswordCopied(false), 2000);
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    
+    if (!password) {
+      setError('Please generate a password first using the Auto Generate button.');
+      return;
+    }
+    
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const token = await user?.getIdToken();
+      const response = await fetch('/api/auth/admin/create-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password, displayName: displayName.trim(), role })
+      });
+
+      const text = await response.text();
+      if (!text) throw new Error('Server returned empty response');
+      const data = JSON.parse(text);
+      if (!response.ok) throw new Error(data.error || `Failed to create user (${response.status})`);
+
+      onSuccess(`Successfully created ${role} account for ${displayName}. Login credentials have been sent to their email.`);
+      onClose();
+      setEmail('');
+      setPassword('');
+      setDisplayName('');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    setEmail('');
+    setPassword('');
+    setDisplayName('');
+    setError(null);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+      >
+        <button onClick={handleClose} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">
+          <X size={20} />
+        </button>
+
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-navy-900">Create New {role.charAt(0).toUpperCase() + role.slice(1)}</h2>
+          <p className="text-sm text-slate-500 mt-1">An email with login credentials will be automatically sent to the user.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Full Name</label>
+            <input
+              type="text"
+              required
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="e.g. Dr. Jane Smith"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Email Address</label>
+            <div className="relative">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="jane@example.com"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 pr-10 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+              />
+              {email && (
+                <button
+                  type="button"
+                  onClick={handleCopyEmail}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Copy email"
+                >
+                  {emailCopied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Temporary Password</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Click 'Auto Generate' to create password"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 pr-10 text-sm font-mono outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                />
+                {password && (
+                  <button
+                    type="button"
+                    onClick={handleCopyPassword}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+                    title="Copy password"
+                  >
+                    {passwordCopied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleAutoGenerate}
+                className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 transition-colors whitespace-nowrap"
+              >
+                <RefreshCw size={16} />
+                Auto Generate
+              </button>
+            </div>
+            {!password && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <ShieldAlert size={12} />
+                Password is required. Click Auto Generate to create one.
+              </p>
+            )}
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 border border-red-100 p-3 text-sm text-red-600 flex gap-2">
+              <ShieldAlert size={16} className="shrink-0 mt-0.5" />
+              {error}
+            </div>
+          )}
+
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-3">
+            <Mail size={18} className="text-blue-500 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-blue-900">Welcome Email</p>
+              <p className="text-blue-700 text-xs mt-0.5">
+                A welcome email with login credentials will be automatically sent to the user's email address upon account creation.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !password}
+              className="flex-1 rounded-lg bg-teal-600 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Creating & Sending Email...
+                </>
+              ) : (
+                <>
+                  <Mail size={16} />
+                  Create & Send Email
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
+export const AdminClients = () => {
+  const { user: authUser } = useAuth();
+  const [clients, setClients] = useState<UserProfile[]>([]);
+  const [specialists, setSpecialists] = useState<UserProfile[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<{uid: string; name: string} | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const idToken = await authUser?.getIdToken();
+      if (!idToken) return;
+
+      const response = await fetch('/api/auth/admin/users', {
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+      const data = await response.json();
+      if (data.users) {
+        const mapUser = (u: any) => ({
+          uid: u.uid,
+          email: u.email,
+          displayName: u.displayName,
+          role: u.role,
+          disabled: u.disabled,
+          createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+          updatedAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+          assignedSpecialistId: u.assignedSpecialistId,
+          assignedSpecialistName: u.assignedSpecialistName,
+          isNewUser: u.isNewUser
+        } as UserProfile);
+
+        const allUsers = data.users.map(mapUser);
+        setClients(allUsers.filter((u: any) => u.role === 'client').sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
+        setSpecialists(allUsers.filter((u: any) => u.role === 'specialist').sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
+      }
+    } catch (e) {
+      console.error('Error fetching admin data:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleToggleStatus = async (uid: string, currentDisabled: boolean) => {
+    setActionLoading(uid);
+    try {
+      const token = await authUser?.getIdToken();
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/deactivate-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ uid, disabled: !currentDisabled })
+      });
+
+      if (!response.ok) throw new Error('Failed to update status');
+      
+      setSuccessMessage(`Account ${!currentDisabled ? 'deactivated' : 'activated'} successfully`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      await fetchData();
+    } catch (err) {
+      alert('Failed to update user status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
+    setActionLoading(deletingUser.uid);
+    try {
+      const token = await authUser?.getIdToken();
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ uid: deletingUser.uid })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to delete user');
+      }
+      
+      setSuccessMessage(`Account "${deletingUser.name}" has been permanently deleted`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setDeleteModalOpen(false);
+      setDeletingUser(null);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete user');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAssign = async (userId: string, specId: string) => {
+    if (!specId) return;
+    const specialist = specialists.find(s => s.uid === specId);
+    const client = clients.find(c => c.uid === userId);
+    if (!specialist || !client) {
+      console.error('Specialist or client not found', { specialist, client, specId, userId });
+      alert('Could not find specialist or client');
+      return;
+    }
+    
+    setAssigningId(userId);
+    try {
+      console.log('Assigning specialist:', { userId, specId, specialistName: specialist.displayName });
+      
+      await userService.assignSpecialist(userId, specId, specialist.displayName || specialist.email || 'Specialist');
+      console.log('Assigned in user profile');
+      
+      await requestService.completeAssignmentRequest(userId, specId, specialist.displayName || specialist.email || 'Specialist');
+      console.log('Completed assignment request');
+      
+      await notificationService.notifyClientAssignment(userId, specialist.displayName || specialist.email || 'Specialist', specialist.email || '');
+      console.log('Notified client');
+      
+      await notificationService.notifySpecialistAssignment(specId, client.displayName || client.email || 'Client', client.email || '');
+      console.log('Notified specialist');
+      
+      await activityService.addActivity({
+        userId,
+        title: `Specialist Assigned: ${specialist.displayName || specialist.email}`,
+        type: 'Assignment',
+        specialistId: specId,
+        specialistName: specialist.displayName || specialist.email || 'Specialist',
+        status: 'completed',
+      });
+      
+      setSuccessMessage(`Successfully assigned ${specialist.displayName || specialist.email} to ${client.displayName || client.email}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to assign specialist');
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const filteredClients = clients.filter(c => 
+    c.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <CreateUserModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        role="client" 
+        onSuccess={(msg) => {
+          setSuccessMessage(msg);
+          setTimeout(() => setSuccessMessage(null), 3000);
+          fetchData();
+        }}
+      />
+
+      {successMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+          <CheckCircle size={16} className="text-emerald-600" />
+          {successMessage}
+        </div>
+      )}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Clients</h1>
+          <p className="mt-1 text-slate-600">Overview of all registered platform clients</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by name or email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 sm:w-64"
+            />
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 transition shadow-sm"
+          >
+            <Plus size={18} />
+            Add Client
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-200 bg-slate-50">
+          <div className="flex items-center gap-2">
+            <Users size={18} className="text-teal-600" />
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">All Clients ({clients.length})</h2>
+          </div>
+        </div>
+        <div>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+              <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+              <p>Fetching clients...</p>
+            </div>
+          ) : filteredClients.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50">
+                    <th className="px-6 py-4 font-semibold text-slate-700">Client</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700">Created</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700">Specialist</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700">Subscription</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
+                  {filteredClients.map(client => (
+                    <tr key={client.uid} className={`hover:bg-slate-50/50 transition ${client.disabled ? 'bg-slate-50/80 opacity-75' : ''}`}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-9 w-9 rounded-full ${client.disabled ? 'bg-slate-200 text-slate-400' : 'bg-teal-100 text-teal-700'} flex items-center justify-center font-bold uppercase text-xs`}>
+                             {client.displayName?.charAt(0) || 'C'}
+                          </div>
+                          <div>
+                            <p className={`font-semibold ${client.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{client.displayName || 'Unnamed'}</p>
+                            <p className="text-xs text-slate-500">{client.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {client.createdAt?.toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        {assigningId === client.uid ? (
+                          <span className="text-xs text-teal-600 flex items-center gap-1">
+                            <span className="inline-block h-3 w-3 animate-spin rounded-full border border-teal-500 border-t-transparent"></span>
+                            Assigning...
+                          </span>
+                        ) : client.assignedSpecialistId ? (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${client.disabled ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-700'}`}>
+                            <CheckCircle size={12} />
+                            {client.assignedSpecialistName || 'Assigned'}
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${client.disabled ? 'bg-slate-100 text-slate-400' : 'bg-amber-50 text-amber-700'}`}>
+                            <AlertCircle size={12} />
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {client.disabled ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-red-600 ring-1 ring-inset ring-red-600/20">
+                            Expired / Disabled
+                          </span>
+                        ) : client.isNewUser ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-blue-600 ring-1 ring-inset ring-blue-600/20">
+                            Awaiting Payment
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-600 ring-1 ring-inset ring-emerald-600/20">
+                            Active Paid
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <select
+                            value={client.assignedSpecialistId || ''}
+                            disabled={client.disabled}
+                            onChange={(e) => handleAssign(client.uid, e.target.value)}
+                            className="rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-teal-500 disabled:opacity-50"
+                          >
+                            <option value="">Assign Specialist</option>
+                            {specialists.map(s => (
+                              <option key={s.uid} value={s.uid}>{s.displayName || s.email}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleToggleStatus(client.uid, !!client.disabled)}
+                            disabled={actionLoading === client.uid}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              client.disabled 
+                                ? 'text-emerald-600 hover:bg-emerald-50' 
+                                : 'text-red-600 hover:bg-red-50'
+                            }`}
+                            title={client.disabled ? "Renew Subscription & Enable Account" : "Cancel Subscription & Disable Account"}
+                          >
+                            {actionLoading === client.uid ? (
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                            ) : (
+                              client.disabled ? <UserCheck size={18} /> : <UserMinus size={18} />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => { setDeletingUser({ uid: client.uid, name: client.displayName || client.email || 'User' }); setDeleteModalOpen(true); }}
+                            disabled={actionLoading === client.uid}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete account"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-12 text-center text-slate-500">
+              <Search size={32} className="mx-auto mb-3 text-slate-300" />
+              <p>No clients match your search criteria.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Delete Account</h3>
+                <p className="text-sm text-red-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-6">
+              Are you sure you want to permanently delete the account for <span className="font-semibold">{deletingUser?.name}</span>? All associated data including messages, requests, and notifications will be removed.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setDeleteModalOpen(false); setDeletingUser(null); }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={actionLoading !== null}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50"
+              >
+                {actionLoading !== null ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const AdminSpecialists = () => {
+  const { user: authUser } = useAuth();
+  const [specialists, setSpecialists] = useState<UserProfile[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<{uid: string; name: string} | null>(null);
+  const [viewingWorkFor, setViewingWorkFor] = useState<UserProfile | null>(null);
+  const [specialistActivity, setSpecialistActivity] = useState<ActivityItem[]>([]);
+  
+  useEffect(() => {
+    if (!viewingWorkFor) return;
+    const unsub = activityService.subscribeToSpecialistActivity(viewingWorkFor.uid, (activity) => {
+      setSpecialistActivity(activity);
+    });
+    return () => unsub();
+  }, [viewingWorkFor]);
+
+  const fetchSpecialists = useCallback(async () => {
+    try {
+      const idToken = await authUser?.getIdToken();
+      if (!idToken) return;
+
+      const response = await fetch('/api/auth/admin/users', {
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+      const data = await response.json();
+      if (data.users) {
+        const list = data.users
+          .filter((u: any) => u.role === 'specialist')
+          .map((u: any) => ({
+            uid: u.uid,
+            email: u.email,
+            displayName: u.displayName,
+            role: u.role,
+            disabled: u.disabled,
+            createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+            updatedAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+          } as UserProfile));
+        setSpecialists(list.sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
+      }
+    } catch (e) {
+      console.error('Error loading specialists:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    fetchSpecialists();
+  }, [fetchSpecialists]);
+
+  const handleToggleStatus = async (uid: string, currentDisabled: boolean) => {
+    setActionLoading(uid);
+    try {
+      const token = await authUser?.getIdToken();
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/deactivate-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ uid, disabled: !currentDisabled })
+      });
+
+      if (!response.ok) throw new Error('Failed to update status');
+      
+      setSuccessMessage(`Account ${!currentDisabled ? 'deactivated' : 'activated'} successfully`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      await fetchSpecialists();
+    } catch (err) {
+      alert('Failed to update user status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
+    setActionLoading(deletingUser.uid);
+    try {
+      const token = await authUser?.getIdToken();
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ uid: deletingUser.uid })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to delete user');
+      }
+      
+      setSuccessMessage(`Account "${deletingUser.name}" has been permanently deleted`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setDeleteModalOpen(false);
+      setDeletingUser(null);
+      await fetchSpecialists();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete user');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const filteredSpecialists = specialists.filter(s => 
+    s.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    s.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <CreateUserModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        role="specialist" 
+        onSuccess={(msg) => {
+          setSuccessMessage(msg);
+          setTimeout(() => setSuccessMessage(null), 3000);
+          fetchSpecialists();
+        }}
+      />
+
+      {successMessage && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 flex items-center gap-2">
+          <CheckCircle size={16} className="text-indigo-600" />
+          {successMessage}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Specialists</h1>
+          <p className="mt-1 text-slate-600">Medical scribe specialists on the platform</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by name or email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 sm:w-64"
+            />
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition shadow-sm"
+          >
+            <Plus size={18} />
+            Add Specialist
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-200 bg-indigo-50/30">
+          <div className="flex items-center gap-2">
+            <Stethoscope size={18} className="text-indigo-600" />
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">All Specialists ({specialists.length})</h2>
+          </div>
+        </div>
+        <div>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+              <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+              <p>Fetching specialists...</p>
+            </div>
+          ) : filteredSpecialists.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50">
+                    <th className="px-6 py-4 font-semibold text-slate-700">Specialist</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700">Joined</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
+                  {filteredSpecialists.map(specialist => (
+                    <tr key={specialist.uid} className={`hover:bg-indigo-50/30 transition ${specialist.disabled ? 'bg-slate-50/80 opacity-75' : ''}`}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-9 w-9 rounded-full ${specialist.disabled ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-700'} flex items-center justify-center font-bold uppercase text-xs`}>
+                            {specialist.displayName?.charAt(0) || 'S'}
+                          </div>
+                          <div>
+                            <p className={`font-semibold ${specialist.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{specialist.displayName || 'Unnamed'}</p>
+                            <p className="text-xs text-slate-500">{specialist.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {specialist.createdAt?.toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        {specialist.disabled ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-red-600 ring-1 ring-inset ring-red-600/20">
+                            Deactivated
+                          </span>
+                        ) : specialist.isNewUser ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-blue-600 ring-1 ring-inset ring-blue-600/20">
+                            Awaiting Setup
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-600 ring-1 ring-inset ring-emerald-600/20">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleToggleStatus(specialist.uid, !!specialist.disabled)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              specialist.disabled 
+                                ? 'text-emerald-600 hover:bg-emerald-50' 
+                                : 'text-red-600 hover:bg-red-50'
+                            }`}
+                          >
+                            {specialist.disabled ? <UserCheck size={18} /> : <UserMinus size={18} />}
+                          </button>
+                          <button
+                            onClick={() => setViewingWorkFor(specialist)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            title="View Work Logs"
+                          >
+                            <ClipboardList size={18} />
+                          </button>
+                          <button
+                            onClick={() => { setDeletingUser({ uid: specialist.uid, name: specialist.displayName || specialist.email || 'User' }); setDeleteModalOpen(true); }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete account"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-12 text-center text-slate-500">
+              <Search size={32} className="mx-auto mb-3 text-slate-300" />
+              <p>No specialists match your search criteria.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Delete Account</h3>
+                <p className="text-sm text-red-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-6">
+              Are you sure you want to permanently delete the account for <span className="font-semibold">{deletingUser?.name}</span>? All associated data including messages, requests, and notifications will be removed.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setDeleteModalOpen(false); setDeletingUser(null); }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={actionLoading !== null}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50"
+              >
+                {actionLoading !== null ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Specialist Work Log Modal */}
+      {viewingWorkFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <div>
+                <h3 className="text-lg font-bold text-navy-900">Work Log: {viewingWorkFor.displayName || viewingWorkFor.email}</h3>
+                <p className="text-sm text-slate-500">Recent activity and tasks handled</p>
+              </div>
+              <button onClick={() => setViewingWorkFor(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {specialistActivity.length === 0 ? (
+                <div className="flex flex-col items-center py-12 text-slate-500">
+                  <ClipboardList size={32} className="text-slate-300 mb-3" />
+                  <p>No activity logs found for this specialist yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {specialistActivity.map(act => (
+                    <div key={act.id} className="flex gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                        {act.type.includes('Call') ? <Clock size={20} /> : act.type.includes('Message') ? <MessageSquare size={20} /> : <CheckCircle size={20} />}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-900">{act.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Type: {act.type}</p>
+                        <p className="text-xs text-slate-400 mt-2">{act.createdAt.toLocaleString()}</p>
+                      </div>
+                      <div className="ml-auto flex items-start">
+                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${
+                          act.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                          act.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {act.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const AdminConversations = () => {
+  const { user: authUser } = useAuth();
+  const [conversations, setConversations] = useState<{clientId: string; clientName: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<{clientId: string; specialistId: string} | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const [specialists, setSpecialists] = useState<UserProfile[]>([]);
+  const [clients, setClients] = useState<UserProfile[]>([]);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const idToken = await authUser?.getIdToken();
+        if (!idToken) return;
+        const response = await fetch('/api/auth/admin/users', {
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        const data = await response.json();
+        if (data.users) {
+          setSpecialists(data.users.filter((u: any) => u.role === 'specialist').map((u: any) => ({ uid: u.uid, displayName: u.displayName, email: u.email } as UserProfile)));
+          setClients(data.users.filter((u: any) => u.role === 'client').map((u: any) => ({ uid: u.uid, displayName: u.displayName, email: u.email } as UserProfile)));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadUsers();
+  }, [authUser]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(500));
+    const unsub = onSnapshot(q, (snap) => {
+      const msgs = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          senderId: data.senderId,
+          senderName: data.senderName,
+          senderRole: data.senderRole,
+          receiverId: data.receiverId,
+          text: data.text,
+          read: data.read || false,
+          status: data.status,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+        } as Message;
+      });
+      setAllMessages(msgs);
+      setLoading(false);
+    }, (err) => {
+      console.error('Firestore subscription error:', err);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const convMap = new Map<string, {clientId: string; clientName: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}>();
+    
+    allMessages.forEach((msg) => {
+      const senderRole = msg.senderRole;
+      const receiverRole = (specialists.find(s => s.uid === msg.senderId) ? msg.senderRole : 
+                           specialists.find(s => s.uid === msg.receiverId) ? 'specialist' : 
+                           clients.find(c => c.uid === msg.receiverId) ? 'client' : '') as string;
+      
+      let clientId = '', specialistId = '', clientName = '', specialistName = '';
+      
+      if (senderRole === 'client' && msg.receiverId) {
+        clientId = msg.senderId;
+        clientName = msg.senderName;
+        specialistId = msg.receiverId;
+        const spec = specialists.find(s => s.uid === specialistId);
+        specialistName = spec?.displayName || spec?.email || 'Specialist';
+      } else if (senderRole === 'specialist' && msg.receiverId) {
+        specialistId = msg.senderId;
+        const spec = specialists.find(s => s.uid === specialistId);
+        specialistName = spec?.displayName || spec?.email || 'Specialist';
+        clientId = msg.receiverId;
+        const cli = clients.find(c => c.uid === clientId);
+        clientName = cli?.displayName || cli?.email || 'Client';
+      }
+      
+      if (!clientId || !specialistId) return;
+      
+      const key = `${clientId}_${specialistId}`;
+      const existing = convMap.get(key);
+      const isUnread = msg.receiverId !== clientId && !msg.read;
+      
+      if (!existing) {
+        convMap.set(key, { clientId, clientName, specialistId, specialistName, lastMessage: msg.text, lastTime: msg.createdAt, unreadCount: isUnread ? 1 : 0 });
+      } else if (msg.createdAt.getTime() > existing.lastTime.getTime()) {
+        existing.lastMessage = msg.text;
+        existing.lastTime = msg.createdAt;
+        if (isUnread) existing.unreadCount += 1;
+      }
+    });
+    
+    setConversations(Array.from(convMap.values()).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime()));
+  }, [allMessages, specialists, clients]);
+
+  useEffect(() => {
+    if (!selectedConversation) {
+      setMessages([]);
+      return;
+    }
+    const filtered = allMessages
+      .filter((msg) =>
+        (msg.senderId === selectedConversation.clientId && msg.receiverId === selectedConversation.specialistId) ||
+        (msg.senderId === selectedConversation.specialistId && msg.receiverId === selectedConversation.clientId)
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    setMessages(filtered);
+  }, [selectedConversation, allMessages]);
+
+  const formatTime = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours > 24) return date.toLocaleDateString();
+    if (hours > 0) return `${hours}h ago`;
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-8rem)] gap-4">
+      <div className="w-96 flex flex-col rounded-2xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-100 p-4">
+          <h2 className="text-xl font-bold text-navy-900">Client-Specialist Conversations</h2>
+          <p className="text-sm text-slate-500 mt-1">Monitor all messaging activity</p>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="flex flex-col items-center py-16 text-slate-500">
+              <p className="font-medium">No conversations yet</p>
+            </div>
+          ) : (
+            conversations.map((conv) => (
+              <button
+                key={`${conv.clientId}_${conv.specialistId}`}
+                onClick={() => setSelectedConversation({ clientId: conv.clientId, specialistId: conv.specialistId })}
+                className={`w-full border-b border-slate-50 p-4 text-left transition hover:bg-slate-50 ${
+                  selectedConversation?.clientId === conv.clientId && selectedConversation?.specialistId === conv.specialistId ? 'bg-teal-50' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-900">{conv.clientName}</p>
+                    <p className="text-xs text-slate-500">→ {conv.specialistName}</p>
+                  </div>
+                  <span className="text-xs text-slate-400">{formatTime(conv.lastTime)}</span>
+                </div>
+                <p className="mt-2 truncate text-sm text-slate-500">{conv.lastMessage}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col rounded-2xl border border-slate-200 bg-white">
+        {selectedConversation ? (
+          <>
+            <div className="border-b border-slate-100 p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold">
+                  {conversations.find(c => c.clientId === selectedConversation.clientId)?.clientName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {conversations.find(c => c.clientId === selectedConversation.clientId)?.clientName}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Specialist: {conversations.find(c => c.clientId === selectedConversation.clientId)?.specialistName}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-[#f0f2f5] p-4 space-y-4">
+              {messages.map((msg) => {
+                const isOwn = msg.senderId === selectedConversation.clientId;
+                return (
+                  <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
+                      isOwn ? 'bg-teal-600 text-white rounded-br-md' : 'bg-white text-slate-900 rounded-bl-md shadow-sm'
+                    }`}>
+                      <p className="text-xs font-semibold mb-1">{msg.senderName}</p>
+                      <p className="text-sm">{msg.text}</p>
+                      <p className={`text-[10px] mt-1 ${isOwn ? 'text-teal-200' : 'text-slate-400'}`}>
+                        {formatTime(msg.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center text-slate-500">
+            <p>Select a conversation to view messages</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const AdminAnalytics = () => {
+  const { user: authUser } = useAuth();
+  const [stats, setStats] = useState({
+    totalClients: 0,
+    totalSpecialists: 0,
+    totalMessages: 0,
+    totalRequests: 0,
+    pendingRequests: 0,
+    completedRequests: 0,
+    activeUsersToday: 0,
+    newUsersThisWeek: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const idToken = await authUser?.getIdToken();
+        if (!idToken) return;
+
+        const response = await fetch('/api/auth/admin/users', {
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        const data = await response.json();
+
+        if (data.users) {
+          const clients = data.users.filter((u: any) => u.role === 'client');
+          const specialists = data.users.filter((u: any) => u.role === 'specialist');
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+
+          setStats({
+            totalClients: clients.length,
+            totalSpecialists: specialists.length,
+            totalMessages: 0,
+            totalRequests: 0,
+            pendingRequests: 0,
+            completedRequests: 0,
+            activeUsersToday: clients.filter((c: any) => !c.disabled).length,
+            newUsersThisWeek: clients.filter((c: any) => c.createdAt && new Date(c.createdAt) > weekAgo).length,
+          });
+        }
+      } catch (e) {
+        console.error('Error fetching analytics:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [authUser]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-navy-900">Analytics</h1>
+        <p className="mt-1 text-slate-600">Platform usage and performance metrics</p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Total Clients</p>
+              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.totalClients}</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-teal-600">
+              <Users size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Total Specialists</p>
+              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.totalSpecialists}</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+              <Stethoscope size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Pending Requests</p>
+              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.pendingRequests}</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <Clock size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Completed Requests</p>
+              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.completedRequests}</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <CheckCircle size={24} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-navy-900">Platform Overview</h2>
+          <div className="mt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">Active Users</span>
+              <span className="font-semibold text-emerald-600">{stats.activeUsersToday}</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-slate-100">
+              <div 
+                className="h-2 rounded-full bg-emerald-500" 
+                style={{ width: `${Math.min((stats.activeUsersToday / stats.totalClients) * 100, 100)}%` }} 
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">New Users This Week</span>
+              <span className="font-semibold text-blue-600">{stats.newUsersThisWeek}</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-slate-100">
+              <div 
+                className="h-2 rounded-full bg-blue-500" 
+                style={{ width: `${Math.min((stats.newUsersThisWeek / stats.totalClients) * 100, 100)}%` }} 
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-navy-900">Specialist Utilization</h2>
+          <div className="mt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">Client to Specialist Ratio</span>
+              <span className="font-semibold text-navy-900">
+                {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0}:1
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-slate-100">
+              <div 
+                className="h-2 rounded-full bg-teal-500" 
+                style={{ width: `${Math.min((stats.totalClients / (stats.totalSpecialists * 5)) * 100, 100)}%` }} 
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">Average Load</span>
+              <span className="font-semibold text-purple-600">
+                {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0} clients/specialist
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
