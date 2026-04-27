@@ -4,6 +4,14 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  multiFactor,
+  getMultiFactorResolver,
+  TotpMultiFactorGenerator,
+  TotpSecret,
+  type MultiFactorResolver,
   type User,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -29,11 +37,18 @@ type AuthContextType = {
   user: User | null;
   sessionUser: SessionUser | null;
   loading: boolean;
+  mfaResolver: MultiFactorResolver | null;
   loginWithCode: (code: string, displayName: string) => Promise<SessionUser>;
   loginWithEmail: (email: string, password: string) => Promise<SessionUser>;
+  loginWithMfaTotp: (totpCode: string) => Promise<SessionUser>;
   logout: () => Promise<void>;
   refreshSessionUser: () => Promise<void>;
   getRedirectPath: (role: SessionUser['role']) => string;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  enrollTotp: () => Promise<{ secret: TotpSecret; qrCodeUrl: string }>;
+  verifyTotpEnrollment: (secret: TotpSecret, totpCode: string, displayName: string) => Promise<void>;
+  unenrollTotp: () => Promise<void>;
+  isTotpEnrolled: () => boolean;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,6 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
 
   const buildSessionUser = async (firebaseUser: User): Promise<SessionUser> => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -156,10 +172,73 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const loginWithEmail = async (email: string, password: string): Promise<SessionUser> => {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const profile = await buildSessionUser(cred.user);
+      setSessionUser(profile);
+      return profile;
+    } catch (error: any) {
+      if (error.code === 'auth/multi-factor-auth-required') {
+        const resolver = getMultiFactorResolver(auth, error);
+        setMfaResolver(resolver);
+        throw error; // re-throw so login UI can handle it
+      }
+      throw error;
+    }
+  };
+
+  const loginWithMfaTotp = async (totpCode: string): Promise<SessionUser> => {
+    if (!mfaResolver) throw new Error('No MFA resolver available');
+    const hint = mfaResolver.hints.find(h => h.factorId === TotpMultiFactorGenerator.FACTOR_ID);
+    if (!hint) throw new Error('No TOTP factor found');
+    const assertion = TotpMultiFactorGenerator.assertionForSignIn(hint.uid, totpCode);
+    const cred = await mfaResolver.resolveSignIn(assertion);
     const profile = await buildSessionUser(cred.user);
     setSessionUser(profile);
+    setMfaResolver(null);
     return profile;
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    if (!user || !user.email) throw new Error('Not authenticated');
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  };
+
+  const enrollTotp = async (): Promise<{ secret: TotpSecret; qrCodeUrl: string }> => {
+    if (!user) throw new Error('Not authenticated');
+    const mfa = multiFactor(user);
+    const session = await mfa.getSession();
+    const totpSecret = await TotpMultiFactorGenerator.generateSecret(session);
+    const qrCodeUrl = totpSecret.generateQrCodeUrl(
+      user.email || 'user',
+      'MySyntroMed'
+    );
+    return { secret: totpSecret, qrCodeUrl };
+  };
+
+  const verifyTotpEnrollment = async (secret: TotpSecret, totpCode: string, displayName: string): Promise<void> => {
+    if (!user) throw new Error('Not authenticated');
+    const mfa = multiFactor(user);
+    const assertion = TotpMultiFactorGenerator.assertionForEnrollment(secret, totpCode);
+    await mfa.enroll(assertion, displayName);
+  };
+
+  const unenrollTotp = async (): Promise<void> => {
+    if (!user) throw new Error('Not authenticated');
+    const mfa = multiFactor(user);
+    const enrolledFactors = mfa.enrolledFactors;
+    const totpFactor = enrolledFactors.find(f => f.factorId === TotpMultiFactorGenerator.FACTOR_ID);
+    if (totpFactor) {
+      await mfa.unenroll(totpFactor);
+    }
+  };
+
+  const isTotpEnrolled = (): boolean => {
+    if (!user) return false;
+    const mfa = multiFactor(user);
+    return mfa.enrolledFactors.some(f => f.factorId === TotpMultiFactorGenerator.FACTOR_ID);
   };
 
   const logout = async () => {
@@ -183,13 +262,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       user,
       sessionUser,
       loading,
+      mfaResolver,
       loginWithCode,
       loginWithEmail,
+      loginWithMfaTotp,
       logout,
       refreshSessionUser,
       getRedirectPath,
+      changePassword,
+      enrollTotp,
+      verifyTotpEnrollment,
+      unenrollTotp,
+      isTotpEnrolled,
     }),
-    [loading, sessionUser, user]
+    [loading, sessionUser, user, mfaResolver]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

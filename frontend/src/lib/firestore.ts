@@ -22,7 +22,7 @@ import { ref, set, onValue, onDisconnect, serverTimestamp as rtdbServerTimestamp
 import { encryption } from './encryption';
 export { db };
 
-const ENCRYPT_MESSAGES = true;
+const ENCRYPT_MESSAGES = false;
 const CONVERSATION_KEYS_COLLECTION = 'conversation_keys';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -51,6 +51,7 @@ export type Message = {
   senderId: string;
   senderName: string;
   senderRole: string;
+  senderPhotoURL?: string;
   receiverId: string;
   text: string;
   read: boolean;
@@ -58,6 +59,10 @@ export type Message = {
   createdAt: Date;
   encrypted?: boolean;
   iv?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: 'image' | 'file';
+  fileSize?: number;
 };
 
 export type ConversationKey = {
@@ -106,6 +111,7 @@ export type CallSession = {
   receiverRole: 'client' | 'admin' | 'specialist';
   meetingLink: string;
   status: 'ringing' | 'accepted' | 'rejected' | 'ended';
+  callType: 'audio' | 'video';
   createdAt: Date;
   updatedAt: Date;
 };
@@ -428,9 +434,7 @@ export const messageService = {
   ): Unsubscribe {
     const q = query(
       collection(db, 'messages'),
-      where('participants', 'array-contains', userId),
-      orderBy('createdAt', 'desc'),
-      limit(200)
+      where('participants', 'array-contains', userId)
     );
 
     return onSnapshot(q, async (snapshot) => {
@@ -440,11 +444,13 @@ export const messageService = {
         createdAt: doc.data().createdAt?.toDate() || new Date(),
       })) as Message[];
 
+      const sorted = messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      
       if (ENCRYPT_MESSAGES) {
-        const decrypted = await this.decryptMessages(messages, userId);
+        const decrypted = await this.decryptMessages(sorted, userId);
         callback(decrypted);
       } else {
-        callback(messages);
+        callback(sorted);
       }
     });
   },
@@ -486,28 +492,35 @@ export const messageService = {
   },
 
   async sendMessage(message: Omit<Message, 'id' | 'createdAt'>): Promise<string> {
+    console.log('sendMessage called:', { senderId: message.senderId, receiverId: message.receiverId, text: message.text });
     const sanitizedText = this.sanitizeText(message.text);
     let finalMessage = { ...message, text: sanitizedText };
     let encrypted = false;
 
     if (ENCRYPT_MESSAGES) {
       try {
+        console.log('Getting/creating encryption key...');
         const key = await conversationKeyService.getOrCreateKey(message.senderId, message.receiverId);
+        console.log('Got key, importing...');
         const cryptoKey = await encryption.importKey(key);
+        console.log('Encrypting message...');
         const { encrypted: encryptedText, iv } = await encryption.encryptMessage(message.text, cryptoKey);
         finalMessage = { ...message, text: encryptedText, iv, encrypted: true };
         encrypted = true;
+        console.log('Message encrypted successfully');
       } catch (err) {
         console.error('Encryption failed, sending plain text:', err);
       }
     }
 
+    console.log('Adding message to Firestore...', { finalMessage });
     const docRef = await addDoc(collection(db, 'messages'), {
       ...finalMessage,
       participants: [finalMessage.senderId, finalMessage.receiverId],
       status: finalMessage.status || 'sent',
       createdAt: serverTimestamp(),
     });
+    console.log('Message saved to Firestore with ID:', docRef.id);
 
     notificationSoundService.broadcastSound(finalMessage.receiverId, 'incoming');
 
@@ -674,6 +687,29 @@ export const requestService = {
       console.error('Failed to notify admins of request', e);
     }
 
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (token) {
+        fetch(`${API_BASE_URL}/api/requests/notify-admin`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            clientName: request.clientName,
+            clientEmail: request.clientEmail,
+            requestType: request.type,
+            description: request.description,
+            priority: request.priority,
+            loginUrl: window.location.origin
+          })
+        }).catch(e => console.error('Failed to send admin email:', e));
+      }
+    } catch (e) {
+      console.error('Failed to send admin email notification:', e);
+    }
+
     return docRef.id;
   },
 
@@ -773,6 +809,27 @@ export const requestService = {
     const q = query(
       collection(db, 'requests'),
       where('userId', '==', userId)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
+          completedAt: doc.data().completedAt?.toDate(),
+          assignedAt: doc.data().assignedAt?.toDate?.(),
+          seen: doc.data().seen || false,
+        }))
+        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+      callback(requests);
+    });
+  },
+
+  subscribeToRequestsForSpecialist(specialistId: string, callback: (requests: Request[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'requests'),
+      where('specialistId', '==', specialistId)
     );
 
     return onSnapshot(q, (snapshot) => {
@@ -1112,6 +1169,12 @@ export const notificationService = {
     await batch.commit();
   },
 
+  async markNotificationRead(notificationId: string): Promise<void> {
+    const { updateDoc } = await import('firebase/firestore');
+    const docRef = doc(db, 'notifications', notificationId);
+    await updateDoc(docRef, { read: true });
+  },
+
   async getUnreadCount(userId: string): Promise<number> {
     const q = query(
       collection(db, 'notifications'),
@@ -1120,6 +1183,17 @@ export const notificationService = {
     );
     const snap = await getDocs(q);
     return snap.size;
+  },
+
+  subscribeToUnreadCount(userId: string, callback: (count: number) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId),
+      where('read', '==', false)
+    );
+    return onSnapshot(q, (snap) => {
+      callback(snap.size);
+    });
   },
 };
 

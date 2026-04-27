@@ -13,10 +13,20 @@ router.get('/me', requireAuth, (req: AuthedRequest, res) => {
 });
 
 // Helper function to send welcome email via custom email server
-const sendWelcomeEmail = async (email: string, displayName: string, password: string, role: 'client' | 'specialist', loginUrl: string): Promise<{success: boolean; error?: string}> => {
+const sendWelcomeEmail = async (email: string, displayName: string, role: 'client' | 'specialist', loginUrl: string, tempCode: string): Promise<{success: boolean; error?: string}> => {
+  console.log('[EMAIL] sendWelcomeEmail called with tempCode:', tempCode);
+  
   try {
     const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
     const serviceKey = process.env.EMAIL_SERVICE_KEY;
+    
+    if (!serviceKey) {
+      console.warn('[EMAIL] EMAIL_SERVICE_KEY not set, skipping email...');
+      return { success: true };
+    }
+    
+    const payload = { email, displayName, role, loginUrl, tempCode };
+    console.log('[EMAIL] Sending payload to email server:', JSON.stringify(payload));
     
     const response = await fetch(`${emailServerUrl}/send-welcome`, {
       method: 'POST',
@@ -24,17 +34,22 @@ const sendWelcomeEmail = async (email: string, displayName: string, password: st
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${serviceKey}`
       },
-      body: JSON.stringify({ email, displayName, password, role, loginUrl }),
+      body: JSON.stringify(payload),
     });
 
-    
     const text = await response.text();
-    if (!text) {
-      console.log('[EMAIL] Email server returned empty response, skipping...');
+    
+    if (!text || text.trim() === '') {
+      console.log('[EMAIL] Email server returned empty response');
       return { success: true };
     }
     
     const result = JSON.parse(text);
+    
+    if (!response.ok) {
+      console.error('[EMAIL] Email server error:', result.error);
+      return { success: false, error: result.error };
+    }
     
     if (!result.success) {
       console.error('[EMAIL] Email server error:', result.error);
@@ -75,8 +90,8 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
     return res.status(400).json({ error: 'Temporary, fake, or disposable email addresses are not allowed.' });
   }
 
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
   }
 
   const validRoles = ['client', 'specialist', 'admin'];
@@ -122,8 +137,8 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       senderRole: 'admin',
       receiverId: userRecord.uid,
       text: role === 'client' 
-        ? `Welcome to MySyntroMed, ${displayName}! We are excited to support your practice. Your account is ready, and you can now start requesting specialist assistance.`
-        : `Welcome to the MySyntroMed Specialist Team, ${displayName}! You will receive client assignments here. Please complete your profile to get started.`,
+        ? `Welcome to MySyntroMed, ${displayName}! We're excited to support your practice. Your temporary password is: ${password}. Check your email for the password and get started!`
+        : `Welcome to the MySyntroMed Specialist Team, ${displayName}! Your temporary password is: ${password}. Check your email for the password to get started!`,
       participants: [adminId, userRecord.uid],
       read: false,
       status: 'sent',
@@ -142,7 +157,7 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
 
     // 3. Send Welcome Email
     const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
-    const emailResult = await sendWelcomeEmail(email, displayName, password, role as 'client' | 'specialist', loginUrl);
+    const emailResult = await sendWelcomeEmail(email, displayName, role as 'client' | 'specialist', loginUrl, password);
     
     if (!emailResult.success) {
       console.error('[EMAIL] Failed to send welcome email:', emailResult.error);
@@ -151,6 +166,7 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
     res.json({ 
       success: true, 
       uid: userRecord.uid,
+      tempCode: password,
       emailSent: emailResult.success
     });
   } catch (error: any) {

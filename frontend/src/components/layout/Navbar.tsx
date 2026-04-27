@@ -106,7 +106,8 @@ export const Navbar = () => {
                 </Link>
               </motion.div>
             ))}
-            <Button href="/contact" className="w-full mt-2">Book Consultation</Button>
+            <Button href="/client-portal" className="w-full mt-2">Get Started</Button>
+            <Button href="/contact" variant="outline" className="w-full">Book Consultation</Button>
           </motion.div>
         )}
       </AnimatePresence>

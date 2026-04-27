@@ -1,6 +1,38 @@
 <?php
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: https://mysyntromed.com');
+
+// Rate limiting - simple file-based implementation
+$rateLimitFile = sys_get_temp_dir() . '/mysyntromed_contact_rate_' . md5($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+$rateLimitWindow = 15 * 60; // 15 minutes
+$rateLimitMax = 5;
+
+if (file_exists($rateLimitFile)) {
+    $data = json_decode(file_get_contents($rateLimitFile), true);
+    if ($data && (time() - $data['time']) < $rateLimitWindow) {
+        if ($data['count'] >= $rateLimitMax) {
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many requests. Please try again later.']);
+            exit;
+        }
+        $data['count']++;
+    } else {
+        $data = ['time' => time(), 'count' => 1];
+    }
+} else {
+    $data = ['time' => time(), 'count' => 1];
+}
+file_put_contents($rateLimitFile, json_encode($data));
+
+// CORS - restrict to your domain
+$allowedOrigins = [
+    'https://mysyntromed.com',
+    'https://www.mysyntromed.com',
+    'http://localhost:3000'  // for development
+];
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if (in_array($origin, $allowedOrigins)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+}
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
@@ -14,6 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed']);
+    exit;
+}
+
+// API Key validation
+$validApiKey = 'mysyntromed-secure-contact-api-key-2024';
+$providedKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
+if (!hash_equals($validApiKey, $providedKey)) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized']);
     exit;
 }
 
@@ -35,13 +76,20 @@ if (!empty($missing)) {
     exit;
 }
 
-// Sanitize and prepare data
-$fullName = trim(htmlspecialchars($input['fullName']));
-$practiceName = trim(htmlspecialchars($input['practiceName']));
+// Sanitize and validate input
+$fullName = filter_var(trim(strip_tags($input['fullName'])), FILTER_SANITIZE_SPECIAL_CHARS);
+$practiceName = filter_var(trim(strip_tags($input['practiceName'])), FILTER_SANITIZE_SPECIAL_CHARS);
 $email = filter_var(trim($input['email']), FILTER_VALIDATE_EMAIL);
-$phone = trim(htmlspecialchars($input['phone'] ?? ''));
-$serviceInterest = trim(htmlspecialchars($input['serviceInterest'] ?? ''));
-$message = trim(htmlspecialchars($input['message'] ?? ''));
+$phone = filter_var(trim(strip_tags($input['phone'] ?? '')), FILTER_SANITIZE_SPECIAL_CHARS);
+$serviceInterest = filter_var(trim(strip_tags($input['serviceInterest'] ?? '')), FILTER_SANITIZE_SPECIAL_CHARS);
+$message = filter_var(trim(strip_tags($input['message'] ?? '')), FILTER_SANITIZE_SPECIAL_CHARS);
+
+// Length validation
+if (strlen($fullName) > 100 || strlen($practiceName) > 200 || strlen($message) > 5000) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Input too long']);
+    exit;
+}
 
 if (!$email) {
     http_response_code(400);
@@ -88,7 +136,7 @@ $htmlEmail = "
     <div class='container'>
         <div class='card'>
             <div class='header'>
-                <h1>📬 New Contact Form Submission</h1>
+                <h1>New Contact Form Submission</h1>
                 <p>Someone is interested in MySyntroMed services</p>
             </div>
             
@@ -98,24 +146,24 @@ $htmlEmail = "
 
             <div class='field'>
                 <div class='field-label'>Full Name</div>
-                <div class='field-value'>{$fullName}</div>
+                <div class='field-value'>" . htmlspecialchars($fullName) . "</div>
             </div>
 
             <div class='field'>
                 <div class='field-label'>Practice / Organization</div>
-                <div class='field-value'>{$practiceName}</div>
+                <div class='field-value'>" . htmlspecialchars($practiceName) . "</div>
             </div>
 
             <div class='field'>
                 <div class='field-label'>Email Address</div>
-                <div class='field-value'><a href='mailto:{$email}'>{$email}</a></div>
+                <div class='field-value'><a href='mailto:" . htmlspecialchars($email) . "'>" . htmlspecialchars($email) . "</a></div>
             </div>";
 
 if (!empty($phone)) {
     $htmlEmail .= "
             <div class='field'>
                 <div class='field-label'>Phone Number</div>
-                <div class='field-value'><a href='tel:{$phone}'>{$phone}</a></div>
+                <div class='field-value'><a href='tel:" . htmlspecialchars($phone) . "'>" . htmlspecialchars($phone) . "</a></div>
             </div>";
 }
 
@@ -123,7 +171,7 @@ if (!empty($serviceInterest)) {
     $htmlEmail .= "
             <div class='field'>
                 <div class='field-label'>Service Interested In</div>
-                <div class='field-value'>{$serviceInterest}</div>
+                <div class='field-value'>" . htmlspecialchars($serviceInterest) . "</div>
             </div>";
 }
 
@@ -132,15 +180,15 @@ if (!empty($message)) {
             <div class='field'>
                 <div class='field-label'>Message</div>
                 <div class='message-box'>
-                    <p>{$message}</p>
+                    <p>" . htmlspecialchars($message) . "</p>
                 </div>
             </div>";
 }
 
 $htmlEmail .= "
             <div style='text-align: center;'>
-                <a href='mailto:{$email}?subject=Re: MySyntroMed Inquiry - " . urlencode($practiceName) . "' class='cta-button'>
-                    Reply to {$fullName}
+                <a href='mailto:" . htmlspecialchars($email) . "?subject=Re: MySyntroMed Inquiry - " . urlencode($practiceName) . "' class='cta-button'>
+                    Reply to " . htmlspecialchars($fullName) . "
                 </a>
             </div>
 
@@ -154,60 +202,6 @@ $htmlEmail .= "
 </html>
 ";
 
-// Plain text version for company
-$textEmail = "
-NEW CONTACT FORM SUBMISSION
-=========================
-
-Contact Inquiry from MySyntroMed Website
-
-CONTACT DETAILS
----------------
-Name:         {$fullName}
-Practice:     {$practiceName}
-Email:        {$email}
-Phone:        {$phone}
-Service:      {$serviceInterest}
-
-MESSAGE
--------
-{$message}
-
----
-Submitted: " . date('l, F j, Y \a\t g:i A') . "
-Reply directly to this email or contact them at: {$email}
-";
-
-// Auto-reply to user
-$autoReplySubject = "Thank you for contacting MySyntroMed, {$fullName}!";
-$autoReplyText = "Dear {$fullName},
-
-Thank you for reaching out to MySyntroMed!
-
-We have received your inquiry and our team will review your message. We typically respond within 24 hours during business days.
-
-Here's a summary of your inquiry:
-- Service(s) of Interest: {$serviceInterest}
-- Practice: {$practiceName}
-
-What to expect next:
-1. Our team will review your inquiry and prepare a personalized response
-2. You will receive a follow-up email with more information
-3. If you'd like a consultation, we'll schedule a time that works for you
-
-In the meantime, feel free to learn more about our services at https://mysyntromed.com
-
-Best regards,
-The MySyntroMed Team
-
----
-Phone: {$companyPhone}
-Email: {$companyEmail}
-Website: https://mysyntromed.com
-
-This is an automated message. Please do not reply directly to this email.
-";
-
 // Email headers
 $headers = [
     'From: "MySyntroMed Website" <noreply@mysyntromed.com>',
@@ -219,32 +213,12 @@ $headers = [
 $headersStr = implode("\r\n", $headers);
 
 // Send email to company
-$mailToCompany = mail(
+$mailToCompany = @mail(
     $companyEmail,
     $subject,
     $htmlEmail,
     $headersStr
 );
-
-// Send auto-reply to user
-$autoReplyHeaders = [
-    'From: "MySyntroMed" <noreply@mysyntromed.com>',
-    'X-Mailer: PHP/' . phpversion(),
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8'
-];
-$autoReplyHeadersStr = implode("\r\n", $autoReplyHeaders);
-
-$mailToUser = mail(
-    $email,
-    $autoReplySubject,
-    $autoReplyText,
-    $autoReplyHeadersStr
-);
-
-// Log the attempt
-$logEntry = date('Y-m-d H:i:s') . " - From: {$email}, Name: {$fullName}, Practice: {$practiceName}, Company Mail: " . ($mailToCompany ? 'OK' : 'FAILED') . ", Auto-Reply: " . ($mailToUser ? 'OK' : 'FAILED') . "\n";
-file_put_contents('contact_log.txt', $logEntry, FILE_APPEND);
 
 // Return response
 if ($mailToCompany) {

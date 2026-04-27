@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from 'react';
-import { AlertTriangle, Check, Clock, Eye, ListTodo, Plus, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Check, Clock, Eye, ListTodo, Plus, RefreshCw, X, Calendar, User, Mail, FileText, ChevronRight } from 'lucide-react';
 import { useRequests } from '@/lib/dashboard';
+import { ErrorBoundary } from '../ErrorBoundary';
+import type { Request } from '@/lib/firestore';
 
 const requestTypes = [
   'Chart Prep',
@@ -47,6 +49,7 @@ const Requests = () => {
   const [preferredTime, setPreferredTime] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -82,8 +85,8 @@ const Requests = () => {
     }
   };
 
-  const getStatusIcon = (status: 'pending' | 'in_progress' | 'completed') => {
-    const Icon = statusIcons[status];
+  const getStatusIcon = (status: string) => {
+    const Icon = statusIcons[status as keyof typeof statusIcons] || Clock;
     return <Icon size={14} className={status === 'in_progress' ? 'animate-spin' : ''} />;
   };
 
@@ -297,16 +300,24 @@ const Requests = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {requests.map((request) => (
-                  <tr key={request.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-4">
+                {requests.map((request) => {
+                  const reqPriority = typeof request.priority === 'string' ? request.priority.toLowerCase() : 'normal';
+const reqStatus = typeof request.status === 'string' ? request.status.toLowerCase() : 'pending';
+                   
+                   return (
+                   <tr 
+                    key={request.id} 
+                    onClick={() => setSelectedRequest(request)}
+                    className="cursor-pointer hover:bg-slate-50"
+                   >
+                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                           <ListTodo size={18} />
                         </div>
                         <div>
-                          <p className="font-medium text-slate-900">{request.type}</p>
-                          <p className="text-sm text-slate-500">{request.description}</p>
+                          <p className="font-medium text-slate-900">{typeof request.type === 'string' ? request.type : 'Request'}</p>
+                          <p className="text-sm text-slate-500">{typeof request.description === 'string' ? request.description : ''}</p>
                         </div>
                       </div>
                     </td>
@@ -315,20 +326,20 @@ const Requests = () => {
                     </td>
                     <td className="whitespace-nowrap px-4 py-4">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${priorityColors[request.priority]}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${priorityColors[reqPriority as keyof typeof priorityColors] || priorityColors.normal}`}
                       >
-                        {request.priority === 'urgent' && <AlertTriangle size={10} />}
-                        {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}
+                        {reqPriority === 'urgent' && <AlertTriangle size={10} />}
+                        {reqPriority.charAt(0).toUpperCase() + reqPriority.slice(1)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[request.status]}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}
                       >
-                        {getStatusIcon(request.status)}
-                        {request.status === 'in_progress'
+                        {getStatusIcon(reqStatus as any)}
+                        {reqStatus === 'in_progress'
                           ? 'In Progress'
-                          : request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                          : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
@@ -343,7 +354,8 @@ const Requests = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </div>
@@ -362,8 +374,154 @@ const Requests = () => {
           </div>
         )}
       </div>
+
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-navy-900">Request Details</h2>
+              <button
+                onClick={() => setSelectedRequest(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-600">
+                  <FileText size={24} />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-slate-900">{selectedRequest.type}</p>
+                  <p className="text-sm text-slate-500">{selectedRequest.description}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                    <Calendar size={12} />
+                    Date Submitted
+                  </div>
+                  <p className="text-sm font-medium text-slate-900">
+                    {new Date(selectedRequest.submittedAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+
+                {selectedRequest.completedAt && (
+                  <div className="rounded-lg border border-slate-200 p-4">
+                    <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                      <Check size={12} />
+                      Completed
+                    </div>
+                    <p className="text-sm font-medium text-slate-900">
+                      {new Date(selectedRequest.completedAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                    <AlertTriangle size={12} />
+                    Priority
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      selectedRequest.priority === 'urgent'
+                        ? 'bg-red-100 text-red-700'
+                        : selectedRequest.priority === 'high'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {selectedRequest.priority === 'urgent' && <AlertTriangle size={10} />}
+                    {selectedRequest.priority.charAt(0).toUpperCase() + selectedRequest.priority.slice(1)}
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                    <Clock size={12} />
+                    Status
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      selectedRequest.status === 'completed'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : selectedRequest.status === 'in_progress'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {selectedRequest.status === 'completed' ? (
+                      <Check size={10} />
+                    ) : selectedRequest.status === 'in_progress' ? (
+                      <RefreshCw size={10} className="animate-spin" />
+                    ) : (
+                      <Clock size={10} />
+                    )}
+                    {selectedRequest.status === 'in_progress'
+                      ? 'In Progress'
+                      : selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 p-4">
+                <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                  <User size={12} />
+                  Specialist
+                </div>
+                <p className="text-sm font-medium text-slate-900">
+                  {selectedRequest.specialistName || 'Not assigned yet'}
+                </p>
+                {selectedRequest.specialistName && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {selectedRequest.seen ? 'Viewed ✓' : 'Not yet viewed'}
+                  </p>
+                )}
+              </div>
+
+              {selectedRequest.clientName && (
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                    <Mail size={12} />
+                    Submitted By
+                  </div>
+                  <p className="text-sm font-medium text-slate-900">{selectedRequest.clientName}</p>
+                  {selectedRequest.clientEmail && (
+                    <p className="text-xs text-slate-500">{selectedRequest.clientEmail}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default Requests;
+export default function RequestsWrapper() {
+  return (
+    <ErrorBoundary>
+      <Requests />
+    </ErrorBoundary>
+  );
+}

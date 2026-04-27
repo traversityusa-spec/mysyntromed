@@ -4,12 +4,26 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import admin from './firebaseAdmin.js';
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/requireAuth.js';
+import authRoutes from './routes/auth.js';
+import contactRoutes from './routes/contact.js';
+import messageRoutes from './routes/messages.js';
+import requestRoutes from './routes/requests.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: frontendOrigin,
+    credentials: true,
+  }
+});
 
 app.disable('x-powered-by');
 app.use(helmet({
@@ -107,14 +121,14 @@ app.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
       used: false,
     });
 
-    console.log(`[OTP] Generated OTP for ${normalizedEmail}: ${code}`);
+    console.log(`[OTP] Generated OTP for ${normalizedEmail}`);
 
     const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
     const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
     const serviceKey = process.env.EMAIL_SERVICE_KEY;
 
     try {
-      await fetch(`${emailServerUrl}/send-otp`, {
+      const emailResponse = await fetch(`${emailServerUrl}/send-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,8 +140,14 @@ app.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
           loginUrl,
         }),
       });
+
+      if (emailResponse.ok) {
+        console.log('[OTP] Verification code sent to email');
+      } else {
+        console.warn('[OTP] Email server returned error, code logged for dev');
+      }
     } catch (emailError) {
-      console.warn('[OTP] Email server unavailable, OTP logged to console:', code);
+      console.warn('[OTP] Email server unavailable, OTP code:', code, '- DEV MODE');
     }
 
     res.json({ success: true, message: 'Verification code sent to your email' });
@@ -196,9 +216,10 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 });
 
-app.use('/api/auth', authLimiter, require('./routes/auth.js'));
-app.use('/api/contact', contactLimiter, require('./routes/contact.js'));
-app.use('/api/messages', authLimiter, require('./routes/messages.js'));
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/contact', contactLimiter, contactRoutes);
+app.use('/api/messages', authLimiter, messageRoutes);
+app.use('/api/requests', authLimiter, requestRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
@@ -209,7 +230,43 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(port, () => {
+const userSockets = new Map<string, string>();
+
+io.on('connection', (socket) => {
+  console.log('[SOCKET] Client connected:', socket.id);
+
+  socket.on('authenticate', (userId: string) => {
+    userSockets.set(userId, socket.id);
+    socket.join(`user:${userId}`);
+    console.log('[SOCKET] User authenticated:', userId);
+  });
+
+  socket.on('sendMessage', (data: { to: string; message: unknown }) => {
+    console.log('[SOCKET] Sending message to:', data.to);
+    io.to(`user:${data.to}`).emit('newMessage', data.message);
+  });
+
+  socket.on('typing', (data: { to: string; isTyping: boolean; senderName?: string; senderId?: string }) => {
+    console.log('[SOCKET] Typing:', data.isTyping, 'from:', data.senderName, 'senderId:', data.senderId, 'to:', data.to);
+    io.to(`user:${data.to}`).emit('userTyping', { 
+      isTyping: data.isTyping,
+      senderName: data.senderName || 'User',
+      senderId: data.senderId || ''
+    });
+  });
+
+  socket.on('disconnect', () => {
+    for (const [userId, sockId] of userSockets.entries()) {
+      if (sockId === socket.id) {
+        userSockets.delete(userId);
+        break;
+      }
+    }
+    console.log('[SOCKET] Client disconnected:', socket.id);
+  });
+});
+
+httpServer.listen(port, () => {
   console.log(`Backend listening on port ${port}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });

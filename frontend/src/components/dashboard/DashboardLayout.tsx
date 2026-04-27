@@ -16,9 +16,11 @@ import {
   User,
   Users,
   Workflow,
+  Shield,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { messageService, notificationService, type AppNotification } from '@/lib/firestore';
+import { messageService, notificationService, liveCallService, type AppNotification, type CallSession } from '@/lib/firestore';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
@@ -75,6 +77,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [incomingCalls, setIncomingCalls] = useState<CallSession[]>([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingAssignments, setPendingAssignments] = useState(0);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -133,9 +136,16 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         showToast(latest.type as any, latest.title, latest.message);
       }
     });
+    const callsUnsub = liveCallService.subscribeToIncomingCalls(user.uid, (sessions) => {
+      setIncomingCalls(sessions);
+      if (sessions.length > 0) {
+        playNotificationSound();
+      }
+    });
     return () => {
       messageUnsub();
       notificationUnsub();
+      callsUnsub();
     };
   }, [user?.uid]);
 
@@ -154,9 +164,15 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAllRead = () => {
-    if (!user?.uid) return;
+const markAllRead = () => {
     notificationService.markAllRead(user.uid).catch(() => {});
+  };
+
+  const handleNotificationClick = (notificationId: string, read: boolean) => {
+    if (!read) {
+      notificationService.markNotificationRead(notificationId).catch(() => {});
+    }
+    setShowNotifications(false);
   };
 
   const handleLogout = async () => {
@@ -164,14 +180,29 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     navigate('/portal');
   };
 
+  const handleAcceptCall = (session: CallSession) => {
+    navigate(`${basePath}/calls?join=${session.id}`);
+  };
+
+  const handleRejectCall = async (session: CallSession) => {
+    await liveCallService.updateStatus(session.id, 'rejected');
+  };
+
   const renderNavItem = (item: NavItem) => {
     const isActive = location.pathname === item.to;
     const Icon = item.icon;
+
+    const handleClick = () => {
+      if (item.to.includes('conversations') && pendingAssignments > 0) {
+        setPendingAssignments(0);
+      }
+    };
 
     return (
       <Link
         key={item.to}
         to={item.to}
+        onClick={handleClick}
         className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
           isActive
             ? 'bg-teal-50 text-teal-700'
@@ -239,6 +270,43 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         />
       )}
 
+      {incomingCalls.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm transition-all duration-300">
+          <div className="w-full max-w-md animate-[slideUp_0.3s_ease-out] rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-amber-100">
+                <div className="absolute inset-0 animate-ping rounded-full bg-amber-100 opacity-75"></div>
+                {incomingCalls[0].callType === 'audio' ? (
+                  <Phone size={40} className="relative z-10 animate-bounce text-amber-600" />
+                ) : (
+                  <Video size={40} className="relative z-10 animate-bounce text-amber-600" />
+                )}
+              </div>
+              <h2 className="text-2xl font-bold text-navy-900">Incoming {incomingCalls[0].callType === 'audio' ? 'Audio' : 'Video'} Call</h2>
+              <p className="mt-2 text-lg text-slate-600">{incomingCalls[0].callerName}</p>
+              <p className="mt-1 text-sm text-slate-400 capitalize">{incomingCalls[0].callerRole}</p>
+
+              <div className="mt-8 flex w-full gap-4">
+                <button
+                  onClick={() => handleRejectCall(incomingCalls[0])}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-100 py-3.5 font-semibold text-red-700 transition hover:bg-red-200"
+                >
+                  <Phone size={20} className="rotate-[135deg]" />
+                  Decline
+                </button>
+                <button
+                  onClick={() => handleAcceptCall(incomingCalls[0])}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-600/30 transition hover:bg-teal-700"
+                >
+                  {incomingCalls[0].callType === 'audio' ? <Phone size={20} /> : <Video size={20} />}
+                  Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-6">
           <div className="flex items-center gap-4">
@@ -287,7 +355,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                         notifications.map((notification) => (
                           <div
                             key={notification.id}
-                            className={`border-b border-slate-100 p-4 ${
+                            onClick={() => handleNotificationClick(notification.id, notification.read)}
+                            className={`cursor-pointer border-b border-slate-100 p-4 hover:bg-slate-50 ${
                               !notification.read ? 'bg-teal-50' : ''
                             }`}
                           >

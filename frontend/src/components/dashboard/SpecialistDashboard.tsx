@@ -66,6 +66,12 @@ export const SpecialistDashboard = () => {
     return () => unsub();
   }, [sessionUser?.uid]);
 
+  const handleNotificationClick = async (notificationId: string, read: boolean) => {
+    if (!read) {
+      await notificationService.markNotificationRead(notificationId);
+    }
+  };
+
   const stats = [
     { label: 'Active Clients', value: clients.length || 0, icon: Users, color: 'bg-blue-50 text-blue-600' },
     { label: 'Pending Requests', value: requests.filter(r => r.status === 'pending').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
@@ -88,9 +94,14 @@ export const SpecialistDashboard = () => {
           </div>
           <div className="space-y-2">
             {newClientAssignments.slice(0, 3).map((notif) => (
-              <div key={notif.id} className="flex items-center gap-2 rounded-lg bg-white/80 p-3 border border-indigo-100">
+              <div 
+                key={notif.id} 
+                onClick={() => handleNotificationClick(notif.id, notif.read)}
+                className={`cursor-pointer flex items-center gap-2 rounded-lg bg-white/80 p-3 border border-indigo-100 ${!notif.read ? 'bg-indigo-100' : ''}`}
+              >
                 <Bell size={14} className="text-indigo-500" />
                 <p className="text-sm text-indigo-800">{notif.message}</p>
+                {!notif.read && <span className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />}
               </div>
             ))}
           </div>

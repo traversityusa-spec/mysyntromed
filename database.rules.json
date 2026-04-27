@@ -1,0 +1,24 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": "auth != null",
+    "typing": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+    "sounds": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+    "presence": {
+      "$uid": {
+        ".read": true,
+        ".write": "$uid === auth.uid"
+      }
+    }
+  }
+}

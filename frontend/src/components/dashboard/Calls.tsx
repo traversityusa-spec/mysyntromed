@@ -9,11 +9,13 @@ import {
   Shield,
   Video,
   X,
+  Phone,
 } from 'lucide-react';
 import { useCalls } from '@/lib/dashboard';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
-import { db, liveCallService, type CallSession, type ScheduledCall, type UserProfile } from '@/lib/firestore';
+import { useSearchParams } from 'react-router-dom';
+import { db, liveCallService, notificationService, type CallSession, type ScheduledCall, type UserProfile } from '@/lib/firestore';
 
 const checkMediaPermissions = async (): Promise<{ camera: boolean; microphone: boolean }> => {
   try {
@@ -49,6 +51,8 @@ const Calls = () => {
   const [assignedClients, setAssignedClients] = useState<UserProfile[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [rescheduleCall, setRescheduleCall] = useState<ScheduledCall | null>(null);
+  const [showCallTypeSelection, setShowCallTypeSelection] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const role = sessionUser?.role || 'client';
 
@@ -68,12 +72,12 @@ const Calls = () => {
   }, [role, user?.uid, selectedClientId]);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    const unsub = liveCallService.subscribeToIncomingCalls(user.uid, (sessions) => {
-      setIncomingCalls(sessions);
-    });
-    return () => unsub();
-  }, [user?.uid]);
+    const joinSessionId = searchParams.get('join');
+    if (joinSessionId) {
+      setOutgoingSessionId(joinSessionId);
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!outgoingSessionId) return;
@@ -165,6 +169,19 @@ const Calls = () => {
       const docRef = doc(db, 'calls', rescheduleCall.id);
       await updateDoc(docRef, { date: newDate });
 
+      const targetUserId = role === 'specialist' ? rescheduleCall.userId : rescheduleCall.specialistId;
+      if (targetUserId) {
+        const formattedDate = newDate.toLocaleString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+        });
+        await notificationService.addNotification({
+          userId: targetUserId,
+          title: 'Call Rescheduled',
+          message: `${(sessionUser as any)?.displayName || 'The other party'} rescheduled the call to ${formattedDate}.`,
+          type: 'call'
+        });
+      }
+
       setRescheduleCall(null);
       setShowScheduleForm(false);
       setSubmitted(true);
@@ -183,7 +200,7 @@ const Calls = () => {
     }
   };
 
-  const handleStartInstantCall = async () => {
+  const handleStartInstantCall = async (type: 'audio' | 'video') => {
     if (!user?.uid || !sessionUser) return;
 
     const permissions = await checkMediaPermissions();
@@ -193,7 +210,8 @@ const Calls = () => {
     }
 
     setCallStatus(null);
-    const meetingLink = `https://meet.jit.si/mysyntromed-live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setShowCallTypeSelection(false);
+    const meetingLink = `https://meet.jit.si/mysyntromed-live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${type === 'audio' ? '#config.startAudioOnly=true' : ''}`;
 
     if (role === 'client') {
       try {
@@ -211,6 +229,7 @@ const Calls = () => {
           receiverName,
           receiverRole: 'specialist',
           meetingLink,
+          callType: type,
         });
         setOutgoingSessionId(sessionId);
         setCallStatus('Calling specialist…');
@@ -234,6 +253,7 @@ const Calls = () => {
         receiverName: client.displayName || client.email || 'Client',
         receiverRole: 'client',
         meetingLink,
+        callType: type,
       });
       setOutgoingSessionId(sessionId);
       setCallStatus('Calling client…');
@@ -282,7 +302,7 @@ const Calls = () => {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={handleStartInstantCall}
+            onClick={() => setShowCallTypeSelection(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700"
           >
             <Video size={18} />
@@ -298,32 +318,36 @@ const Calls = () => {
         </div>
       </div>
 
-      {incomingCalls.length > 0 && !activeCallLink && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                <Shield size={18} />
-              </div>
-              <div>
-                <p className="font-medium text-amber-900">Incoming call from {incomingCalls[0].callerName}</p>
-                <p className="text-xs text-amber-700">Role: {incomingCalls[0].callerRole}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
+      {showCallTypeSelection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-center text-lg font-semibold text-navy-900">Select Call Type</h3>
+            <div className="flex gap-4">
               <button
-                onClick={() => handleRejectCall(incomingCalls[0])}
-                className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                onClick={() => handleStartInstantCall('audio')}
+                className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 p-4 transition hover:border-teal-500 hover:bg-slate-50"
               >
-                Reject
+                <div className="rounded-full bg-teal-100 p-3 text-teal-600">
+                  <Phone size={24} />
+                </div>
+                <span className="font-medium text-slate-700">Audio Call</span>
               </button>
               <button
-                onClick={() => handleAcceptCall(incomingCalls[0])}
-                className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                onClick={() => handleStartInstantCall('video')}
+                className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 p-4 transition hover:border-teal-500 hover:bg-slate-50"
               >
-                Accept
+                <div className="rounded-full bg-teal-100 p-3 text-teal-600">
+                  <Video size={24} />
+                </div>
+                <span className="font-medium text-slate-700">Video Call</span>
               </button>
             </div>
+            <button
+              onClick={() => setShowCallTypeSelection(false)}
+              className="mt-6 w-full rounded-lg border border-slate-200 py-2 font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

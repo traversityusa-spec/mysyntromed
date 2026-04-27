@@ -15,14 +15,14 @@ service cloud.firestore {
         getUserRole(request.auth.uid) == 'admin'
       );
     }
-    
+
     function isSpecialist() {
       return signedIn() && (
         request.auth.token.role == 'specialist' ||
         getUserRole(request.auth.uid) == 'specialist'
       );
     }
-    
+
     function isClient() {
       return signedIn() && (
         request.auth.token.role == 'client' ||
@@ -34,30 +34,71 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+function isValidEmail(email) {
+      return email.matches('.*@.*');
+    }
+
+    function isValidDisplayName(name) {
+      return name.size() >= 2 && name.size() <= 100;
+    }
+
+    function isValidRole(role) {
+      return role in ['client', 'specialist', 'admin'];
+    }
+
+    function isValidString(str, minLen, maxLen) {
+      return str.size() >= minLen && str.size() <= maxLen;
+    }
+
     match /users/{userId} {
       allow read: if signedIn() && (isOwner(userId) || isAdmin());
-      allow create: if signedIn() && request.auth.uid == userId;
-      allow update: if isOwner(userId) || isAdmin();
+      allow create: if signedIn() && request.auth.uid == userId
+        && request.resource.data.displayName is string
+        && isValidDisplayName(request.resource.data.displayName)
+        && request.resource.data.role is string
+        && isValidRole(request.resource.data.role);
+      allow update: if (isOwner(userId) || isAdmin())
+        && (
+          request.resource.data.displayName == resource.data.displayName ||
+          (request.resource.data.displayName is string && isValidDisplayName(request.resource.data.displayName))
+        );
       allow delete: if isAdmin();
     }
 
     match /messages/{messageId} {
-      allow read: if signedIn() && (request.auth.uid in resource.data.participants || isAdmin());
-      allow create: if signedIn() && (request.auth.uid in request.resource.data.participants);
-      allow update: if signedIn() && (request.auth.uid in resource.data.participants);
+      allow read: if signedIn() && (
+        request.auth.uid in resource.data.participants || 
+        request.auth.uid == resource.data.senderId ||
+        request.auth.uid == resource.data.receiverId ||
+        isAdmin()
+      );
+      allow create: if signedIn() && (
+        request.auth.uid in request.resource.data.participants
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 5000
+      );
+      allow update: if signedIn() && (
+        request.auth.uid in resource.data.participants ||
+        request.auth.uid == resource.data.senderId ||
+        request.auth.uid == resource.data.receiverId ||
+        isAdmin()
+      );
       allow delete: if isAdmin();
     }
 
     match /requests/{requestId} {
       allow read: if signedIn() && (
-        resource.data.userId == request.auth.uid || 
-        resource.data.specialistId == request.auth.uid || 
+        resource.data.userId == request.auth.uid ||
+        resource.data.specialistId == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isClient();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.type is string
+        && request.resource.data.type.size() <= 100;
       allow update: if signedIn() && (
-        resource.data.userId == request.auth.uid || 
-        resource.data.specialistId == request.auth.uid || 
+        resource.data.userId == request.auth.uid ||
+        resource.data.specialistId == request.auth.uid ||
         isAdmin()
       );
       allow delete: if isAdmin();
@@ -65,14 +106,15 @@ service cloud.firestore {
 
     match /calls/{callId} {
       allow read: if signedIn() && (
-        resource.data.userId == request.auth.uid || 
-        resource.data.specialistId == request.auth.uid || 
+        resource.data.userId == request.auth.uid ||
+        resource.data.specialistId == request.auth.uid ||
         isAdmin()
       );
-      allow create: if signedIn();
+      allow create: if signedIn()
+        && (request.resource.data.userId == request.auth.uid || request.resource.data.specialistId == request.auth.uid);
       allow update: if signedIn() && (
-        resource.data.userId == request.auth.uid || 
-        resource.data.specialistId == request.auth.uid || 
+        resource.data.userId == request.auth.uid ||
+        resource.data.specialistId == request.auth.uid ||
         isAdmin()
       );
       allow delete: if isAdmin();
@@ -80,14 +122,17 @@ service cloud.firestore {
 
     match /call_sessions/{sessionId} {
       allow read: if signedIn() && (
-        resource.data.callerId == request.auth.uid || 
-        resource.data.receiverId == request.auth.uid || 
+        resource.data.callerId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
         isAdmin()
       );
-      allow create: if signedIn();
+      allow create: if signedIn() && (
+        request.resource.data.callerId == request.auth.uid ||
+        request.resource.data.receiverId == request.auth.uid
+      );
       allow update: if signedIn() && (
-        resource.data.callerId == request.auth.uid || 
-        resource.data.receiverId == request.auth.uid || 
+        resource.data.callerId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
         isAdmin()
       );
       allow delete: if isAdmin();
@@ -95,21 +140,26 @@ service cloud.firestore {
 
     match /activity/{activityId} {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if signedIn() && (request.resource.data.userId == request.auth.uid);
+      allow create: if signedIn() && (
+        request.resource.data.userId == request.auth.uid
+        && request.resource.data.type is string
+      );
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAdmin() || (signedIn() && request.resource.data.userId == request.auth.uid);
+      allow create: if signedIn();  
       allow update: if signedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /invite_codes/{codeId} {
       allow read: if isAdmin();
-      allow create: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.code is string
+        && request.resource.data.code.size() >= 8;
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -123,7 +173,7 @@ service cloud.firestore {
 
     match /ratings/{ratingId} {
       allow read: if signedIn();
-      allow create: if isClient();
+      allow create: if isClient() && request.resource.data.userId == request.auth.uid;
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }

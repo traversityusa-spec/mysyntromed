@@ -264,8 +264,7 @@ export const AdminDashboard = () => {
         })}
       </div>
 
-      {/* Invite Code Manager */}
-      {sessionUser?.uid && <InviteManager adminUid={sessionUser.uid} />}
+      
 
       {/* Recent System Activity */}
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">

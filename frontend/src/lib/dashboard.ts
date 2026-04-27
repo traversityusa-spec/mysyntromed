@@ -37,58 +37,67 @@ export const useDashboardData = () => {
   const [activityFilter, setActivityFilter] = useState<'today' | 'week' | 'month'>('today');
   const [unreadMessages, setUnreadMessages] = useState(0);
 
-  const loadDashboardData = useCallback(async () => {
-    if (!user?.uid) return;
+  useEffect(() => {
+    if (!user?.uid) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
-    try {
-      const [requestsData, upcomingCallsData, pastCallsData, activityData, unreadCount] = await Promise.all([
-        requestService.getRequests(user.uid),
-        callService.getUpcomingCalls(user.uid),
-        callService.getPastCalls(user.uid),
-        activityService.getActivity(user.uid, activityFilter),
-        notificationService.getUnreadCount(user.uid),
-      ]);
+    const unsubs: Array<() => void> = [];
 
-      setRequests(requestsData);
-      setUpcomingCalls(upcomingCallsData);
-      setPastCalls(pastCallsData);
-      setActivity(activityData);
-      setUnreadMessages(unreadCount);
+    // Subscribe to requests
+    const unsubRequests = requestService.subscribeToRequests(user.uid, (msgs) => {
+      setRequests(msgs);
+      setStats(prev => ({
+        ...prev,
+        openRequests: msgs.filter(r => r.status !== 'completed').length,
+        inProgressRequests: msgs.filter(r => r.status === 'in_progress').length,
+      }));
+    });
+    unsubs.push(unsubRequests);
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    // Subscribe to notifications (unread count)
+    const unsubNotifications = notificationService.subscribeToUnreadCount(user.uid, (count) => {
+      setUnreadMessages(count);
+      setStats(prev => ({ ...prev, unreadMessages: count }));
+    });
+    unsubs.push(unsubNotifications);
 
-      const openRequests = requestsData.filter((r) => r.status !== 'completed').length;
-      const inProgressRequests = requestsData.filter((r) => r.status === 'in_progress').length;
-      const completedToday = activityData.filter(
-        (a) => a.status === 'completed' && a.createdAt >= today
-      ).length;
+    // Initial load for others (can be converted later if needed)
+    const loadOthers = async () => {
+      try {
+        const [upcoming, past, act] = await Promise.all([
+          callService.getUpcomingCalls(user.uid),
+          callService.getPastCalls(user.uid),
+          activityService.getActivity(user.uid, activityFilter),
+        ]);
+        setUpcomingCalls(upcoming);
+        setPastCalls(past);
+        setActivity(act);
+        setStats(prev => ({
+          ...prev,
+          nextCall: upcoming[0] || null,
+          completedToday: act.filter(a => a.status === 'completed' && a.createdAt >= new Date(new Date().setHours(0,0,0,0))).length
+        }));
+      } catch (err) {
+        console.error('Error loading dashboard extras:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      setStats({
-        openRequests,
-        inProgressRequests,
-        unreadMessages: unreadCount,
-        nextCall: upcomingCallsData[0] || null,
-        completedToday,
-      });
-    } catch (err) {
-      console.error('Error loading dashboard data:', err);
-      setError('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
+    loadOthers();
+
+    return () => unsubs.forEach(fn => fn());
   }, [user?.uid, activityFilter]);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
-
   const refreshData = useCallback(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    // The subscribers handle most things. This can trigger a reload of the non-real-time parts.
+    setLoading(true);
+  }, []);
 
   return {
     loading,
@@ -110,10 +119,60 @@ export const useRequests = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadRequests = useCallback(async () => {
-    if (!user?.uid) return;
+  useEffect(() => {
+    if (!user?.uid) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
+    setError(null);
+
+    const callback = (data: Request[]) => {
+      setRequests(data);
+      setLoading(false);
+    };
+
+    let unsubscribe: () => void;
+
+    if (sessionUser?.role === 'specialist') {
+      unsubscribe = requestService.subscribeToRequestsForSpecialist(user.uid, callback);
+    } else {
+      unsubscribe = requestService.subscribeToRequests(user.uid, callback);
+    }
+
+    return () => unsubscribe();
+  }, [user?.uid, sessionUser?.role]);
+
+  const createRequest = async (requestData: {
+    type: string;
+    description: string;
+    priority: 'normal' | 'high' | 'urgent';
+    preferredTime?: string;
+  }) => {
+    if (!user?.uid) throw new Error('Not authenticated');
+
+    const isSpecialist = sessionUser?.role === 'specialist';
+    const specialistId = isSpecialist ? user.uid : (sessionUser?.assignedSpecialistId || '');
+    const specialistName = isSpecialist ? (sessionUser?.displayName || '') : (sessionUser?.assignedSpecialistName || '');
+    
+    const requestPayload: any = {
+      ...requestData,
+      userId: user.uid,
+      clientName: sessionUser?.displayName || user.email || 'Client',
+      clientEmail: user.email || '',
+    };
+
+    if (specialistId) {
+      requestPayload.specialistId = specialistId;
+      requestPayload.specialistName = specialistName;
+    }
+
+    await requestService.createRequest(requestPayload);
+  };
+
+  const refreshRequests = async () => {
+    if (!user?.uid) return;
     try {
       let data: Request[] = [];
       if (sessionUser?.role === 'specialist') {
@@ -125,39 +184,12 @@ export const useRequests = () => {
       }
       setRequests(data);
     } catch (err) {
-      console.error('Error loading requests:', err);
+      console.error('Error refreshing requests:', err);
       setError('Failed to load requests');
-      setRequests([]);
-    } finally {
-      setLoading(false);
     }
-  }, [user?.uid, sessionUser?.role]);
-
-  useEffect(() => {
-    loadRequests();
-  }, [loadRequests]);
-
-  const createRequest = async (requestData: {
-    type: string;
-    description: string;
-    priority: 'normal' | 'high' | 'urgent';
-    preferredTime?: string;
-  }) => {
-    if (!user?.uid) throw new Error('Not authenticated');
-
-    await requestService.createRequest({
-      ...requestData,
-      userId: user.uid,
-      clientName: sessionUser?.displayName || user.email || 'Client',
-      clientEmail: user.email || '',
-      specialistId: (sessionUser as any)?.assignedSpecialistId || '',
-      specialistName: (sessionUser as any)?.assignedSpecialistName || '',
-    });
-
-    await loadRequests();
   };
 
-  return { requests, loading, error, createRequest, refreshRequests: loadRequests };
+  return { requests, loading, error, createRequest, refreshRequests };
 };
 
 export const useCalls = () => {
@@ -168,7 +200,10 @@ export const useCalls = () => {
   const [error, setError] = useState<string | null>(null);
 
   const loadCalls = useCallback(async () => {
-    if (!user?.uid) return;
+    if (!user?.uid) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -206,12 +241,39 @@ export const useCalls = () => {
       throw new Error('A specialist must be assigned to your account before you can schedule a call. Please contact support or wait for an admin to assign one.');
     }
 
-    await callService.scheduleCall({
-      ...callData,
-      userId: callData.userId || user.uid,
-      specialistId: callData.specialistId || assignedId,
-      specialistName: callData.specialistName || assignedName,
-    });
+    const isSpecialist = sessionUser?.role === 'specialist';
+    
+    // If client, they are the user and their assigned specialist is the specialist
+    // If specialist, they are the specialist and the selected client is the user
+    const finalUserId = isSpecialist ? (callData.userId || '') : user.uid;
+    const finalSpecialistId = isSpecialist ? user.uid : (callData.specialistId || assignedId || '');
+    const finalSpecialistName = isSpecialist ? (sessionUser as any)?.displayName || 'Specialist' : (callData.specialistName || assignedName || 'Specialist');
+
+    const payload: any = {
+      title: callData.title,
+      date: callData.date,
+      userId: finalUserId,
+      specialistId: finalSpecialistId,
+      specialistName: finalSpecialistName,
+    };
+
+    // Remove undefined values to prevent Firestore crashes
+    Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+
+    await callService.scheduleCall(payload);
+
+    const targetUserId = isSpecialist ? finalUserId : finalSpecialistId;
+    if (targetUserId) {
+      const formattedDate = callData.date.toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+      });
+      await notificationService.addNotification({
+        userId: targetUserId,
+        title: 'New Call Scheduled',
+        message: `${(sessionUser as any)?.displayName || 'The other party'} scheduled a call with you for ${formattedDate}.`,
+        type: 'call'
+      });
+    }
 
     await loadCalls();
   };

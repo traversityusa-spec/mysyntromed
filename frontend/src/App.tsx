@@ -14,6 +14,7 @@ import Specialist from "@/components/dashboard/Specialist";
 import Activity from "@/components/dashboard/Activity";
 import Settings from "@/components/dashboard/Settings";
 import { AdminClients, AdminSpecialists, AdminConversations, AdminAnalytics } from "@/components/dashboard/AdminPages";
+import AdminDashboard from "@/components/dashboard/AdminDashboard";
 
 import Home from "@/pages/Home";
 import About from "@/pages/About";
@@ -52,16 +53,14 @@ const AuthRoute = ({ children }: { children: ReactNode }) => {
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { user, sessionUser, loading } = useAuth();
 
-  if (loading) {
+  const isReady = !loading && !!sessionUser;
+
+  if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
       </div>
     );
-  }
-
-  if (!user || !sessionUser) {
-    return <Navigate to="/portal" replace />;
   }
 
   if (sessionUser.isNewUser) {
@@ -74,16 +73,16 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
 const AdminRoute = ({ children }: { children: ReactNode }) => {
   const { user, sessionUser, loading } = useAuth();
 
-  if (loading) {
+  const isReady = !loading && !!sessionUser;
+
+  if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-front border-2 border-teal-500 border-t-transparent" />
       </div>
     );
   }
 
-  if (!user || !sessionUser) return <Navigate to="/admin" replace />;
-  
   if (sessionUser.isNewUser) {
     return <Navigate to="/reset-password" replace />;
   }
@@ -95,7 +94,9 @@ const AdminRoute = ({ children }: { children: ReactNode }) => {
 const SpecialistRoute = ({ children }: { children: ReactNode }) => {
   const { user, sessionUser, loading } = useAuth();
 
-  if (loading) {
+  const isReady = !loading && !!sessionUser;
+
+  if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
@@ -103,8 +104,6 @@ const SpecialistRoute = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  if (!user || !sessionUser) return <Navigate to="/portal" replace />;
-  
   if (sessionUser.isNewUser) {
     return <Navigate to="/reset-password" replace />;
   }
@@ -186,7 +185,7 @@ function AppRoutes() {
       <Route path="/portal/settings" element={<DashboardPage><Settings /></DashboardPage>} />
       
       {/* Admin Workspace */}
-      <Route path="/admin/dashboard" element={<AdminPage><DashboardHome /></AdminPage>} />
+      <Route path="/admin/dashboard" element={<AdminPage><AdminDashboard /></AdminPage>} />
       <Route path="/admin/clients" element={<AdminPage><AdminClients /></AdminPage>} />
       <Route path="/admin/specialists" element={<AdminPage><AdminSpecialists /></AdminPage>} />
       <Route path="/admin/conversations" element={<AdminPage><AdminConversations /></AdminPage>} />

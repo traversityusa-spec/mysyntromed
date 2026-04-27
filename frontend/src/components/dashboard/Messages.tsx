@@ -1,4 +1,4 @@
-import { type FormEvent, useState, useEffect, useRef } from 'react';
+import { type FormEvent, useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Paperclip, Phone, Plus, Search, Send, Shield, Video, X, MessageSquare, 
@@ -7,6 +7,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, userService, notificationService, typingService, notificationSoundService, type Message, type UserProfile } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
+import { initSocket, emitMessage, emitTyping, disconnectSocket } from '@/lib/socket';
 
 type ConversationPreview = {
   id: string;
@@ -35,7 +36,9 @@ const Messages = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [typingUserName, setTypingUserName] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const initialSoundLoadRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -44,9 +47,65 @@ const Messages = () => {
   const clientPending = sessionUser?.role === 'client' && !sessionUser?.assignedSpecialistId;
 
   useEffect(() => {
+    if (user?.uid) {
+      initSocket(user.uid);
+    }
+    return () => {
+      disconnectSocket();
+    };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    const handleNewMessage = (e: CustomEvent<Message>) => {
+      const msg = e.detail;
+      console.log('[MESSAGES] Socket message received:', msg);
+      setAllMessages((prev) => {
+        const exists = prev.some((m) => m.id === msg.id);
+        if (exists) return prev;
+        return [...prev, msg];
+      });
+      if (selectedConversation && (msg.senderId === selectedConversation || msg.receiverId === selectedConversation)) {
+        setMessages((prev) => [...prev, msg]);
+        notificationSoundService.playIncomingSound();
+        scrollToBottom();
+      }
+    };
+    window.addEventListener('socket:newMessage', handleNewMessage as EventListener);
+    return () => window.removeEventListener('socket:newMessage', handleNewMessage as EventListener);
+  }, [selectedConversation]);
+
+  useEffect(() => {
+    const handleTyping = (e: CustomEvent<{ isTyping: boolean; senderName?: string }>) => {
+      const data = e.detail;
+      console.log('[MESSAGES] Typing event received:', data, 'selectedConversation:', selectedConversation);
+      
+      // Only show typing indicator if it's from the selected conversation
+      // We're typing to them, not them to us - don't show our own typing coming back
+      if (!selectedConversation) return;
+      
+      if (data.isTyping) {
+        setIsTyping(true);
+        setTypingUserName(data.senderName || 'User');
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+          setTypingUserName('');
+        }, 5000);
+      } else {
+        setIsTyping(false);
+        setTypingUserName('');
+      }
+    };
+    window.addEventListener('socket:typing', handleTyping as EventListener);
+    return () => window.removeEventListener('socket:typing', handleTyping as EventListener);
+  }, [selectedConversation]);
+
+  useEffect(() => {
     if (!user?.uid) return;
     setLoading(true);
+    console.log('[MESSAGES] Subscribing to messages for user:', user.uid);
     const unsubscribe = messageService.subscribeToUserMessages(user.uid, (msgs) => {
+      console.log('[MESSAGES] Received messages:', msgs.length);
       setAllMessages(msgs);
       setLoading(false);
     });
@@ -67,30 +126,48 @@ const Messages = () => {
   useEffect(() => {
     if (!user?.uid) return;
     const conversationMap = new Map<string, ConversationPreview>();
-    const allowedSpecialistIds = sessionUser?.role === 'specialist'
-      ? new Set(assignedClients.map((c) => c.uid))
-      : null;
-
     allMessages.forEach((msg) => {
       const otherId = msg.senderId === user.uid ? msg.receiverId : msg.senderId;
-      // Allow all messages to show up, not just from assigned specialists
       const existing = conversationMap.get(otherId);
       const isUnread = msg.receiverId === user.uid && !msg.read;
+      
+      const lastMsgText = msg.fileUrl ? (msg.fileType === 'image' ? '📷 Image' : '📎 File') : msg.text;
+      
       if (!existing) {
+        // Resolve name and role for the other person
+        let otherName = 'User';
+        let otherRole = 'client';
+        let otherPhoto = '';
+
+        if (msg.senderId === user.uid) {
+          // I sent it, so the other person is the receiver
+          otherName = msg.receiverId === sessionUser?.assignedSpecialistId ? (sessionUser.assignedSpecialistName || 'Specialist') : 'Client';
+          otherRole = msg.receiverId === sessionUser?.assignedSpecialistId ? 'specialist' : 'client';
+        } else {
+          // They sent it
+          otherName = msg.senderName;
+          otherRole = msg.senderRole;
+          otherPhoto = msg.senderPhotoURL || '';
+        }
+
         conversationMap.set(otherId, {
           id: otherId,
-          name: msg.senderId === user.uid ? (msg.receiverId === sessionUser?.assignedSpecialistId ? sessionUser.assignedSpecialistName || 'Specialist' : 'User') : msg.senderName,
-          role: msg.senderId === user.uid ? 'User' : msg.senderRole,
-          lastMessage: msg.text,
+          name: otherName,
+          role: otherRole,
+          lastMessage: lastMsgText,
           time: formatMessageTime(msg.createdAt),
           lastTimestamp: msg.createdAt.getTime(),
           unread: isUnread ? 1 : 0,
           online: presenceMap[otherId] || false,
+          photoURL: otherPhoto,
         });
       } else if (existing && msg.createdAt.getTime() > (existing.lastTimestamp || 0)) {
-        existing.lastMessage = msg.text;
+        existing.lastMessage = lastMsgText;
         existing.time = formatMessageTime(msg.createdAt);
         existing.lastTimestamp = msg.createdAt.getTime();
+        if (msg.senderId !== user.uid && msg.senderPhotoURL) {
+          existing.photoURL = msg.senderPhotoURL;
+        }
       }
       if (existing && isUnread) existing.unread += 1;
     });
@@ -183,7 +260,7 @@ const Messages = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isTyping]);
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
@@ -228,11 +305,11 @@ const Messages = () => {
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
-    const unsub = typingService.subscribeToTyping(user.uid, selectedConversation, (isTyping) => {
-      if (isTyping) {
+    const unsub = typingService.subscribeToTyping(selectedConversation, user.uid, (isTypingVal) => {
+      if (isTypingVal) {
         setIsTyping(true);
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000);
+        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 5000);
       } else {
         setIsTyping(false);
       }
@@ -284,54 +361,62 @@ const Messages = () => {
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user?.uid || sending || !selectedConversation) return;
-    if (!chatEnabled) return;
+    console.log('=== SEND MESSAGE DEBUG ===');
+    console.log('newMessage:', newMessage.trim());
+    console.log('user?.uid:', user?.uid);
+    console.log('selectedConversation:', selectedConversation);
+    console.log('sessionUser?.assignedSpecialistId:', sessionUser?.assignedSpecialistId);
+    console.log('chatEnabled:', chatEnabled);
+    console.log('sending:', sending);
+    console.log('=========================');
+    
+    if (!newMessage.trim() || !user?.uid || sending || !selectedConversation) {
+      console.log('Early return: missing required fields');
+      return;
+    }
+    if (!chatEnabled) {
+      console.log('Chat is not enabled - cannot send');
+      return;
+    }
 
     setSending(true);
     const receiverId = selectedConversation;
     const senderName = sessionUser?.displayName || user?.email?.split('@')[0] || 'User';
     const senderRole = sessionUser?.role || 'client';
 
+    console.log('Attempting to send message...', {
+      senderId: user.uid,
+      receiverId,
+      senderName,
+      senderRole
+    });
+
     try {
       await messageService.sendMessage({
         senderId: user.uid,
         senderName,
         senderRole,
+        senderPhotoURL: sessionUser?.photoURL || '',
         receiverId,
         text: newMessage.trim(),
         read: false,
         status: 'sent',
       });
 
-      if (sessionUser?.role === 'client' && sessionUser.assignedSpecialistId) {
-        const checkResponseDelay = () => {
-          setTimeout(async () => {
-            const msgs = allMessages.filter(m => 
-              m.senderId === user.uid && 
-              m.receiverId === sessionUser.assignedSpecialistId
-            );
-            if (msgs.length > 0) {
-              const lastMsg = msgs[msgs.length - 1];
-              const timeSinceLastMsg = Date.now() - lastMsg.createdAt.getTime();
-              if (timeSinceLastMsg > 15 * 60 * 1000) {
-                const specialist = await userService.getProfile(sessionUser.assignedSpecialistId);
-                await notificationService.notifyAdminsOfDelayedReply(
-                  sessionUser.displayName || sessionUser.email || 'Client',
-                  sessionUser.email || '',
-                  specialist?.displayName || 'Specialist',
-                  lastMsg.createdAt
-                );
-              }
-            }
-          }, 15 * 60 * 1000);
-        };
-        checkResponseDelay();
-      }
+      emitMessage(receiverId, {
+        senderId: user.uid,
+        senderName,
+        senderRole,
+        senderPhotoURL: sessionUser?.photoURL || '',
+        receiverId,
+        text: newMessage.trim(),
+        createdAt: new Date(),
+      });
 
       notificationSoundService.playOutgoingSound();
       typingService.setTyping(user.uid, receiverId, false);
       setNewMessage('');
-      setIsTyping(false);
+      console.log('Message sent successfully!');
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
@@ -339,27 +424,69 @@ const Messages = () => {
     }
   };
 
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.uid || !selectedConversation) return;
+
+    // Check file size (Firestore document limit is 1MB, so let's cap at 800KB for safety)
+    if (file.size > 800 * 1024) {
+      alert('File is too large. Please select a file smaller than 800KB.');
+      return;
+    }
+
+    setSending(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      const isImage = file.type.startsWith('image/');
+      
+      try {
+        await messageService.sendMessage({
+          senderId: user.uid,
+          senderName: sessionUser?.displayName || user?.email?.split('@')[0] || 'User',
+          senderRole: sessionUser?.role || 'client',
+          senderPhotoURL: sessionUser?.photoURL || '',
+          receiverId: selectedConversation,
+          text: `Sent a ${file.type.startsWith('image/') ? 'photo' : 'file'}`,
+          read: false,
+          status: 'sent',
+          fileUrl: base64,
+          fileName: file.name,
+          fileType: file.type.startsWith('image/') ? 'image' : 'file',
+          fileSize: file.size,
+        });
+        notificationSoundService.playOutgoingSound();
+      } catch (err) {
+        console.error('File upload failed:', err);
+        alert('Failed to send file. Please try again.');
+      } finally {
+        setSending(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleTyping = (value: string) => {
     setNewMessage(value);
+    
+    const senderName = sessionUser?.displayName || sessionUser?.assignedSpecialistName || user?.email?.split('@')[0] || 'User';
     
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
     
-    if (selectedConversation) {
+    if (selectedConversation && user?.uid) {
       typingService.setTyping(user.uid, selectedConversation, !!value);
-    }
-    
-    if (value && !isTyping) {
-      setIsTyping(true);
+      emitTyping(selectedConversation, !!value, senderName);
     }
     
     typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-      if (selectedConversation) {
+      if (selectedConversation && user?.uid) {
         typingService.setTyping(user.uid, selectedConversation, false);
+        emitTyping(selectedConversation, false, senderName);
       }
-    }, 2000);
+    }, 3000);
   };
 
   const getStatusIcon = (status?: string, isOwn: boolean = false) => {
@@ -592,52 +719,172 @@ const Messages = () => {
                         return (
                           <div
                             key={msg.id}
-                            className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                            className={`flex gap-2 mb-1 ${isOwn ? 'justify-end' : 'justify-start'}`}
                           >
+                            {!isOwn && (
+                              <div className="flex-shrink-0 mt-auto mb-1">
+                                {msg.senderPhotoURL || profileMap[msg.senderId]?.photoURL ? (
+                                  <img 
+                                    src={msg.senderPhotoURL || profileMap[msg.senderId]?.photoURL} 
+                                    alt={msg.senderName} 
+                                    className="h-8 w-8 rounded-full object-cover border border-slate-200" 
+                                  />
+                                ) : (
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-400 to-slate-500 text-[10px] font-bold text-white uppercase">
+                                    {msg.senderName.charAt(0)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
                             <div
-                              className={`relative max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}
+                              className="relative max-w-[75%]"
                             >
                               <div
                                 className={`rounded-2xl px-4 py-2.5 shadow-sm ${
                                   isOwn
-                                    ? 'bg-teal-600 text-white rounded-br-md'
-                                    : 'bg-white text-slate-900 rounded-bl-md'
+                                    ? 'bg-teal-600 text-white rounded-br-none'
+                                    : 'bg-white text-slate-900 rounded-bl-none'
                                 }`}
                               >
-                                {!isOwn && (
-                                  <p className={`text-[10px] font-semibold mb-1 ${
-                                    currentConversation.role === 'specialist' ? 'text-purple-600' : 'text-blue-600'
+                                <div className={`flex items-center gap-1.5 mb-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                  {isOwn && (
+                                    <span className="text-[8px] px-1 rounded uppercase font-bold bg-white/20 text-white opacity-80">
+                                      You
+                                    </span>
+                                  )}
+                                  <p className={`text-[10px] font-bold ${
+                                    isOwn ? 'text-teal-100' : (msg.senderRole === 'specialist' ? 'text-purple-600' : 'text-blue-600')
                                   }`}>
-                                    {msg.senderName}
+                                    {isOwn ? 'You' : msg.senderName}
                                   </p>
+                                  {!isOwn && (
+                                    <span className={`text-[8px] px-1 rounded uppercase font-bold opacity-80 ${
+                                      msg.senderRole === 'specialist' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
+                                    }`}>
+                                      {msg.senderRole}
+                                    </span>
+                                  )}
+                                </div>
+
+                                
+                                {msg.fileUrl ? (
+                                  <div className="space-y-2">
+                                    {msg.fileType === 'image' ? (
+                                      <img 
+                                        src={msg.fileUrl} 
+                                        alt={msg.fileName} 
+                                        className="rounded-lg max-w-full cursor-pointer hover:opacity-90 transition"
+                                        onClick={() => window.open(msg.fileUrl, '_blank')}
+                                      />
+                                    ) : (
+                                      <div className={`flex items-center gap-3 p-3 rounded-lg border ${isOwn ? 'bg-teal-700 border-teal-500' : 'bg-slate-50 border-slate-200'}`}>
+                                        <div className="p-2 rounded bg-white/20 text-current">
+                                          <Paperclip size={20} />
+                                        </div>
+                                        <div className="flex-1 overflow-hidden">
+                                          <p className="text-sm font-medium truncate">{msg.fileName}</p>
+                                          <p className="text-[10px] opacity-70">
+                                            {msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : 'File'}
+                                          </p>
+                                        </div>
+                                        <a 
+                                          href={msg.fileUrl} 
+                                          download={msg.fileName}
+                                          className={`p-2 rounded-full hover:bg-black/10 transition`}
+                                        >
+                                          <Send size={16} className="rotate-90" />
+                                        </a>
+                                      </div>
+                                    )}
+                                    {msg.text && !msg.text.startsWith('Sent a ') && (
+                                      <p className="text-sm leading-relaxed">{msg.text}</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm leading-relaxed">{msg.text}</p>
                                 )}
-                                <p className="text-sm leading-relaxed">{msg.text}</p>
-                                <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : ''}`}>
-                                  <span className={`text-[10px] ${isOwn ? 'text-teal-200' : 'text-slate-400'}`}>
-                                    {formatFullTime(msg.createdAt)}
-                                  </span>
-                                  {getStatusIcon(msg.status, isOwn)}
+                                                           <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                  <p className={`text-[10px] ${isOwn ? 'text-teal-200' : 'text-slate-400'}`}>
+                                    {formatMessageTime(msg.createdAt)}
+                                  </p>
+                                  {isOwn && (
+                                    msg.read ? <CheckCheck size={12} className="text-teal-200" /> : <Check size={12} className="text-teal-200 opacity-70" />
+                                  )}
                                 </div>
                               </div>
                             </div>
+
+                            {isOwn && (
+                              <div className="flex-shrink-0 mt-auto mb-1">
+                                {sessionUser?.photoURL ? (
+                                  <img 
+                                    src={sessionUser.photoURL} 
+                                    alt="You" 
+                                    className="h-8 w-8 rounded-full object-cover border border-slate-200 shadow-sm" 
+                                  />
+                                ) : (
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-[10px] font-bold text-white uppercase shadow-sm">
+                                    {sessionUser?.displayName?.charAt(0) || 'U'}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   </div>
                 ))}
+                
+                {isTyping && currentConversation && (
+                  <div className="flex justify-start gap-3 mb-4">
+                    <div className="flex-shrink-0">
+                      {(currentConversation.photoURL || profileMap[currentConversation.id]?.photoURL) ? (
+                        <img 
+                          src={currentConversation.photoURL || profileMap[currentConversation.id]?.photoURL} 
+                          alt={currentConversation.name} 
+                          className="h-8 w-8 rounded-full object-cover border border-slate-100 shadow-sm" 
+                        />
+                      ) : (
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400 uppercase border border-slate-200">
+                          {currentConversation.name.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-white text-slate-900 rounded-2xl rounded-bl-none px-4 py-2 shadow-sm flex items-center gap-2 border border-slate-100">
+                      <div className="flex gap-1">
+                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce [animation-delay:-0.3s]" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce [animation-delay:-0.15s]" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-teal-600 italic">
+                        {typingUserName || currentConversation.name} is typing...
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
                 <div ref={messagesEndRef} />
               </div>
             </div>
 
             {/* Input Area */}
             <form onSubmit={handleSendMessage} className="border-t border-slate-100 bg-white p-3">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                onChange={handleFileUpload}
+                accept="image/*,.pdf,.doc,.docx,.txt"
+              />
               <div className="flex items-end gap-2">
                 <button
                   type="button"
+                  onClick={() => fileInputRef.current?.click()}
                   className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
                 >
-                  <Image size={22} />
+                  <Paperclip size={22} />
                 </button>
                 <div className="flex-1">
                   <textarea
@@ -690,3 +937,4 @@ const Messages = () => {
 };
 
 export default Messages;
+

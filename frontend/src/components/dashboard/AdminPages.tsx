@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent, useCallback } from 'react';
-import { collection, limit, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc } from 'firebase/firestore';
 import { db, userService, requestService, notificationService, activityService } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
 import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList } from 'lucide-react';
@@ -1077,6 +1077,26 @@ export const AdminConversations = () => {
       )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     setMessages(filtered);
+    
+    const markAsRead = async () => {
+      const unreadMsgs = filtered.filter(m => !m.read);
+      for (const msg of unreadMsgs) {
+        try {
+          await updateDoc(doc(db, 'messages', msg.id), { read: true, status: 'read' });
+        } catch (e) {
+          console.error('Error marking message as read:', e);
+        }
+      }
+      if (unreadMsgs.length > 0) {
+        setConversations(prev => prev.map(c => {
+          if (c.clientId === selectedConversation.clientId && c.specialistId === selectedConversation.specialistId) {
+            return { ...c, unreadCount: 0 };
+          }
+          return c;
+        }));
+      }
+    };
+    markAsRead();
   }, [selectedConversation, allMessages]);
 
   const formatTime = (date: Date) => {
@@ -1146,17 +1166,22 @@ export const AdminConversations = () => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto bg-[#f0f2f5] p-4 space-y-4">
-              {messages.map((msg) => {
-                const isOwn = msg.senderId === selectedConversation.clientId;
+              {(!messages || messages.length === 0) ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <p>No messages found</p>
+                </div>
+              ) : messages.filter(Boolean).map((msg) => {
+                if (!msg || !msg.senderId) return null;
+                const isOwn = selectedConversation?.clientId ? msg.senderId === selectedConversation.clientId : false;
                 return (
                   <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
                       isOwn ? 'bg-teal-600 text-white rounded-br-md' : 'bg-white text-slate-900 rounded-bl-md shadow-sm'
                     }`}>
-                      <p className="text-xs font-semibold mb-1">{msg.senderName}</p>
-                      <p className="text-sm">{msg.text}</p>
+                      <p className="text-xs font-semibold mb-1">{msg.senderName || 'Unknown'}</p>
+                      <p className="text-sm">{msg.text || ''}</p>
                       <p className={`text-[10px] mt-1 ${isOwn ? 'text-teal-200' : 'text-slate-400'}`}>
-                        {formatTime(msg.createdAt)}
+                        {formatTime(msg.createdAt || new Date())}
                       </p>
                     </div>
                   </div>

@@ -498,7 +498,7 @@ const Settings = () => {
               <Smartphone size={18} className="text-slate-400" />
               <div>
                 <p className="font-medium text-slate-900">Two-Factor Authentication</p>
-                <p className="text-sm text-slate-500">Add an extra layer of security</p>
+                <p className="text-sm text-slate-500">Verification code sent to your email</p>
               </div>
             </div>
             <Toggle checked={twoFactor} onChange={setTwoFactor} />

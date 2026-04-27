@@ -1,8 +1,32 @@
 <?php
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
+
+// Rate limiting - simple file-based implementation
+$rateLimitFile = sys_get_temp_dir() . '/mysyntromed_welcome_rate_' . md5($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+$rateLimitWindow = 15 * 60; // 15 minutes
+$rateLimitMax = 50;
+
+if (file_exists($rateLimitFile)) {
+    $data = json_decode(file_get_contents($rateLimitFile), true);
+    if ($data && (time() - $data['time']) < $rateLimitWindow) {
+        if ($data['count'] >= $rateLimitMax) {
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many requests. Please try again later.']);
+            exit;
+        }
+        $data['count']++;
+    } else {
+        $data = ['time' => time(), 'count' => 1];
+    }
+} else {
+    $data = ['time' => time(), 'count' => 1];
+}
+file_put_contents($rateLimitFile, json_encode($data));
+
+// CORS - restrict to internal services only
+header('Access-Control-Allow-Origin: https://mysyntromed.com');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 // Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -17,11 +41,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// API Key validation - must match backend EMAIL_SERVICE_KEY
+$validApiKey = 'mysyntromed-secure-email-api-key-2024';
+$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+if (!preg_match('/^Bearer\s+' . preg_quote($validApiKey, '/') . '$/i', $authHeader)) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized']);
+    exit;
+}
+
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
 
 // Validate required fields
-$required = ['email', 'displayName', 'password', 'role'];
+$required = ['email', 'displayName', 'role'];
 $missing = [];
 foreach ($required as $field) {
     if (empty($input[$field])) {
@@ -35,12 +68,19 @@ if (!empty($missing)) {
     exit;
 }
 
-// Sanitize data
+// Sanitize and validate input
 $email = filter_var(trim($input['email']), FILTER_VALIDATE_EMAIL);
-$displayName = trim(htmlspecialchars($input['displayName']));
-$password = trim($input['password']);
-$role = trim($input['role']);
-$loginUrl = trim($input['loginUrl'] ?? 'https://mysyntromed.com');
+$displayName = filter_var(trim(strip_tags($input['displayName'])), FILTER_SANITIZE_SPECIAL_CHARS);
+$role = trim(strip_tags($input['role']));
+$loginUrl = filter_var(trim(strip_tags($input['loginUrl'] ?? 'https://mysyntromed.com')), FILTER_SANITIZE_URL);
+$tempCode = trim($input['tempCode'] ?? '');
+
+// Length validation
+if (strlen($displayName) > 100) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Display name too long']);
+    exit;
+}
 
 if (!$email) {
     http_response_code(400);
@@ -53,7 +93,7 @@ if (!in_array($role, ['client', 'specialist'])) {
 }
 
 $roleLabel = $role === 'specialist' ? 'Specialist' : 'Healthcare Professional';
-$portalUrl = $role === 'specialist' ? $loginUrl . '/specialist' : $loginUrl . '/portal';
+$portalUrl = $role === 'specialist' ? rtrim($loginUrl, '/') . '/specialist' : rtrim($loginUrl, '/') . '/portal';
 
 // Build HTML email
 $htmlEmail = "
@@ -97,33 +137,31 @@ $htmlEmail = "
                 <div class='tagline'>Virtual Medical Assistant & Healthcare Support</div>
             </div>
 
-            <h1>Welcome Aboard, {$displayName}!</h1>
+            <h1>Welcome Aboard, " . htmlspecialchars($displayName) . "!</h1>
             
-            <p>We're thrilled to have you join the MySyntroMed family as a <strong>{$roleLabel}</strong>. Your account has been successfully created and you're all set to get started.</p>
+            <p>We're thrilled to have you join the MySyntroMed family as a <strong>" . htmlspecialchars($roleLabel) . "</strong>. Your account has been successfully created and you're all set to get started.</p>
 
             <div class='credentials'>
-                <h3>Your Login Credentials</h3>
+                <h3>Your Account Details</h3>
                 <div class='credential-item'>
                     <span class='credential-label'>Email</span>
-                    <span class='credential-value'>{$email}</span>
+                    <span class='credential-value'>" . htmlspecialchars($email) . "</span>
                 </div>
+                " . (!empty($tempCode) ? "
                 <div class='credential-item'>
-                    <span class='credential-label'>Temporary Password</span>
-                    <span class='credential-value'>{$password}</span>
+                    <span class='credential-label'>Temporary Code</span>
+                    <span class='credential-value'>" . htmlspecialchars($tempCode) . "</span>
                 </div>
-                <div class='credential-item'>
-                    <span class='credential-label'>Login URL</span>
-                    <span class='credential-value'>" . substr($portalUrl, 0, 30) . "...</span>
-                </div>
+                " : "") . "
             </div>
 
             <div style='text-align: center;'>
-                <a href='{$portalUrl}' class='cta-button'>Access Your Dashboard</a>
+                <a href='" . htmlspecialchars($portalUrl, ENT_QUOTES, 'UTF-8') . "' class='cta-button'>Access Your Dashboard</a>
             </div>
 
             <div class='warning'>
-                <div class='warning-title'>⚠️ Important Security Notice</div>
-                <p class='warning-text'>For your security, you will be required to change your temporary password upon first login. Please choose a strong, unique password that you don't use elsewhere.</p>
+                <div class='warning-title'>First-Time Login</div>
+                <p class='warning-text'>Use the "Forgot Password" link on the login page to set up your secure password. This ensures only you know your credentials.</p>
             </div>
 
             <h2 style='font-size: 18px; margin-top: 30px;'>What's Next?</h2>
@@ -162,45 +200,6 @@ $htmlEmail .= "
 </html>
 ";
 
-// Plain text version
-$textEmail = "Welcome to MySyntroMed, {$displayName}!
-
-We're thrilled to have you join the MySyntroMed family as a {$roleLabel}. Your account has been successfully created and you're all set to get started.
-
-YOUR LOGIN CREDENTIALS
-======================
-Email:              {$email}
-Temporary Password:  {$password}
-Login URL:          {$portalUrl}
-======================
-
-IMPORTANT: For your security, you will be required to change your temporary password upon first login.
-
-NEXT STEPS
-";
-
-if ($role === 'client') {
-    $textEmail .= "
-• Complete your profile with clinic information
-• Submit support requests for assistance
-• Message your assigned specialist directly
-• Schedule consultation calls";
-} else {
-    $textEmail .= "
-• Complete your specialist profile
-• Review assigned client requests
-• Coordinate with clients through secure messaging
-• Access training resources";
-}
-
-$textEmail .= "
-
-If you have any questions or need assistance getting started, don't hesitate to reach out to our support team.
-
-© " . date('Y') . " MySyntroMed. All rights reserved.
-This email was sent because an admin created your account.
-";
-
 // Email headers
 $subject = "Welcome to MySyntroMed - Your Account is Ready" . ($role === 'specialist' ? ', Specialist!' : '!');
 $headers = [
@@ -212,11 +211,7 @@ $headers = [
 $headersStr = implode("\r\n", $headers);
 
 // Send email
-$sent = mail($email, $subject, $htmlEmail, $headersStr);
-
-// Log the attempt
-$logEntry = date('Y-m-d H:i:s') . " - Welcome Email To: {$email}, Name: {$displayName}, Role: {$role}, Status: " . ($sent ? 'SENT' : 'FAILED') . "\n";
-file_put_contents('welcome_email_log.txt', $logEntry, FILE_APPEND);
+$sent = @mail($email, $subject, $htmlEmail, $headersStr);
 
 // Return response
 if ($sent) {

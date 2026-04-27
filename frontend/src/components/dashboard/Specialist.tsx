@@ -73,6 +73,9 @@ const Specialist = () => {
   }, [sessionUser?.assignedSpecialistId, sessionUser?.assignedSpecialistName]);
 
   const dismissAssignmentNotification = async () => {
+    if (assignmentNotification) {
+      await notificationService.markNotificationRead(assignmentNotification.id);
+    }
     setAssignmentNotification(null);
     await refreshSessionUser();
   };

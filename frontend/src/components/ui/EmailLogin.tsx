@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, KeyRound } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, KeyRound, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { auth } from '@/lib/firebase';
@@ -17,12 +17,13 @@ interface EmailLoginProps {
 
 const EmailLogin = ({ portal, title, subtitle }: EmailLoginProps) => {
   const navigate = useNavigate();
-  const { loginWithEmail, user } = useAuth();
+  const { loginWithEmail, loginWithMfaTotp, mfaResolver, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState<{ type: NoticeType; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
 
   const friendlyError = (error: any) => {
     const code = error.code || '';
@@ -44,21 +45,39 @@ const EmailLogin = ({ portal, title, subtitle }: EmailLoginProps) => {
 
     try {
       const profile = await loginWithEmail(email.trim().toLowerCase(), password);
-      
-      // Enforce correct portal role
-      if (profile.role !== portal && portal !== 'client') { // Allow login if role matches or if it's the general portal
-         // Check role logic
-      }
-
-      const path = profile.role === 'admin' 
-        ? '/admin/dashboard' 
-        : profile.role === 'specialist' 
-        ? '/specialist/dashboard' 
+      const path = profile.role === 'admin'
+        ? '/admin/dashboard'
+        : profile.role === 'specialist'
+        ? '/specialist/dashboard'
         : '/portal/dashboard';
-
       navigate(path);
     } catch (error: any) {
-      setNotice({ type: 'error', text: friendlyError(error) });
+      if (error.code === 'auth/multi-factor-auth-required') {
+        // mfaResolver is now set in AuthContext — show TOTP screen
+        setNotice({ type: 'info', text: 'Enter your 6-digit verification code sent to your email.' });
+      } else {
+        setNotice({ type: 'error', text: friendlyError(error) });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (totpCode.length < 6) return;
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const profile = await loginWithMfaTotp(totpCode);
+      const path = profile.role === 'admin'
+        ? '/admin/dashboard'
+        : profile.role === 'specialist'
+        ? '/specialist/dashboard'
+        : '/portal/dashboard';
+      navigate(path);
+    } catch {
+      setNotice({ type: 'error', text: 'Invalid code. Please try again.' });
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +137,43 @@ const EmailLogin = ({ portal, title, subtitle }: EmailLoginProps) => {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl">
-          <form onSubmit={handleLogin} className="space-y-4">
+          {mfaResolver ? (
+            <motion.div
+              key="mfa"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="mb-5 flex flex-col items-center text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+                  <Smartphone size={26} className="text-teal-400" />
+                </div>
+                <h2 className="text-lg font-bold text-white">Two-Factor Verification</h2>
+                <p className="mt-1 text-sm text-slate-400">Enter the 6-digit code sent to your email</p>
+              </div>
+              <form onSubmit={handleMfaSubmit} className="space-y-4">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  autoFocus
+                  className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-4 text-center text-3xl font-mono font-bold tracking-widest text-white placeholder:text-slate-600 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/50"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting || totpCode.length < 6}
+                  className="w-full rounded-xl bg-teal-600 py-3 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50 shadow-lg shadow-teal-900/50 flex items-center justify-center h-[46px] transition"
+                >
+                  {submitting ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-teal-300 border-t-transparent" />
+                  ) : 'Verify & Sign In'}
+                </button>
+              </form>
+            </motion.div>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-300">Email Address</label>
               <div className="flex items-center rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/50 transition-all">
@@ -179,6 +234,7 @@ const EmailLogin = ({ portal, title, subtitle }: EmailLoginProps) => {
               )}
             </button>
           </form>
+          )}
 
           {notice && (
             <motion.div

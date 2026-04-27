@@ -87,7 +87,7 @@ export const encryption = {
   
   async generateKeyPair(): Promise<{ publicKey: string; privateKey: string }> {
     const keyPair = await crypto.subtle.generateKey(
-      { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+      { name: 'RSA-OAEP', modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
       true,
       ['encrypt', 'decrypt']
     );

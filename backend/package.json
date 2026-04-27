@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "deploy:prep": "node deploy.js",
+    "deploy:firebase": "npx firebase deploy --only hosting",
+    "deploy:gcloud": "gcloud run deploy mysyntromed-backend --source . --platform managed --region us-central1 --allow-unauthenticated --port 3001",
+    "deploy": "npm run deploy:prep && npm run deploy:firebase",
+    "deploy:auto": "node deploy-master.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -15,13 +20,15 @@
     "express-rate-limit": "^8.3.1",
     "firebase-admin": "^13.0.0",
     "helmet": "^8.1.0",
-    "nodemailer": "^8.0.4"
+    "nodemailer": "^8.0.4",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/nodemailer": "^7.0.11",
+    "firebase-tools": "^15.15.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2"
   }

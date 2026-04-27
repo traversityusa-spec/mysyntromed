@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, Lock, Mail, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, ShieldAlert, ShieldCheck, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
@@ -10,7 +10,7 @@ type NoticeType = 'info' | 'error' | 'success';
 
 const AdminAuth = () => {
   const navigate = useNavigate();
-  const { loginWithEmail } = useAuth();
+  const { loginWithEmail, loginWithMfaTotp, mfaResolver } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState<{ type: NoticeType; text: string } | null>(null);
@@ -18,6 +18,7 @@ const AdminAuth = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
+  const [totpCode, setTotpCode] = useState('');
 
   const friendlyError = (error: unknown) => {
     const code = String((error as { code?: string })?.code || '');
@@ -53,7 +54,7 @@ const AdminAuth = () => {
 
     try {
       const profile = await loginWithEmail(trimmedEmail, password);
-      
+
       if (profile.role !== 'admin') {
         await auth.signOut();
         setNotice({ type: 'error', text: 'Your account does not have admin access.' });
@@ -61,8 +62,32 @@ const AdminAuth = () => {
       }
 
       navigate('/admin/dashboard');
-    } catch (error) {
-      setNotice({ type: 'error', text: friendlyError(error) });
+    } catch (error: any) {
+      if (error.code === 'auth/multi-factor-auth-required') {
+        setNotice({ type: 'info', text: 'Enter your 6-digit verification code sent to your email.' });
+      } else {
+        setNotice({ type: 'error', text: friendlyError(error) });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (totpCode.length < 6) return;
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const profile = await loginWithMfaTotp(totpCode);
+      if (profile.role !== 'admin') {
+        await auth.signOut();
+        setNotice({ type: 'error', text: 'Your account does not have admin access.' });
+        return;
+      }
+      navigate('/admin/dashboard');
+    } catch {
+      setNotice({ type: 'error', text: 'Invalid code. Please try again.' });
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +132,41 @@ const AdminAuth = () => {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl">
-          {showVerification ? (
+          {mfaResolver ? (
+            <motion.div
+              key="mfa"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-teal-500/30 bg-teal-950/60">
+                  <Smartphone size={26} className="text-teal-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-white">Two-Factor Verification</h2>
+                <p className="mt-1 text-sm text-slate-400">Enter the 6-digit code sent to your email</p>
+              </div>
+              <form onSubmit={handleMfaSubmit} className="space-y-4">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  autoFocus
+                  className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-4 text-center text-3xl font-mono font-bold tracking-widest text-white placeholder:text-slate-600 outline-none focus:border-teal-500"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting || totpCode.length < 6}
+                  className="w-full rounded-xl bg-teal-600 py-3 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50 flex items-center justify-center h-[46px] transition"
+                >
+                  {submitting ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-teal-300 border-t-transparent" /> : 'Verify & Sign In'}
+                </button>
+              </form>
+            </motion.div>
+          ) : showVerification ? (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
