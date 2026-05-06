@@ -34,49 +34,71 @@ const createTransporter = () => {
 };
 
 // Helper function to send welcome email directly via nodemailer
-const sendWelcomeEmail = async (email: string, displayName: string, role: 'client' | 'specialist', loginUrl: string, tempCode: string): Promise<{success: boolean; error?: string}> => {
-  console.log('[EMAIL] sendWelcomeEmail called for:', email);
+const sendWelcomeEmail = (email: string, displayName: string, role: 'client' | 'specialist', loginUrl: string, tempCode: string): Promise<{success: boolean; error?: string}> => {
+  console.log('[EMAIL] Sending welcome email to:', email);
   
-  try {
-    const transporter = createTransporter();
-    const from = process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>';
-    
-    const roleText = role === 'specialist' ? 'Specialist' : 'Client';
-    const subject = `Welcome to MySyntroMed - Your ${roleText} Account is Ready`;
-    
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #3b82f6;">Welcome to MySyntroMed!</h2>
-        <p>Hello ${displayName || 'there'},</p>
-        <p>Your ${roleText} account has been created successfully. Here are your login credentials:</p>
-        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Login URL:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Temporary Password:</strong> <code style="background: #e5e7eb; padding: 4px 8px; border-radius: 4px;">${tempCode}</code></p>
+  return new Promise((resolve) => {
+    try {
+      const isDevMode = !process.env.SMTP_PASS || process.env.SMTP_PASS === 'your-app-password';
+      
+      if (isDevMode) {
+        console.log('[EMAIL] [DEV MODE] Would send to', email, 'with password:', tempCode);
+        resolve({ success: true });
+        return;
+      }
+      
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+      
+      const from = process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>';
+      const roleText = role === 'specialist' ? 'Specialist' : 'Client';
+      const subject = `Welcome to MySyntroMed - Your ${roleText} Account is Ready`;
+      
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin:0 auto;">
+          <h2 style="color: #3b82f6;">Welcome to MySyntroMed!</h2>
+          <p>Hello ${displayName || 'there'},</p>
+          <p>Your ${roleText} account has been created successfully. Here are your login credentials:</p>
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Login URL:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Temporary Password:</strong> <code style="background: #e5e7eb; padding: 4px 8px; border-radius: 4px;">${tempCode}</code></p>
+          </div>
+          <p style="color: #dc2626;"><strong>Important:</strong> Please log in and change your password immediately for security.</p>
+          <p>Best regards,<br>The MySyntroMed Team</p>
         </div>
-        <p style="color: #dc2626;"><strong>Important:</strong> Please log in and change your password immediately for security.</p>
-        <p>Best regards,<br>The MySyntroMed Team</p>
-      </div>
-    `;
-    
-    if (!transporter) {
-      console.log('[EMAIL] [DEV MODE] Would send email to', email, 'with password:', tempCode);
-      return { success: true };
+      `;
+      
+      transporter.sendMail({
+        from,
+        to: email,
+        subject,
+        html,
+      }, (error, result) => {
+        if (error) {
+          console.error('[EMAIL] Failed to send to', email, ':', error.message);
+          resolve({ success: false, error: error.message });
+        } else {
+          console.log('[EMAIL] Sent to', email, '- Message ID:', result.messageId);
+          resolve({ success: true });
+        }
+      });
+      
+    } catch (error: any) {
+      console.error('[EMAIL] Exception for', email, ':', error.message);
+      resolve({ success: false, error: error.message });
     }
-    
-    const result = await transporter.sendMail({
-      from,
-      to: email,
-      subject,
-      html,
-    });
-    
-    console.log('[EMAIL] Welcome email sent to', email, '- Message ID:', result.messageId);
-    return { success: true };
-  } catch (error: any) {
-    console.error('[EMAIL] Failed to send welcome email:', error.message);
-    return { success: false, error: error.message };
-  }
+  });
 };
 
 // Admin management endpoints
@@ -170,13 +192,17 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 3. Send Welcome Email
+    // 3. Send Welcome Email (non-blocking - don't await)
     const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
-    const emailResult = await sendWelcomeEmail(email, displayName, role as 'client' | 'specialist', loginUrl, password);
-    
-    if (!emailResult.success) {
-      console.error('[EMAIL] Failed to send welcome email:', emailResult.error);
-    }
+    sendWelcomeEmail(email, displayName, role as 'client' | 'specialist', loginUrl, password)
+      .then(result => {
+        if (!result.success) {
+          console.error('[EMAIL] Failed to send welcome email:', result.error);
+        }
+      })
+      .catch(err => {
+        console.error('[EMAIL] Exception sending welcome email:', err);
+      });
 
     res.json({ 
       success: true, 
