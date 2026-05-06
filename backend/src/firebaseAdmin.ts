@@ -9,10 +9,30 @@ const projectId = process.env.FIREBASE_PROJECT_ID;
 if (!admin.apps.length) {
   const databaseURL = process.env.FIREBASE_DATABASE_URL || (projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined);
 
-  if (serviceAccountKey) {
+  // Method 1: Try individual env vars (most reliable for Railway)
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  
+  if (clientEmail && privateKey && projectId) {
+    try {
+      const credential = admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+      });
+      admin.initializeApp({
+        credential,
+        ...(databaseURL && { databaseURL }),
+      });
+      console.log('Firebase Admin initialized with individual env vars');
+    } catch (err) {
+      console.error('Failed to init with individual env vars:', err);
+    }
+  }
+  // Method 2: Try SERVICE_ACCOUNT_KEY JSON
+  else if (serviceAccountKey) {
     try {
       const parsed = JSON.parse(serviceAccountKey);
-      // Fix private key newlines - replace literal \n with actual newlines
       if (parsed.private_key && parsed.private_key.includes('\\n')) {
         parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
       }
@@ -20,7 +40,7 @@ if (!admin.apps.length) {
         credential: admin.credential.cert(parsed),
         ...(databaseURL && { databaseURL }),
       });
-      console.log('Firebase Admin initialized with service account key from env');
+      console.log('Firebase Admin initialized with SERVICE_ACCOUNT_KEY');
     } catch (err) {
       console.error('Failed to parse SERVICE_ACCOUNT_KEY:', err);
       if (projectId) {
@@ -29,7 +49,9 @@ if (!admin.apps.length) {
         admin.initializeApp(databaseURL ? { databaseURL } : undefined);
       }
     }
-  } else if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
+  }
+  // Method 3: Try service account file
+  else if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
     try {
       const absolute = path.resolve(serviceAccountPath);
       const serviceAccount = JSON.parse(fs.readFileSync(absolute, 'utf8'));
