@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import nodemailer from 'nodemailer';
 import admin, { adminAuth } from '../firebaseAdmin.js';
 import { requireAuth, requireRole, type AuthedRequest } from '../middleware/requireAuth.js';
 
@@ -12,54 +13,68 @@ router.get('/me', requireAuth, (req: AuthedRequest, res) => {
   res.json({ user: req.user });
 });
 
-// Helper function to send welcome email via custom email server
+// Create email transporter
+const createTransporter = () => {
+  const isDevMode = !process.env.SMTP_PASS || process.env.SMTP_PASS === 'your-app-password';
+  
+  if (isDevMode) {
+    console.log('[EMAIL] No SMTP_PASS set → emails will be logged only');
+    return null;
+  }
+  
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+};
+
+// Helper function to send welcome email directly via nodemailer
 const sendWelcomeEmail = async (email: string, displayName: string, role: 'client' | 'specialist', loginUrl: string, tempCode: string): Promise<{success: boolean; error?: string}> => {
-  console.log('[EMAIL] sendWelcomeEmail called with tempCode:', tempCode);
+  console.log('[EMAIL] sendWelcomeEmail called for:', email);
   
   try {
-    const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
-    const serviceKey = process.env.EMAIL_SERVICE_KEY;
+    const transporter = createTransporter();
+    const from = process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>';
     
-    if (!serviceKey) {
-      console.warn('[EMAIL] EMAIL_SERVICE_KEY not set, skipping email...');
+    const roleText = role === 'specialist' ? 'Specialist' : 'Client';
+    const subject = `Welcome to MySyntroMed - Your ${roleText} Account is Ready`;
+    
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #3b82f6;">Welcome to MySyntroMed!</h2>
+        <p>Hello ${displayName || 'there'},</p>
+        <p>Your ${roleText} account has been created successfully. Here are your login credentials:</p>
+        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p><strong>Login URL:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Temporary Password:</strong> <code style="background: #e5e7eb; padding: 4px 8px; border-radius: 4px;">${tempCode}</code></p>
+        </div>
+        <p style="color: #dc2626;"><strong>Important:</strong> Please log in and change your password immediately for security.</p>
+        <p>Best regards,<br>The MySyntroMed Team</p>
+      </div>
+    `;
+    
+    if (!transporter) {
+      console.log('[EMAIL] [DEV MODE] Would send email to', email, 'with password:', tempCode);
       return { success: true };
     }
     
-    const payload = { email, displayName, role, loginUrl, tempCode };
-    console.log('[EMAIL] Sending payload to email server:', JSON.stringify(payload));
-    
-    const response = await fetch(`${emailServerUrl}/send-welcome`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceKey}`
-      },
-      body: JSON.stringify(payload),
+    const result = await transporter.sendMail({
+      from,
+      to: email,
+      subject,
+      html,
     });
-
-    const text = await response.text();
     
-    if (!text || text.trim() === '') {
-      console.log('[EMAIL] Email server returned empty response');
-      return { success: true };
-    }
-    
-    const result = JSON.parse(text);
-    
-    if (!response.ok) {
-      console.error('[EMAIL] Email server error:', result.error);
-      return { success: false, error: result.error };
-    }
-    
-    if (!result.success) {
-      console.error('[EMAIL] Email server error:', result.error);
-      return { success: false, error: result.error };
-    }
-    
-    console.log('[EMAIL] Welcome email sent to', email);
+    console.log('[EMAIL] Welcome email sent to', email, '- Message ID:', result.messageId);
     return { success: true };
   } catch (error: any) {
-    console.warn('[EMAIL] Could not reach email server:', error.message, '- User creation will continue');
+    console.error('[EMAIL] Failed to send welcome email:', error.message);
     return { success: false, error: error.message };
   }
 };
