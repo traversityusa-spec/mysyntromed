@@ -11,9 +11,13 @@ if (!admin.apps.length) {
 
   if (serviceAccountKey) {
     try {
-      const serviceAccount = JSON.parse(serviceAccountKey);
+      const parsed = JSON.parse(serviceAccountKey);
+      // Fix private key newlines - replace literal \n with actual newlines
+      if (parsed.private_key && parsed.private_key.includes('\\n')) {
+        parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+      }
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+        credential: admin.credential.cert(parsed),
         ...(databaseURL && { databaseURL }),
       });
       console.log('Firebase Admin initialized with service account key from env');
