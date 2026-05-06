@@ -6,74 +6,109 @@ const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH;
 const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY;
 const projectId = process.env.FIREBASE_PROJECT_ID;
 
-if (!admin.apps.length) {
+let initialized = false;
+
+function initFirebase() {
+  if (initialized || admin.apps.length > 0) {
+    initialized = true;
+    return true;
+  }
+
   const databaseURL = process.env.FIREBASE_DATABASE_URL || (projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined);
 
-  // Method 1: Try individual env vars (most reliable for Railway)
+  // Method 1: Individual env vars
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-  
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
   if (clientEmail && privateKey && projectId) {
     try {
+      // Handle newlines
+      if (privateKey.includes('\\n')) {
+        privateKey = privateKey.replace(/\\n/g, '\n');
+      }
+      if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        console.error('[FIREBASE] Private key missing PEM header');
+        return false;
+      }
+
       const credential = admin.credential.cert({
         projectId,
         clientEmail,
-        privateKey: privateKey.replace(/\\n/g, '\n'),
+        privateKey,
       });
-      admin.initializeApp({
-        credential,
-        ...(databaseURL && { databaseURL }),
-      });
-      console.log('Firebase Admin initialized with individual env vars');
-    } catch (err) {
-      console.error('Failed to init with individual env vars:', err);
+
+      const config: any = { credential };
+      if (databaseURL) config.databaseURL = databaseURL;
+
+      admin.initializeApp(config);
+      initialized = true;
+      console.log('[FIREBASE] Initialized with individual env vars');
+      return true;
+    } catch (err: any) {
+      console.error('[FIREBASE] Failed with individual env vars:', err.message);
     }
   }
-  // Method 2: Try SERVICE_ACCOUNT_KEY JSON
-  else if (serviceAccountKey) {
+
+  // Method 2: SERVICE_ACCOUNT_KEY JSON
+  if (serviceAccountKey) {
     try {
       const parsed = JSON.parse(serviceAccountKey);
       if (parsed.private_key && parsed.private_key.includes('\\n')) {
         parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
       }
-      admin.initializeApp({
+
+      const config: any = {
         credential: admin.credential.cert(parsed),
-        ...(databaseURL && { databaseURL }),
-      });
-      console.log('Firebase Admin initialized with SERVICE_ACCOUNT_KEY');
-    } catch (err) {
-      console.error('Failed to parse SERVICE_ACCOUNT_KEY:', err);
-      if (projectId) {
-        admin.initializeApp({ projectId, ...(databaseURL && { databaseURL }) });
-      } else {
-        admin.initializeApp(databaseURL ? { databaseURL } : undefined);
-      }
+      };
+      if (databaseURL) config.databaseURL = databaseURL;
+
+      admin.initializeApp(config);
+      initialized = true;
+      console.log('[FIREBASE] Initialized with SERVICE_ACCOUNT_KEY');
+      return true;
+    } catch (err: any) {
+      console.error('[FIREBASE] Failed to parse SERVICE_ACCOUNT_KEY:', err.message);
     }
   }
-  // Method 3: Try service account file
-  else if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
+
+  // Method 3: Service account file
+  if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
     try {
       const absolute = path.resolve(serviceAccountPath);
       const serviceAccount = JSON.parse(fs.readFileSync(absolute, 'utf8'));
-      admin.initializeApp({
+      const config: any = {
         credential: admin.credential.cert(serviceAccount),
-        ...(databaseURL && { databaseURL }),
-      });
-      console.log('Firebase Admin initialized with service account file');
-    } catch (err) {
-      console.error('Failed to load service account:', err);
-      if (projectId) {
-        admin.initializeApp({ projectId, ...(databaseURL && { databaseURL }) });
-      } else {
-        admin.initializeApp(databaseURL ? { databaseURL } : undefined);
-      }
+      };
+      if (databaseURL) config.databaseURL = databaseURL;
+
+      admin.initializeApp(config);
+      initialized = true;
+      console.log('[FIREBASE] Initialized with service account file');
+      return true;
+    } catch (err: any) {
+      console.error('[FIREBASE] Failed to load service account file:', err.message);
     }
-  } else if (projectId) {
-    admin.initializeApp({ projectId, ...(databaseURL && { databaseURL }) });
-  } else {
-    admin.initializeApp(databaseURL ? { databaseURL } : undefined);
   }
+
+  // Fallback
+  try {
+    if (projectId) {
+      const config: any = { projectId };
+      if (databaseURL) config.databaseURL = databaseURL;
+      admin.initializeApp(config);
+      initialized = true;
+      console.warn('[FIREBASE] Initialized without credentials - limited functionality');
+      return true;
+    }
+  } catch (err: any) {
+    console.error('[FIREBASE] Failed fallback init:', err.message);
+  }
+
+  return false;
 }
+
+// Initialize on import
+initFirebase();
 
 export const adminAuth = admin.auth();
 export default admin;
