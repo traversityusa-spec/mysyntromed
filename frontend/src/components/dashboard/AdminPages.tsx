@@ -68,7 +68,7 @@ const CreateUserModal = ({
 
     try {
       const token = await user?.getIdToken();
-      const response = await fetch('/api/auth/admin/create-user', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/create-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -263,7 +263,7 @@ export const AdminClients = () => {
       const idToken = await authUser?.getIdToken();
       if (!idToken) return;
 
-      const response = await fetch('/api/auth/admin/users', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
@@ -642,7 +642,7 @@ export const AdminSpecialists = () => {
       const idToken = await authUser?.getIdToken();
       if (!idToken) return;
 
-      const response = await fetch('/api/auth/admin/users', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
@@ -980,7 +980,7 @@ export const AdminConversations = () => {
       try {
         const idToken = await authUser?.getIdToken();
         if (!idToken) return;
-        const response = await fetch('/api/auth/admin/users', {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
           headers: { 'Authorization': `Bearer ${idToken}` }
         });
         const data = await response.json();
@@ -1219,7 +1219,7 @@ export const AdminAnalytics = () => {
         const idToken = await authUser?.getIdToken();
         if (!idToken) return;
 
-        const response = await fetch('/api/auth/admin/users', {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
           headers: { 'Authorization': `Bearer ${idToken}` }
         });
         const data = await response.json();
