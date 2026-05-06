@@ -208,7 +208,7 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       success: true, 
       uid: userRecord.uid,
       tempCode: password,
-      emailSent: emailResult.success
+      emailSent: 'pending'
     });
   } catch (error: any) {
     console.error('Create user error:', error);
