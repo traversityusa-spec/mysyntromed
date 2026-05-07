@@ -9,6 +9,37 @@ try {
   // dotenv not available, that's fine for Railway
 }
 
+// Use Resend (free, works on Railway) or fallback to Ethereal
+async function createTransporter() {
+  // Try Resend first (set RESEND_API_KEY in Railway)
+  if (process.env.RESEND_API_KEY) {
+    console.log('[EMAIL] Using Resend (real emails)');
+    return nodemailer.createTransport({
+      host: 'smtp.resend.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'resend',
+        pass: process.env.RESEND_API_KEY,
+      },
+    });
+  }
+  
+  // Fallback to Ethereal (test emails with preview)
+  console.log('[EMAIL] Using Ethereal (preview mode)');
+  const testAccount = await nodemailer.createTestAccount();
+  console.log('[EMAIL] Ethereal account:', testAccount.user);
+  return nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
+  });
+}
+
 const app = express();
 
 // CORS for backend access
@@ -60,28 +91,7 @@ const authenticateRequest = (req, res, next) => {
   next();
 };
 
-// Always use Ethereal (works everywhere) - preview URLs in logs
-// For real emails: setup SendGrid, Resend, or Mailgun
-let transporter;
-let testAccount = null;
-
-async function getTransporter() {
-  if (transporter) return transporter;
-
-  console.log('[EMAIL] Using Ethereal (preview URLs will be logged)');
-  testAccount = await nodemailer.createTestAccount();
-  transporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
-  });
-  console.log('[EMAIL] Ethereal account ready:', testAccount.user);
-
-  return transporter;
+// createTransporter is defined above (uses Resend or Ethereal)
 }
 
 // Input sanitization helper
@@ -170,7 +180,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 </html>`;
 
 try {
-    const mail = await getTransporter();
+    const mail = await createTransporter();
     const info = await mail.sendMail({
       from: `"MySyntroMed" <${companyEmail}>`,
       to: email,
@@ -241,7 +251,7 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 </html>`;
 
   try {
-    const mail = await getTransporter();
+    const mail = await createTransporter();
     const info = await mail.sendMail({
       from: '"MySyntroMed" <noreply@mysyntromed.com>',
       to: email,
@@ -320,7 +330,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 </html>`;
 
   try {
-    const mail = await getTransporter();
+    const mail = await createTransporter();
     const info = await mail.sendMail({
       from: '"MySyntroMed" <noreply@mysyntromed.com>',
       to: email,
