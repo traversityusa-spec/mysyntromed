@@ -46,8 +46,22 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// Support multiple origins for CORS
+const allowedOrigins = [
+  frontendOrigin,
+  'http://localhost:3000',
+  'http://localhost:5173',
+].filter(Boolean);
+
 app.use(cors({
-  origin: frontendOrigin,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(allowed => origin === allowed || origin.includes('.railway.app'))) {
+      return callback(null, true);
+    }
+    callback(new Error('CORS policy: Origin not allowed'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With'],
