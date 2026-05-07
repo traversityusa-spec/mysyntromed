@@ -1,7 +1,13 @@
-import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
+
+// Load dotenv if available (for local development)
+try {
+  import('dotenv/config').catch(() => {});
+} catch (e) {
+  // dotenv not available, that's fine - Railway sets env vars directly
+}
 
 const app = express();
 
