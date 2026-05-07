@@ -60,45 +60,26 @@ const authenticateRequest = (req, res, next) => {
   next();
 };
 
-// Auto-select transport: Ethereal (dev preview) or Gmail (production)
+// Always use Ethereal (works everywhere) - preview URLs in logs
+// For real emails: setup SendGrid, Resend, or Mailgun
 let transporter;
 let testAccount = null;
 
 async function getTransporter() {
   if (transporter) return transporter;
 
-  const isDevMode = !process.env.EMAIL_PASS || process.env.EMAIL_PASS === 'your_app_password_here';
-
-  if (isDevMode) {
-    console.log('[EMAIL] No EMAIL_PASS set → using Ethereal test account');
-    testAccount = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-    console.log('[EMAIL] Ethereal account ready:', testAccount.user);
-  } else {
-    console.log('[EMAIL] Using Gmail SMTP (real emails will be sent)');
-    transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      tls: {
-        rejectUnauthorized: true,
-        minVersion: 'TLSv1.2'
-      },
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-  }
+  console.log('[EMAIL] Using Ethereal (preview URLs will be logged)');
+  testAccount = await nodemailer.createTestAccount();
+  transporter = nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
+  });
+  console.log('[EMAIL] Ethereal account ready:', testAccount.user);
 
   return transporter;
 }
