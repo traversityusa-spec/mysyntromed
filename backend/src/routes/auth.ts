@@ -277,7 +277,7 @@ router.get('/admin/users', requireAuth, requireRole('admin'), async (_req, res) 
       profiles.set(doc.id, doc.data());
     });
 
-    const users = listUsersResult.users.map(u => {
+    const users = listUsersResult.users.map((u: any) => {
       const profile = profiles.get(u.uid) || {};
       return {
         uid: u.uid,
