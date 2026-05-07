@@ -2,11 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
 
-// Load dotenv if available (for local development)
+// Simple dotenv loading - Railway sets env vars directly
 try {
-  import('dotenv/config').catch(() => {});
+  require('dotenv').config();
 } catch (e) {
-  // dotenv not available, that's fine - Railway sets env vars directly
+  // dotenv not available, that's fine for Railway
 }
 
 const app = express();
