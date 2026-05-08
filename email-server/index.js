@@ -132,9 +132,23 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 
   const sanitizedName = sanitize(displayName);
   const sanitizedUrl = sanitize(loginUrl);
+  const rawFrom = (process.env.SMTP_FROM || '').trim();
+  let companyEmail = 'noreply@mysyntromed.com';
+  let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
+
+  if (rawFrom) {
+    if (rawFrom.includes('<') && rawFrom.includes('>')) {
+      fromAddress = rawFrom;
+      const match = rawFrom.match(/<([^>]+)>/);
+      if (match) companyEmail = match[1];
+    } else {
+      fromAddress = `MySyntroMed <${rawFrom}>`;
+      companyEmail = rawFrom;
+    }
+  }
+
   const roleLabel = role === 'specialist' ? 'Specialist' : 'Healthcare Professional';
   const portalUrl = role === 'specialist' ? sanitizedUrl + '/specialist' : sanitizedUrl + '/portal';
-  const companyEmail = process.env.SMTP_FROM || 'noreply@mysyntromed.com';
   const tempPassword = tempCode || 'N/A';
 
   console.log('[DEBUG] tempPassword to send:', tempPassword);
@@ -197,7 +211,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 
 try {
     const result = await sendEmail({
-      from: `MySyntroMed <${companyEmail}>`,
+      from: fromAddress,
       to: email,
       subject: `Welcome to MySyntroMed - Let's Get You Started${role === 'specialist' ? ', Specialist!' : '!'}`,
       html: htmlContent,
@@ -227,7 +241,17 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
   const sanitizedSender = sanitize(senderName);
   const sanitizedUrl = sanitize(loginUrl);
   const sanitizedPreview = sanitize(messagePreview).substring(0, 100);
-  const companyEmail = process.env.SMTP_FROM || 'noreply@mysyntromed.com';
+  
+  const rawFrom = (process.env.SMTP_FROM || '').trim();
+  let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
+
+  if (rawFrom) {
+    if (rawFrom.includes('<') && rawFrom.includes('>')) {
+      fromAddress = rawFrom;
+    } else {
+      fromAddress = `MySyntroMed <${rawFrom}>`;
+    }
+  }
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -266,7 +290,7 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 
   try {
     const result = await sendEmail({
-      from: 'MySyntroMed <noreply@mysyntromed.com>',
+      from: fromAddress,
       to: email,
       subject: `New message from ${sanitizedSender} on MySyntroMed`,
       html: htmlContent,
@@ -305,7 +329,17 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
   }
 
   const sanitizedUrl = sanitize(loginUrl);
-  const companyEmail = process.env.SMTP_FROM || 'noreply@mysyntromed.com';
+  
+  const rawFrom = (process.env.SMTP_FROM || '').trim();
+  let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
+
+  if (rawFrom) {
+    if (rawFrom.includes('<') && rawFrom.includes('>')) {
+      fromAddress = rawFrom;
+    } else {
+      fromAddress = `MySyntroMed <${rawFrom}>`;
+    }
+  }
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -343,7 +377,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 
   try {
     const result = await sendEmail({
-      from: 'MySyntroMed <noreply@mysyntromed.com>',
+      from: fromAddress,
       to: email,
       subject: 'Your MySyntroMed Verification Code',
       html: htmlContent,
