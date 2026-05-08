@@ -15,6 +15,7 @@ import Activity from "@/components/dashboard/Activity";
 import Settings from "@/components/dashboard/Settings";
 import { AdminClients, AdminSpecialists, AdminConversations, AdminAnalytics } from "@/components/dashboard/AdminPages";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import Home from "@/pages/Home";
 import About from "@/pages/About";
@@ -130,19 +131,25 @@ const ResetPasswordRoute = ({ children }: { children: ReactNode }) => {
 
 const DashboardPage = ({ children }: { children: ReactNode }) => (
   <ProtectedRoute>
-    <DashboardLayout>{children}</DashboardLayout>
+    <DashboardLayout>
+      <ErrorBoundary>{children}</ErrorBoundary>
+    </DashboardLayout>
   </ProtectedRoute>
 );
 
 const AdminPage = ({ children }: { children: ReactNode }) => (
   <AdminRoute>
-    <DashboardLayout>{children}</DashboardLayout>
+    <DashboardLayout>
+      <ErrorBoundary>{children}</ErrorBoundary>
+    </DashboardLayout>
   </AdminRoute>
 );
 
 const SpecialistPage = ({ children }: { children: ReactNode }) => (
   <SpecialistRoute>
-    <DashboardLayout>{children}</DashboardLayout>
+    <DashboardLayout>
+      <ErrorBoundary>{children}</ErrorBoundary>
+    </DashboardLayout>
   </SpecialistRoute>
 );
 

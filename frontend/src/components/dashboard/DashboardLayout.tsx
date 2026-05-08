@@ -95,6 +95,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       const AudioContextRef = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextRef) return;
       const ctx = new AudioContextRef();
+      if (ctx.state === 'closed') return;
       const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
       oscillator.type = 'sine';
@@ -104,30 +105,36 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       gain.connect(ctx.destination);
       oscillator.start();
       oscillator.stop(ctx.currentTime + 0.1);
-      oscillator.onended = () => ctx.close();
+      oscillator.onended = () => { try { ctx.close(); } catch {} };
     } catch {
       // ignore audio failures
     }
   };
 
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
   useEffect(() => {
     if (!user?.uid) return;
     const messageUnsub = messageService.subscribeToUserMessages(user.uid, (messages) => {
-      const unread = messages.filter((m) => !m.read && m.senderId !== user.uid).length;
-      setUnreadMessages(unread);
-      if (!messages.length) return;
-      const latest = messages[messages.length - 1];
-      if (!initialSoundLoadRef.current) {
+      try {
+        const unread = messages.filter((m) => !m.read && m.senderId !== user.uid).length;
+        setUnreadMessages(unread);
+        if (!messages.length) return;
+        const latest = messages[messages.length - 1];
+        if (!initialSoundLoadRef.current) {
+          lastMessageIdRef.current = latest.id;
+          initialSoundLoadRef.current = true;
+          return;
+        }
+        if (latest.id !== lastMessageIdRef.current && latest.senderId !== user.uid) {
+          if (soundEnabled) playNotificationSound();
+          const preview = latest.text || 'New message';
+          showToast('message', latest.senderName || 'New message', preview.length > 60 ? preview.substring(0, 60) + '...' : preview);
+        }
         lastMessageIdRef.current = latest.id;
-        initialSoundLoadRef.current = true;
-        return;
+      } catch (e) {
+        console.error('[DashboardLayout] Message subscription error:', e);
       }
-      if (latest.id !== lastMessageIdRef.current && latest.senderId !== user.uid) {
-        playNotificationSound();
-        const preview = latest.text || 'New message';
-        showToast('message', latest.senderName || 'New message', preview.length > 60 ? preview.substring(0, 60) + '...' : preview);
-      }
-      lastMessageIdRef.current = latest.id;
     });
     const notificationUnsub = notificationService.subscribeToNotifications(user.uid, (items) => {
       setNotifications(items);
@@ -148,7 +155,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       notificationUnsub();
       callsUnsub();
     };
-  }, [user?.uid]);
+  }, [user?.uid, soundEnabled]);
 
   useEffect(() => {
     if (role !== 'admin') return;
