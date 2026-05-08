@@ -29,7 +29,7 @@ const sendWelcomeEmail = (email: string, displayName: string, role: 'client' | '
 
       // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       fetch(`${emailServerUrl}/send-welcome`, {
         method: 'POST',
