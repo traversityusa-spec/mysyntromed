@@ -10,19 +10,6 @@ try {
 }
 
 async function createTransporter() {
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    console.log('[EMAIL] Using Gmail SMTP');
-    return nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-  }
-
   if (process.env.RESEND_API_KEY) {
     console.log('[EMAIL] Using Resend');
     return nodemailer.createTransport({
@@ -32,6 +19,19 @@ async function createTransporter() {
       auth: {
         user: 'resend',
         pass: process.env.RESEND_API_KEY,
+      },
+    });
+  }
+
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    console.log('[EMAIL] Using Gmail SMTP');
+    return nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
     });
   }
