@@ -9,37 +9,44 @@ try {
   // dotenv not available, that's fine for Railway
 }
 
-async function createTransporter() {
+async function sendEmail({ from, to, subject, html }) {
   if (process.env.RESEND_API_KEY) {
-    console.log('[EMAIL] Using Resend');
-    return nodemailer.createTransport({
-      host: 'smtp.resend.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: 'resend',
-        pass: process.env.RESEND_API_KEY,
+    console.log('[EMAIL] Using Resend API (HTTP)');
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ from, to, subject, html }),
     });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Resend API error (${res.status}): ${err}`);
+    }
+    return { previewUrl: null };
   }
 
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     console.log('[EMAIL] Using Gmail SMTP');
-    return nodemailer.createTransport({
+    const transport = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
     });
+    const info = await transport.sendMail({ from, to, subject, html });
+    return { previewUrl: nodemailer.getTestMessageUrl(info) };
   }
 
   console.log('[EMAIL] Using Ethereal (preview mode)');
   const testAccount = await nodemailer.createTestAccount();
-  console.log('[EMAIL] Ethereal account:', testAccount.user);
-  return nodemailer.createTransport({
+  const transport = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
     secure: false,
@@ -48,6 +55,8 @@ async function createTransporter() {
       pass: testAccount.pass,
     },
   });
+  const info = await transport.sendMail({ from, to, subject, html });
+  return { previewUrl: nodemailer.getTestMessageUrl(info) };
 }
 
 const app = express();
@@ -187,19 +196,17 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 </html>`;
 
 try {
-    const mail = await createTransporter();
-    const info = await mail.sendMail({
+    const result = await sendEmail({
       from: `"MySyntroMed" <${companyEmail}>`,
       to: email,
       subject: `Welcome to MySyntroMed - Let's Get You Started${role === 'specialist' ? ', Specialist!' : '!'}`,
       html: htmlContent,
     });
 
-    const previewUrl = nodemailer.getTestMessageUrl(info);
     console.log('[EMAIL] Welcome email sent to:', email);
-    res.json({ success: true, previewUrl: previewUrl || null });
+    res.json({ success: true, previewUrl: result.previewUrl || null });
   } catch (error) {
-    console.error('[EMAIL] Error:', error.message);
+    console.error('[EMAIL] Error:', error.message, error.code, error.command);
     res.status(500).json({ error: error.message });
   }
 });
@@ -258,17 +265,15 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 </html>`;
 
   try {
-    const mail = await createTransporter();
-    const info = await mail.sendMail({
+    const result = await sendEmail({
       from: '"MySyntroMed" <noreply@mysyntromed.com>',
       to: email,
       subject: `New message from ${sanitizedSender} on MySyntroMed`,
       html: htmlContent,
     });
 
-    const previewUrl = nodemailer.getTestMessageUrl(info);
     console.log('[EMAIL] Unread message notification sent to:', email);
-    res.json({ success: true, previewUrl: previewUrl || null });
+    res.json({ success: true, previewUrl: result.previewUrl || null });
   } catch (error) {
     console.error('[EMAIL] Notification Error:', error.message);
     res.status(500).json({ error: error.message });
@@ -337,17 +342,15 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 </html>`;
 
   try {
-    const mail = await createTransporter();
-    const info = await mail.sendMail({
+    const result = await sendEmail({
       from: '"MySyntroMed" <noreply@mysyntromed.com>',
       to: email,
       subject: 'Your MySyntroMed Verification Code',
       html: htmlContent,
     });
 
-    const previewUrl = nodemailer.getTestMessageUrl(info);
     console.log('[EMAIL] OTP sent to:', email);
-    res.json({ success: true, previewUrl: previewUrl || null });
+    res.json({ success: true, previewUrl: result.previewUrl || null });
   } catch (error) {
     console.error('[EMAIL] OTP Error:', error.message);
     res.status(500).json({ error: error.message });
