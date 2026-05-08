@@ -9,11 +9,22 @@ try {
   // dotenv not available, that's fine for Railway
 }
 
-// Use Resend (free, works on Railway) or fallback to Ethereal
 async function createTransporter() {
-  // Try Resend first (set RESEND_API_KEY in Railway)
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    console.log('[EMAIL] Using Gmail SMTP');
+    return nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+  }
+
   if (process.env.RESEND_API_KEY) {
-    console.log('[EMAIL] Using Resend (real emails)');
+    console.log('[EMAIL] Using Resend');
     return nodemailer.createTransport({
       host: 'smtp.resend.com',
       port: 465,
@@ -24,8 +35,7 @@ async function createTransporter() {
       },
     });
   }
-  
-  // Fallback to Ethereal (test emails with preview)
+
   console.log('[EMAIL] Using Ethereal (preview mode)');
   const testAccount = await nodemailer.createTestAccount();
   console.log('[EMAIL] Ethereal account:', testAccount.user);
