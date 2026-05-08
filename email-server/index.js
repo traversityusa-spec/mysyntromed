@@ -197,7 +197,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 
 try {
     const result = await sendEmail({
-      from: `"MySyntroMed" <${companyEmail}>`,
+      from: `MySyntroMed <${companyEmail}>`,
       to: email,
       subject: `Welcome to MySyntroMed - Let's Get You Started${role === 'specialist' ? ', Specialist!' : '!'}`,
       html: htmlContent,
@@ -266,7 +266,7 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 
   try {
     const result = await sendEmail({
-      from: '"MySyntroMed" <noreply@mysyntromed.com>',
+      from: 'MySyntroMed <noreply@mysyntromed.com>',
       to: email,
       subject: `New message from ${sanitizedSender} on MySyntroMed`,
       html: htmlContent,
@@ -343,7 +343,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 
   try {
     const result = await sendEmail({
-      from: '"MySyntroMed" <noreply@mysyntromed.com>',
+      from: 'MySyntroMed <noreply@mysyntromed.com>',
       to: email,
       subject: 'Your MySyntroMed Verification Code',
       html: htmlContent,
