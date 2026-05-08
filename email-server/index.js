@@ -116,6 +116,14 @@ const sanitize = (str) => {
   return str.trim().substring(0, 500).replace(/[<>]/g, '');
 };
 
+const normalizeBaseUrl = (url) => sanitize(url).replace(/\/+$/, '');
+
+const dashboardPathForRole = (role, section = 'dashboard') => {
+  if (role === 'admin') return `/admin/${section}`;
+  if (role === 'specialist') return `/specialist/${section}`;
+  return `/portal/${section}`;
+};
+
 app.post('/send-welcome', authenticateRequest, async (req, res) => {
   const { email, displayName, role, loginUrl, tempCode } = req.body;
 
@@ -131,7 +139,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
   }
 
   const sanitizedName = sanitize(displayName);
-  const sanitizedUrl = sanitize(loginUrl);
+  const sanitizedUrl = normalizeBaseUrl(loginUrl);
   const rawFrom = (process.env.SMTP_FROM || '').trim();
   let companyEmail = 'noreply@mysyntromed.com';
   let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
@@ -226,7 +234,7 @@ try {
 });
 
 app.post('/send-unread-message', authenticateRequest, async (req, res) => {
-  const { email, receiverName, senderName, messagePreview, loginUrl } = req.body;
+  const { email, receiverName, senderName, messagePreview, loginUrl, receiverRole } = req.body;
 
   if (!email || !receiverName || !senderName || !loginUrl) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -239,7 +247,7 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 
   const sanitizedReceiver = sanitize(receiverName);
   const sanitizedSender = sanitize(senderName);
-  const sanitizedUrl = sanitize(loginUrl);
+  const sanitizedUrl = normalizeBaseUrl(loginUrl) + dashboardPathForRole(receiverRole, 'messages');
   const sanitizedPreview = sanitize(messagePreview).substring(0, 100);
   
   const rawFrom = (process.env.SMTP_FROM || '').trim();
@@ -328,7 +336,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
     return res.status(400).json({ error: 'Invalid email address' });
   }
 
-  const sanitizedUrl = sanitize(loginUrl);
+  const sanitizedUrl = normalizeBaseUrl(loginUrl);
   
   const rawFrom = (process.env.SMTP_FROM || '').trim();
   let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';

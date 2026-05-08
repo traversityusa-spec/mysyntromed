@@ -27,6 +27,19 @@ const CONVERSATION_KEYS_COLLECTION = 'conversation_keys';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
+const toDate = (value: unknown): Date => {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    const parsed = (value as { toDate: () => Date }).toDate();
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+};
+
 export type UserProfile = {
   uid: string;
   email: string | null;
@@ -64,6 +77,25 @@ export type Message = {
   fileType?: 'image' | 'file';
   fileSize?: number;
 };
+
+const mapMessageDoc = (id: string, data: DocumentData): Message => ({
+  id,
+  senderId: data.senderId || '',
+  senderName: data.senderName || 'User',
+  senderRole: data.senderRole || 'client',
+  senderPhotoURL: data.senderPhotoURL || '',
+  receiverId: data.receiverId || '',
+  text: typeof data.text === 'string' ? data.text : '',
+  read: !!data.read,
+  status: data.status || (data.read ? 'read' : 'sent'),
+  createdAt: toDate(data.createdAt),
+  encrypted: data.encrypted,
+  iv: data.iv,
+  fileUrl: data.fileUrl,
+  fileName: data.fileName,
+  fileType: data.fileType,
+  fileSize: data.fileSize,
+});
 
 export type ConversationKey = {
   key: string;
@@ -400,11 +432,7 @@ export const messageService = {
       limit(200)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-    })) as Message[];
+    return snapshot.docs.map((doc) => mapMessageDoc(doc.id, doc.data()));
   },
 
   async decryptMessage(message: Message, userId: string): Promise<Message> {
@@ -438,11 +466,7 @@ export const messageService = {
     );
 
     return onSnapshot(q, async (snapshot) => {
-      const messages = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      })) as Message[];
+      const messages = snapshot.docs.map((doc) => mapMessageDoc(doc.id, doc.data()));
 
       const sorted = messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       
@@ -464,20 +488,7 @@ export const messageService = {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs
-      .map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          senderId: data.senderId,
-          senderName: data.senderName,
-          senderRole: data.senderRole,
-          receiverId: data.receiverId,
-          text: data.text,
-          read: data.read || false,
-          status: data.status || (data.read ? 'read' : 'sent'),
-          createdAt: data.createdAt?.toDate() || new Date(),
-        } as Message;
-      })
+      .map((doc) => mapMessageDoc(doc.id, doc.data()))
       .filter((msg) => 
         (msg.senderId === userId && msg.receiverId === otherUserId) ||
         (msg.senderId === otherUserId && msg.receiverId === userId)
@@ -591,22 +602,7 @@ export const messageService = {
 
     return onSnapshot(q, async (snapshot) => {
       const messages = snapshot.docs
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            senderId: data.senderId,
-            senderName: data.senderName,
-            senderRole: data.senderRole,
-            receiverId: data.receiverId,
-            text: data.text,
-            read: data.read || false,
-            status: data.status || (data.read ? 'read' : 'sent'),
-            createdAt: data.createdAt?.toDate() || new Date(),
-            iv: data.iv,
-            encrypted: data.encrypted,
-          } as Message;
-        })
+        .map((doc) => mapMessageDoc(doc.id, doc.data()))
         .filter((msg) =>
           (msg.senderId === userId && msg.receiverId === otherUserId) ||
           (msg.senderId === otherUserId && msg.receiverId === userId)

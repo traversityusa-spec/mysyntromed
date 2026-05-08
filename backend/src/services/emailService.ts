@@ -26,9 +26,10 @@ export const sendWelcomeEmail = async ({
   loginUrl,
 }: WelcomeEmailParams): Promise<{ success: boolean; error?: string }> => {
   const roleLabel = role === 'client' ? 'Healthcare Professional' : 'Specialist';
-  const portalUrl = role === 'client' 
-    ? `${loginUrl}/portal` 
-    : `${loginUrl}/specialist`;
+  const baseLoginUrl = loginUrl.replace(/\/+$/, '');
+  const portalUrl = role === 'client'
+    ? `${baseLoginUrl}/portal`
+    : `${baseLoginUrl}/specialist`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -117,7 +118,7 @@ export const sendWelcomeEmail = async ({
         <p>© ${new Date().getFullYear()} MySyntroMed. All rights reserved.</p>
         <p>This email was sent because an admin created your account.</p>
         <p style="margin-top: 12px;">
-          <a href="${loginUrl}" style="color: #0d9488;">Visit Website</a> · 
+          <a href="${baseLoginUrl}" style="color: #0d9488;">Visit Website</a> ·
           <a href="mailto:support@mysyntromed.com" style="color: #0d9488;">Contact Support</a>
         </p>
       </div>

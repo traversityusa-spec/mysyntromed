@@ -43,6 +43,7 @@ router.post('/notify-offline', requireAuth, async (req: AuthedRequest, res) => {
     const receiverData = userSnap.data();
     const email = receiverData?.email;
     const receiverName = receiverData?.displayName || 'User';
+    const receiverRole = receiverData?.role || 'client';
 
     if (!email) {
       return res.json({ sent: false, reason: 'Receiver has no email' });
@@ -64,6 +65,7 @@ router.post('/notify-offline', requireAuth, async (req: AuthedRequest, res) => {
         senderName,
         messagePreview: messagePreview?.substring(0, 100), // truncate for preview
         loginUrl,
+        receiverRole,
       }),
     });
 

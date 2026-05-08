@@ -1,4 +1,4 @@
-import { type FormEvent, useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { type FormEvent, useState, useEffect, useRef, type ChangeEvent, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Paperclip, Phone, Plus, Search, Send, Shield, Video, X, MessageSquare, 
@@ -19,6 +19,48 @@ type ConversationPreview = {
   online: boolean;
   photoURL?: string;
   lastTimestamp?: number;
+};
+
+const toMessageDate = (value: unknown): Date => {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    const parsed = (value as { toDate: () => Date }).toDate();
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+};
+
+const normalizeRealtimeMessage = (raw: unknown): Message | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Partial<Message> & { createdAt?: unknown };
+
+  if (!data.senderId || !data.receiverId) return null;
+
+  const createdAt = toMessageDate(data.createdAt);
+  const text = typeof data.text === 'string' ? data.text : '';
+
+  return {
+    id: data.id || `realtime-${data.senderId}-${data.receiverId}-${createdAt.getTime()}-${text.slice(0, 20)}`,
+    senderId: data.senderId,
+    senderName: data.senderName || 'User',
+    senderRole: data.senderRole || 'client',
+    senderPhotoURL: data.senderPhotoURL || '',
+    receiverId: data.receiverId,
+    text,
+    read: !!data.read,
+    status: data.status || 'sent',
+    createdAt,
+    encrypted: data.encrypted,
+    iv: data.iv,
+    fileUrl: data.fileUrl,
+    fileName: data.fileName,
+    fileType: data.fileType,
+    fileSize: data.fileSize,
+  };
 };
 
 const Messages = () => {
@@ -45,6 +87,10 @@ const Messages = () => {
 
   const chatEnabled = sessionUser?.role !== 'client' || !!sessionUser?.assignedSpecialistId;
   const clientPending = sessionUser?.role === 'client' && !sessionUser?.assignedSpecialistId;
+  const conversationIdsKey = useMemo(
+    () => conversations.map((c) => c.id).sort().join('|'),
+    [conversations]
+  );
 
   useEffect(() => {
     if (user?.uid) {
@@ -56,16 +102,36 @@ const Messages = () => {
   }, [user?.uid]);
 
   useEffect(() => {
-    const handleNewMessage = (e: CustomEvent<Message>) => {
-      const msg = e.detail;
+    const handleNewMessage = (e: CustomEvent<unknown>) => {
+      const msg = normalizeRealtimeMessage(e.detail);
+      if (!msg) return;
       console.log('[MESSAGES] Socket message received:', msg);
       setAllMessages((prev) => {
-        const exists = prev.some((m) => m.id === msg.id);
+        const exists = prev.some((m) =>
+          m.id === msg.id ||
+          (
+            m.senderId === msg.senderId &&
+            m.receiverId === msg.receiverId &&
+            m.text === msg.text &&
+            Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
+          )
+        );
         if (exists) return prev;
         return [...prev, msg];
       });
       if (selectedConversation && (msg.senderId === selectedConversation || msg.receiverId === selectedConversation)) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => {
+          const exists = prev.some((m) =>
+            m.id === msg.id ||
+            (
+              m.senderId === msg.senderId &&
+              m.receiverId === msg.receiverId &&
+              m.text === msg.text &&
+              Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
+            )
+          );
+          return exists ? prev : [...prev, msg];
+        });
         notificationSoundService.playIncomingSound();
         scrollToBottom();
       }
@@ -156,15 +222,15 @@ const Messages = () => {
           role: otherRole,
           lastMessage: lastMsgText,
           time: formatMessageTime(msg.createdAt),
-          lastTimestamp: msg.createdAt.getTime(),
+          lastTimestamp: toMessageDate(msg.createdAt).getTime(),
           unread: isUnread ? 1 : 0,
           online: presenceMap[otherId] || false,
           photoURL: otherPhoto,
         });
-      } else if (existing && msg.createdAt.getTime() > (existing.lastTimestamp || 0)) {
+      } else if (existing && toMessageDate(msg.createdAt).getTime() > (existing.lastTimestamp || 0)) {
         existing.lastMessage = lastMsgText;
         existing.time = formatMessageTime(msg.createdAt);
-        existing.lastTimestamp = msg.createdAt.getTime();
+        existing.lastTimestamp = toMessageDate(msg.createdAt).getTime();
         if (msg.senderId !== user.uid && msg.senderPhotoURL) {
           existing.photoURL = msg.senderPhotoURL;
         }
@@ -230,7 +296,24 @@ const Messages = () => {
     })
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
 
-    setConversations(nextConversations);
+    setConversations((prev) => {
+      const same =
+        prev.length === nextConversations.length &&
+        prev.every((item, index) => {
+          const next = nextConversations[index];
+          return next &&
+            item.id === next.id &&
+            item.name === next.name &&
+            item.role === next.role &&
+            item.lastMessage === next.lastMessage &&
+            item.time === next.time &&
+            item.unread === next.unread &&
+            item.online === next.online &&
+            item.photoURL === next.photoURL &&
+            item.lastTimestamp === next.lastTimestamp;
+        });
+      return same ? prev : nextConversations;
+    });
     if (!selectedConversation && nextConversations.length > 0) {
       setSelectedConversation(nextConversations[0].id);
     }
@@ -254,7 +337,7 @@ const Messages = () => {
           (msg.senderId === user.uid && msg.receiverId === selectedConversation) ||
           (msg.senderId === selectedConversation && msg.receiverId === user.uid)
       )
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      .sort((a, b) => toMessageDate(a.createdAt).getTime() - toMessageDate(b.createdAt).getTime());
     setMessages(filtered);
   }, [allMessages, user?.uid, selectedConversation]);
 
@@ -318,16 +401,20 @@ const Messages = () => {
   }, [user?.uid, selectedConversation]);
 
   useEffect(() => {
-    const ids = conversations.map((c) => c.id);
+    const ids = conversationIdsKey ? conversationIdsKey.split('|') : [];
     const unsubs: Array<() => void> = [];
     ids.forEach((id) => {
       const unsub = presenceService.subscribeToPresence(id, (state) => {
-        setPresenceMap((prev) => ({ ...prev, [id]: state?.state === 'online' }));
+        const online = state?.state === 'online';
+        setPresenceMap((prev) => {
+          if (prev[id] === online) return prev;
+          return { ...prev, [id]: online };
+        });
       });
       unsubs.push(unsub);
     });
     return () => unsubs.forEach((fn) => fn());
-  }, [conversations]);
+  }, [conversationIdsKey]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -335,7 +422,7 @@ const Messages = () => {
 
   const formatMessageTime = (date: Date) => {
     const now = new Date();
-    const msgDate = new Date(date);
+    const msgDate = toMessageDate(date);
     const diff = now.getTime() - msgDate.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(hours / 24);
@@ -352,7 +439,7 @@ const Messages = () => {
   };
 
   const formatFullTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString('en-US', { 
+    return toMessageDate(date).toLocaleTimeString('en-US', {
       hour: 'numeric', 
       minute: '2-digit',
       hour12: true 
@@ -392,25 +479,29 @@ const Messages = () => {
     });
 
     try {
-      await messageService.sendMessage({
+      const messageText = newMessage.trim();
+      const messageId = await messageService.sendMessage({
         senderId: user.uid,
         senderName,
         senderRole,
         senderPhotoURL: sessionUser?.photoURL || '',
         receiverId,
-        text: newMessage.trim(),
+        text: messageText,
         read: false,
         status: 'sent',
       });
 
       emitMessage(receiverId, {
+        id: messageId,
         senderId: user.uid,
         senderName,
         senderRole,
         senderPhotoURL: sessionUser?.photoURL || '',
         receiverId,
-        text: newMessage.trim(),
-        createdAt: new Date(),
+        text: messageText,
+        read: false,
+        status: 'sent',
+        createdAt: new Date().toISOString(),
       });
 
       notificationSoundService.playOutgoingSound();
@@ -501,7 +592,7 @@ const Messages = () => {
     let currentDate = '';
     
     messages.forEach((msg) => {
-      const msgDate = new Date(msg.createdAt).toLocaleDateString('en-US', { 
+      const msgDate = toMessageDate(msg.createdAt).toLocaleDateString('en-US', {
         month: 'long', 
         day: 'numeric',
         year: 'numeric'
@@ -937,4 +1028,3 @@ const Messages = () => {
 };
 
 export default Messages;
-

@@ -1,7 +1,13 @@
-import { Navigate } from 'react-router-dom';
+import EmailLogin from '@/components/ui/EmailLogin';
 
 const SpecialistAuth = () => {
-  return <Navigate to="/portal" replace />;
+  return (
+    <EmailLogin
+      portal="specialist"
+      title="MySyntroMed Specialist Portal"
+      subtitle="Secure access for MySyntroMed specialists."
+    />
+  );
 };
 
 export default SpecialistAuth;

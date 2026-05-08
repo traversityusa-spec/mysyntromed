@@ -141,7 +141,10 @@ function isValidEmail(email) {
     match /activity/{activityId} {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if signedIn() && (
-        request.resource.data.userId == request.auth.uid
+        (
+          request.resource.data.userId == request.auth.uid ||
+          isAdmin()
+        )
         && request.resource.data.type is string
       );
       allow update: if isAdmin();

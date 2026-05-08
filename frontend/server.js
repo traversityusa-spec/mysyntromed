@@ -6,28 +6,61 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const distDir = path.join(__dirname, 'dist');
+const indexPath = path.join(distDir, 'index.html');
+
+const contentTypes = {
+  '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.txt': 'text/plain; charset=utf-8',
+  '.webp': 'image/webp',
+};
+
+const serveIndex = (res) => {
+  fs.readFile(indexPath, (err, data) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache',
+    });
+    res.end(data);
+  });
+};
 
 const server = http.createServer((req, res) => {
-  let reqPath = req.url.split('?')[0];
+  let reqPath = decodeURIComponent(req.url.split('?')[0]);
   if (reqPath === '/' || !reqPath) reqPath = '/index.html';
   
-  const filePath = path.join(distDir, reqPath);
+  const filePath = path.normalize(path.join(distDir, reqPath));
+
+  if (!filePath.startsWith(distDir)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Forbidden');
+    return;
+  }
   
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      fs.readFile(path.join(distDir, 'index.html'), (err2, indexData) => {
-        if (err2) {
-          res.writeHead(404, { 'Content-Type': 'text/plain' });
-          res.end('Not Found');
-        } else {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(indexData);
-        }
-      });
+      serveIndex(res);
     } else {
       const ext = path.extname(reqPath);
-      const contentType = ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : 'text/html';
-      res.writeHead(200, { 'Content-Type': contentType });
+      const contentType = contentTypes[ext] || 'application/octet-stream';
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': reqPath === '/index.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+      });
       res.end(data);
     }
   });

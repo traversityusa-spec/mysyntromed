@@ -268,6 +268,108 @@ router.post('/admin/delete-user', requireAuth, requireRole('admin'), async (req,
   }
 });
 
+router.post('/admin/assign-specialist', requireAuth, requireRole('admin'), async (req, res) => {
+  const { userId, specialistId } = req.body;
+
+  if (!userId || !specialistId) {
+    return res.status(400).json({ error: 'Missing required fields: userId, specialistId' });
+  }
+
+  try {
+    const firestore = admin.firestore();
+    const [clientSnap, specialistSnap] = await Promise.all([
+      firestore.collection('users').doc(userId).get(),
+      firestore.collection('users').doc(specialistId).get(),
+    ]);
+
+    if (!clientSnap.exists) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    if (!specialistSnap.exists) {
+      return res.status(404).json({ error: 'Specialist not found' });
+    }
+
+    const client = clientSnap.data() || {};
+    const specialist = specialistSnap.data() || {};
+
+    if (client.role !== 'client') {
+      return res.status(400).json({ error: 'Selected user is not a client' });
+    }
+
+    if (specialist.role !== 'specialist') {
+      return res.status(400).json({ error: 'Selected user is not a specialist' });
+    }
+
+    const specialistName = specialist.displayName || specialist.email || 'Specialist';
+    const clientName = client.displayName || client.email || 'Client';
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const batch = firestore.batch();
+
+    batch.update(clientSnap.ref, {
+      assignedSpecialistId: specialistId,
+      assignedSpecialistName: specialistName,
+      updatedAt: now,
+    });
+
+    const assignmentRequestsSnap = await firestore.collection('requests')
+      .where('userId', '==', userId)
+      .get();
+
+    assignmentRequestsSnap.docs.forEach((requestDoc) => {
+      const request = requestDoc.data();
+      if (request.type !== 'Specialist Assignment' || request.status !== 'pending') return;
+
+      batch.update(requestDoc.ref, {
+        specialistId,
+        specialistName,
+        status: 'completed',
+        assignedAt: now,
+        completedAt: now,
+      });
+    });
+
+    batch.create(firestore.collection('notifications').doc(), {
+      userId,
+      title: 'Specialist Assigned to You',
+      message: `${specialistName} has been assigned as your specialist. You can now message them for assistance.`,
+      type: 'assignment',
+      read: false,
+      createdAt: now,
+    });
+
+    batch.create(firestore.collection('notifications').doc(), {
+      userId: specialistId,
+      title: 'New Client Assignment',
+      message: `You have been assigned to ${clientName}. Check your messages to introduce yourself.`,
+      type: 'assignment',
+      read: false,
+      createdAt: now,
+    });
+
+    batch.create(firestore.collection('activity').doc(), {
+      userId,
+      title: `Specialist Assigned: ${specialistName}`,
+      type: 'Assignment',
+      specialistId,
+      specialistName,
+      status: 'completed',
+      createdAt: now,
+    });
+
+    await batch.commit();
+
+    res.json({
+      success: true,
+      assignedSpecialistId: specialistId,
+      assignedSpecialistName: specialistName,
+    });
+  } catch (error: any) {
+    console.error('Assign specialist error:', error);
+    res.status(500).json({ error: error.message || 'Failed to assign specialist' });
+  }
+});
+
 router.get('/admin/users', requireAuth, requireRole('admin'), async (_req, res) => {
   try {
     const listUsersResult = await adminAuth.listUsers(1000);
@@ -310,4 +412,3 @@ router.get('/me/specialist', requireAuth, requireRole('specialist'), (req: Authe
 });
 
 export default router;
-

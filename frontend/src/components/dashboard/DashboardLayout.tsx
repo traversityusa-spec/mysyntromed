@@ -116,7 +116,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       const unread = messages.filter((m) => !m.read && m.senderId !== user.uid).length;
       setUnreadMessages(unread);
       if (!messages.length) return;
-      const latest = messages[0];
+      const latest = messages[messages.length - 1];
       if (!initialSoundLoadRef.current) {
         lastMessageIdRef.current = latest.id;
         initialSoundLoadRef.current = true;
@@ -124,7 +124,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       }
       if (latest.id !== lastMessageIdRef.current && latest.senderId !== user.uid) {
         playNotificationSound();
-        showToast('message', latest.senderName, latest.text.length > 60 ? latest.text.substring(0, 60) + '...' : latest.text);
+        const preview = latest.text || 'New message';
+        showToast('message', latest.senderName || 'New message', preview.length > 60 ? preview.substring(0, 60) + '...' : preview);
       }
       lastMessageIdRef.current = latest.id;
     });

@@ -25,6 +25,7 @@ import FAQ from "@/pages/FAQ";
 import Contact from "@/pages/Contact";
 import PortalAuth from "@/pages/PortalAuth";
 import AdminAuth from "@/pages/AdminAuth";
+import SpecialistAuth from "@/pages/SpecialistAuth";
 import ResetPassword from "@/pages/ResetPassword";
 
 const MarketingLayout = ({ children }: { children: ReactNode }) => (
@@ -172,6 +173,7 @@ function AppRoutes() {
       {/* Auth entry points */}
       <Route path="/portal" element={<AuthRoute><PortalAuth /></AuthRoute>} />
       <Route path="/admin" element={<AuthRoute><AdminAuth /></AuthRoute>} />
+      <Route path="/specialist" element={<AuthRoute><SpecialistAuth /></AuthRoute>} />
       <Route path="/reset-password" element={<ResetPasswordRoute><ResetPassword /></ResetPasswordRoute>} />
       
       {/* Client Workspace */}
@@ -199,6 +201,7 @@ function AppRoutes() {
       <Route path="/specialist/calls" element={<SpecialistPage><Calls /></SpecialistPage>} />
       <Route path="/specialist/activity" element={<SpecialistPage><Activity /></SpecialistPage>} />
       <Route path="/specialist/settings" element={<SpecialistPage><Settings /></SpecialistPage>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

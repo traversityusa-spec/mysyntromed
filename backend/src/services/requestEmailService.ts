@@ -29,6 +29,7 @@ export const sendNewRequestEmailToAdmin = async ({
   priority,
   loginUrl,
 }: NewRequestEmailParams): Promise<{ success: boolean; error?: string }> => {
+  const baseLoginUrl = loginUrl.replace(/\/+$/, '');
   const priorityColors: Record<string, string> = {
     urgent: '#dc2626',
     high: '#f59e0b',
@@ -102,7 +103,7 @@ export const sendNewRequestEmailToAdmin = async ({
       </div>
 
       <div style="text-align: center;">
-        <a href="${loginUrl}/admin" class="cta-button">View in Admin Dashboard</a>
+        <a href="${baseLoginUrl}/admin" class="cta-button">View in Admin Dashboard</a>
       </div>
 
       <div class="footer">
@@ -128,7 +129,7 @@ Priority:     ${priority}
 Description:  ${description || 'No description provided'}
 ══════════════════════════════════════════
 
-View in Admin Dashboard: ${loginUrl}/admin
+View in Admin Dashboard: ${baseLoginUrl}/admin
 
 © ${new Date().getFullYear()} MySyntroMed
 `;

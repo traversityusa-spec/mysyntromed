@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent, useCallback } from 'react';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc } from 'firebase/firestore';
-import { db, userService, requestService, notificationService, activityService } from '@/lib/firestore';
+import { db, activityService } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
 import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -366,35 +366,32 @@ export const AdminClients = () => {
     
     setAssigningId(userId);
     try {
-      console.log('Assigning specialist:', { userId, specId, specialistName: specialist.displayName });
-      
-      await userService.assignSpecialist(userId, specId, specialist.displayName || specialist.email || 'Specialist');
-      console.log('Assigned in user profile');
-      
-      await requestService.completeAssignmentRequest(userId, specId, specialist.displayName || specialist.email || 'Specialist');
-      console.log('Completed assignment request');
-      
-      await notificationService.notifyClientAssignment(userId, specialist.displayName || specialist.email || 'Specialist', specialist.email || '');
-      console.log('Notified client');
-      
-      await notificationService.notifySpecialistAssignment(specId, client.displayName || client.email || 'Client', client.email || '');
-      console.log('Notified specialist');
-      
-      await activityService.addActivity({
-        userId,
-        title: `Specialist Assigned: ${specialist.displayName || specialist.email}`,
-        type: 'Assignment',
-        specialistId: specId,
-        specialistName: specialist.displayName || specialist.email || 'Specialist',
-        status: 'completed',
+      const token = await authUser?.getIdToken();
+      if (!token) {
+        throw new Error('Your admin session has expired. Please log in again.');
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/assign-specialist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId, specialistId: specId }),
       });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to assign specialist');
+      }
       
       setSuccessMessage(`Successfully assigned ${specialist.displayName || specialist.email} to ${client.displayName || client.email}`);
       setTimeout(() => setSuccessMessage(null), 3000);
       await fetchData();
-    } catch (e) {
-      console.error(e);
-      alert('Failed to assign specialist');
+    } catch (e: any) {
+      console.error('Failed to assign specialist:', e);
+      alert(e.message || 'Failed to assign specialist');
     } finally {
       setAssigningId(null);
     }
