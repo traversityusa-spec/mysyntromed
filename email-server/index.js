@@ -91,9 +91,6 @@ const authenticateRequest = (req, res, next) => {
   next();
 };
 
-// createTransporter is defined above (uses Resend or Ethereal)
-}
-
 // Input sanitization helper
 const sanitize = (str) => {
   if (typeof str !== 'string') return '';
