@@ -28,14 +28,23 @@ const CONVERSATION_KEYS_COLLECTION = 'conversation_keys';
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 const toDate = (value: unknown): Date => {
+  if (!value) return new Date();
   if (value instanceof Date) return value;
   if (typeof value === 'string' || typeof value === 'number') {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
   if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
-    const parsed = (value as { toDate: () => Date }).toDate();
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+    try {
+      const parsed = (value as { toDate: () => unknown }).toDate();
+      if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) return parsed;
+      if (typeof parsed === 'string' || typeof parsed === 'number') {
+        const d = new Date(parsed);
+        if (!Number.isNaN(d.getTime())) return d;
+      }
+    } catch {
+      return new Date();
+    }
   }
   return new Date();
 };

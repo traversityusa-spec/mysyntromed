@@ -22,45 +22,59 @@ type ConversationPreview = {
 };
 
 const toMessageDate = (value: unknown): Date => {
+  if (!value) return new Date();
   if (value instanceof Date) return value;
   if (typeof value === 'string' || typeof value === 'number') {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
   if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
-    const parsed = (value as { toDate: () => Date }).toDate();
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+    try {
+      const parsed = (value as { toDate: () => unknown }).toDate();
+      if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) return parsed;
+      if (typeof parsed === 'string' || typeof parsed === 'number') {
+        const d = new Date(parsed);
+        if (!Number.isNaN(d.getTime())) return d;
+      }
+    } catch {
+      return new Date();
+    }
   }
   return new Date();
 };
 
 const normalizeRealtimeMessage = (raw: unknown): Message | null => {
-  if (!raw || typeof raw !== 'object') return null;
-  const data = raw as Partial<Message> & { createdAt?: unknown };
+  try {
+    if (!raw || typeof raw !== 'object') return null;
+    const data = raw as Partial<Message> & { createdAt?: unknown };
 
-  if (!data.senderId || !data.receiverId) return null;
+    if (!data.senderId || !data.receiverId) return null;
 
-  const createdAt = toMessageDate(data.createdAt);
-  const text = typeof data.text === 'string' ? data.text : '';
+    const createdAt = toMessageDate(data.createdAt);
+    const text = typeof data.text === 'string' ? data.text : '';
 
-  return {
-    id: data.id || `realtime-${data.senderId}-${data.receiverId}-${createdAt.getTime()}-${text.slice(0, 20)}`,
-    senderId: data.senderId,
-    senderName: data.senderName || 'User',
-    senderRole: data.senderRole || 'client',
-    senderPhotoURL: data.senderPhotoURL || '',
-    receiverId: data.receiverId,
-    text,
-    read: !!data.read,
-    status: data.status || 'sent',
-    createdAt,
-    encrypted: data.encrypted,
-    iv: data.iv,
-    fileUrl: data.fileUrl,
-    fileName: data.fileName,
-    fileType: data.fileType,
-    fileSize: data.fileSize,
-  };
+    return {
+      id: data.id || `realtime-${data.senderId}-${data.receiverId}-${createdAt.getTime()}-${text.slice(0, 20)}`,
+      senderId: data.senderId,
+      senderName: data.senderName || 'User',
+      senderRole: data.senderRole || 'client',
+      senderPhotoURL: data.senderPhotoURL || '',
+      receiverId: data.receiverId,
+      text,
+      read: !!data.read,
+      status: data.status || 'sent',
+      createdAt,
+      encrypted: data.encrypted,
+      iv: data.iv,
+      fileUrl: data.fileUrl,
+      fileName: data.fileName,
+      fileType: data.fileType,
+      fileSize: data.fileSize,
+    };
+  } catch (error) {
+    console.error('[MESSAGES] Error normalizing realtime message:', error);
+    return null;
+  }
 };
 
 const Messages = () => {
@@ -103,24 +117,11 @@ const Messages = () => {
 
   useEffect(() => {
     const handleNewMessage = (e: CustomEvent<unknown>) => {
-      const msg = normalizeRealtimeMessage(e.detail);
-      if (!msg) return;
-      console.log('[MESSAGES] Socket message received:', msg);
-      setAllMessages((prev) => {
-        const exists = prev.some((m) =>
-          m.id === msg.id ||
-          (
-            m.senderId === msg.senderId &&
-            m.receiverId === msg.receiverId &&
-            m.text === msg.text &&
-            Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
-          )
-        );
-        if (exists) return prev;
-        return [...prev, msg];
-      });
-      if (selectedConversation && (msg.senderId === selectedConversation || msg.receiverId === selectedConversation)) {
-        setMessages((prev) => {
+      try {
+        const msg = normalizeRealtimeMessage(e.detail);
+        if (!msg) return;
+        console.log('[MESSAGES] Socket message received:', msg);
+        setAllMessages((prev) => {
           const exists = prev.some((m) =>
             m.id === msg.id ||
             (
@@ -130,10 +131,27 @@ const Messages = () => {
               Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
             )
           );
-          return exists ? prev : [...prev, msg];
+          if (exists) return prev;
+          return [...prev, msg];
         });
-        notificationSoundService.playIncomingSound();
-        scrollToBottom();
+        if (selectedConversation && (msg.senderId === selectedConversation || msg.receiverId === selectedConversation)) {
+          setMessages((prev) => {
+            const exists = prev.some((m) =>
+              m.id === msg.id ||
+              (
+                m.senderId === msg.senderId &&
+                m.receiverId === msg.receiverId &&
+                m.text === msg.text &&
+                Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
+              )
+            );
+            return exists ? prev : [...prev, msg];
+          });
+          notificationSoundService.playIncomingSound();
+          scrollToBottom();
+        }
+      } catch (error) {
+        console.error('[MESSAGES] Error handling new message:', error);
       }
     };
     window.addEventListener('socket:newMessage', handleNewMessage as EventListener);
