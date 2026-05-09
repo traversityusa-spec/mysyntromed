@@ -36,6 +36,8 @@ const Calls = () => {
     receiverId: string;
     receiverName: string;
     callType: 'audio' | 'video';
+    callerRole?: string;
+    receiverRole?: string;
   } | null>(null);
 
   const incomingWebRTCCalls = useIncomingCalls(user?.uid || '');
@@ -44,12 +46,15 @@ const Calls = () => {
   useEffect(() => {
     if (incomingWebRTCCalls.length > 0 && !activeCallSession) {
       const latestCall = incomingWebRTCCalls[incomingWebRTCCalls.length - 1];
+      console.log('Incoming call detected in Calls:', latestCall);
       setActiveCallSession({
         callerId: latestCall.callerId,
         callerName: latestCall.callerName,
         receiverId: latestCall.receiverId,
         receiverName: latestCall.receiverName,
         callType: latestCall.callType,
+        callerRole: latestCall.callerRole,
+        receiverRole: latestCall.receiverRole,
       });
     }
   }, [incomingWebRTCCalls, activeCallSession]);
@@ -130,13 +135,14 @@ const Calls = () => {
       return;
     }
 
-    setShowCallTypeSelection(false);
     setActiveCallSession({
       callerId: user?.uid || '',
       callerName: sessionUser?.displayName || 'User',
       receiverId: targetId,
       receiverName: targetName,
       callType: type,
+      callerRole: role,
+      receiverRole: role === 'client' ? 'specialist' : 'client',
     });
   };
 
@@ -277,6 +283,7 @@ const Calls = () => {
           callerName={activeCallSession.callerName}
           receiverId={activeCallSession.receiverId}
           receiverName={activeCallSession.receiverName}
+          receiverRole={activeCallSession.receiverRole}
           callType={activeCallSession.callType}
           onCallEnd={handleEndWebRTCCall}
         />

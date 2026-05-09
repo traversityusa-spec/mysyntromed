@@ -20,11 +20,12 @@ import {
   Video,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { messageService, notificationService, liveCallService, type AppNotification, type CallSession } from '@/lib/firestore';
+import { messageService, notificationService, type AppNotification } from '@/lib/firestore';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
 import { initSocket, emitCallAccepted, emitCallEnded, type IncomingCallData } from '@/lib/socket';
+import { useIncomingCalls, WebRTCVideoCall } from '@/components/ui/WebRTCVideoCall';
 
 type NavItem = {
   label: string;
@@ -78,10 +79,18 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [incomingCalls, setIncomingCalls] = useState<CallSession[]>([]);
   const [socketIncomingCall, setSocketIncomingCall] = useState<IncomingCallData | null>(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingAssignments, setPendingAssignments] = useState(0);
+  const [activeWebRTCCall, setActiveWebRTCCall] = useState<{
+    callerId: string;
+    callerName: string;
+    callerRole: string;
+    receiverId: string;
+    receiverName: string;
+    receiverRole: string;
+    callType: 'audio' | 'video';
+  } | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const initialSoundLoadRef = useRef(false);
   const location = useLocation();
@@ -91,6 +100,24 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const role = sessionUser?.role || 'client';
   const basePath = role === 'admin' ? '/admin' : role === 'specialist' ? '/specialist' : '/portal';
   const displayedNavItems = getNavItems(role, pendingAssignments);
+
+  const incomingWebRTCCalls = useIncomingCalls(user?.uid || '');
+
+  useEffect(() => {
+    if (incomingWebRTCCalls.length > 0 && !activeWebRTCCall && !socketIncomingCall) {
+      const latestCall = incomingWebRTCCalls[incomingWebRTCCalls.length - 1];
+      console.log('Incoming WebRTC call detected:', latestCall);
+      setActiveWebRTCCall({
+        callerId: latestCall.callerId,
+        callerName: latestCall.callerName,
+        callerRole: latestCall.callerRole,
+        receiverId: latestCall.receiverId,
+        receiverName: latestCall.receiverName,
+        receiverRole: latestCall.receiverRole,
+        callType: latestCall.callType,
+      });
+    }
+  }, [incomingWebRTCCalls, activeWebRTCCall, socketIncomingCall]);
 
   const playNotificationSound = () => {
     try {
@@ -147,12 +174,6 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         showToast(latest.type as any, latest.title, latest.message);
       }
     });
-    const callsUnsub = liveCallService.subscribeToIncomingCalls(user.uid, (sessions) => {
-      setIncomingCalls(sessions);
-      if (sessions.length > 0) {
-        playNotificationSound();
-      }
-    });
 
     const handleSocketCall = (e: Event) => {
       const data = (e as CustomEvent<IncomingCallData>).detail;
@@ -179,7 +200,6 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return () => {
       messageUnsub();
       notificationUnsub();
-      callsUnsub();
       window.removeEventListener('socket:incomingCall', handleSocketCall);
       window.removeEventListener('socket:callRejected', handleSocketCallRejected);
     };
@@ -216,15 +236,8 @@ const markAllRead = () => {
     navigate('/portal');
   };
 
-  const handleAcceptCall = async (session: CallSession) => {
-    await liveCallService.updateStatus(session.id, 'accepted');
-    emitCallAccepted(session.callerId);
-    navigate(`${basePath}/calls?join=${session.id}`);
-  };
-
-  const handleRejectCall = async (session: CallSession) => {
-    emitCallEnded(session.callerId);
-    await liveCallService.updateStatus(session.id, 'rejected');
+  const handleEndWebRTCCall = () => {
+    setActiveWebRTCCall(null);
   };
 
   const renderNavItem = (item: NavItem) => {
@@ -309,41 +322,18 @@ const markAllRead = () => {
         />
       )}
 
-      {incomingCalls.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm transition-all duration-300">
-          <div className="w-full max-w-md animate-[slideUp_0.3s_ease-out] rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex flex-col items-center text-center">
-              <div className="relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-amber-100">
-                <div className="absolute inset-0 animate-ping rounded-full bg-amber-100 opacity-75" />
-                {incomingCalls[0].callType === 'audio' ? (
-                  <Phone size={40} className="relative z-10 animate-bounce text-amber-600" />
-                ) : (
-                  <Video size={40} className="relative z-10 animate-bounce text-amber-600" />
-                )}
-              </div>
-              <h2 className="text-2xl font-bold text-navy-900">Incoming {incomingCalls[0].callType === 'audio' ? 'Audio' : 'Video'} Call</h2>
-              <p className="mt-2 text-lg text-slate-600">{incomingCalls[0].callerName}</p>
-              <p className="mt-1 text-sm text-slate-400 capitalize">{incomingCalls[0].callerRole}</p>
-
-              <div className="mt-8 flex w-full gap-4">
-                <button
-                  onClick={() => handleRejectCall(incomingCalls[0])}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-100 py-3.5 font-semibold text-red-700 transition hover:bg-red-200"
-                >
-                  <Phone size={20} className="rotate-[135deg]" />
-                  Decline
-                </button>
-                <button
-                  onClick={() => handleAcceptCall(incomingCalls[0])}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-600/30 transition hover:bg-teal-700"
-                >
-                  {incomingCalls[0].callType === 'audio' ? <Phone size={20} /> : <Video size={20} />}
-                  Accept
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {activeWebRTCCall && (
+        <WebRTCVideoCall
+          isInitiator={false}
+          callerId={activeWebRTCCall.callerId}
+          callerName={activeWebRTCCall.callerName}
+          callerRole={activeWebRTCCall.callerRole}
+          receiverId={activeWebRTCCall.receiverId}
+          receiverName={activeWebRTCCall.receiverName}
+          receiverRole={activeWebRTCCall.receiverRole}
+          callType={activeWebRTCCall.callType}
+          onCallEnd={handleEndWebRTCCall}
+        />
       )}
 
       {socketIncomingCall && (
@@ -364,15 +354,12 @@ const markAllRead = () => {
 
               <div className="mt-8 flex w-full gap-4">
                 <button
-                  onClick={async () => {
-                    if (socketIncomingCall.sessionId) {
-                      await liveCallService.updateStatus(socketIncomingCall.sessionId, 'rejected');
-                    }
-                    if (socketIncomingCall.callerId) {
-                      emitCallEnded(socketIncomingCall.callerId);
-                    }
-                    setSocketIncomingCall(null);
-                  }}
+onClick={async () => {
+                      if (socketIncomingCall.callerId) {
+                        emitCallEnded(socketIncomingCall.callerId);
+                      }
+                      setSocketIncomingCall(null);
+                    }}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-100 py-3.5 font-semibold text-red-700 transition hover:bg-red-200"
                 >
                   <Phone size={20} className="rotate-[135deg]" />
@@ -380,16 +367,8 @@ const markAllRead = () => {
                 </button>
                 <button
                   onClick={async () => {
-                    if (socketIncomingCall.sessionId) {
-                      await liveCallService.updateStatus(socketIncomingCall.sessionId, 'accepted');
-                    }
                     if (socketIncomingCall.callerId) {
                       emitCallAccepted(socketIncomingCall.callerId);
-                    }
-                    if (socketIncomingCall.sessionId) {
-                      navigate(`${basePath}/calls?join=${socketIncomingCall.sessionId}`);
-                    } else {
-                      window.open(socketIncomingCall.meetingLink, '_blank');
                     }
                     setSocketIncomingCall(null);
                   }}
