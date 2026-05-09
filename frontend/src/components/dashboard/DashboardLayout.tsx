@@ -24,6 +24,7 @@ import { messageService, notificationService, liveCallService, type AppNotificat
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
+import { initSocket, type IncomingCallData } from '@/lib/socket';
 
 type NavItem = {
   label: string;
@@ -78,6 +79,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [incomingCalls, setIncomingCalls] = useState<CallSession[]>([]);
+  const [socketIncomingCall, setSocketIncomingCall] = useState<IncomingCallData | null>(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingAssignments, setPendingAssignments] = useState(0);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -150,10 +152,38 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         playNotificationSound();
       }
     });
+
+    const handleSocketCall = (data?: IncomingCallData) => {
+      if (data) {
+        playNotificationSound();
+        showToast('call', `Incoming ${data.callType} call from ${data.callerName}`, 'Tap to join');
+        setSocketIncomingCall(data);
+        const timer = setTimeout(() => {
+          setSocketIncomingCall(prev => prev === data ? null : prev);
+        }, 30000);
+        return () => clearTimeout(timer);
+      }
+    };
+
+    const handleSocketCallRejected = () => {
+      setSocketIncomingCall(null);
+    };
+
+    window.addEventListener('socket:incomingCall', (e: Event) => {
+      const data = (e as CustomEvent<IncomingCallData>).detail;
+      handleSocketCall(data);
+    });
+    window.addEventListener('socket:callRejected', handleSocketCallRejected as EventListener);
+
     return () => {
       messageUnsub();
       notificationUnsub();
       callsUnsub();
+      window.removeEventListener('socket:incomingCall', (e: Event) => {
+        const data = (e as CustomEvent<IncomingCallData>).detail;
+        handleSocketCall(data);
+      });
+      window.removeEventListener('socket:callRejected', handleSocketCallRejected as EventListener);
     };
   }, [user?.uid, soundEnabled]);
 
@@ -223,7 +253,7 @@ const markAllRead = () => {
           <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
             {item.badge}
           </span>
-        )}
+)}
       </Link>
     );
   };
@@ -283,7 +313,7 @@ const markAllRead = () => {
           <div className="w-full max-w-md animate-[slideUp_0.3s_ease-out] rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex flex-col items-center text-center">
               <div className="relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-amber-100">
-                <div className="absolute inset-0 animate-ping rounded-full bg-amber-100 opacity-75"></div>
+                <div className="absolute inset-0 animate-ping rounded-full bg-amber-100 opacity-75" />
                 {incomingCalls[0].callType === 'audio' ? (
                   <Phone size={40} className="relative z-10 animate-bounce text-amber-600" />
                 ) : (
@@ -307,6 +337,46 @@ const markAllRead = () => {
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-600/30 transition hover:bg-teal-700"
                 >
                   {incomingCalls[0].callType === 'audio' ? <Phone size={20} /> : <Video size={20} />}
+                  Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {socketIncomingCall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm transition-all duration-300">
+          <div className="w-full max-w-md animate-[slideUp_0.3s_ease-out] rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-amber-100">
+                <div className="absolute inset-0 animate-ping rounded-full bg-amber-100 opacity-75" />
+                {socketIncomingCall.callType === 'audio' ? (
+                  <Phone size={40} className="relative z-10 animate-bounce text-amber-600" />
+                ) : (
+                  <Video size={40} className="relative z-10 animate-bounce text-amber-600" />
+                )}
+              </div>
+              <h2 className="text-2xl font-bold text-navy-900">Incoming {socketIncomingCall.callType === 'audio' ? 'Audio' : 'Video'} Call</h2>
+              <p className="mt-2 text-lg text-slate-600">{socketIncomingCall.callerName}</p>
+              <p className="mt-1 text-sm text-slate-400 capitalize">wants to connect with you</p>
+
+              <div className="mt-8 flex w-full gap-4">
+                <button
+                  onClick={() => setSocketIncomingCall(null)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-100 py-3.5 font-semibold text-red-700 transition hover:bg-red-200"
+                >
+                  <Phone size={20} className="rotate-[135deg]" />
+                  Decline
+                </button>
+                <button
+                  onClick={() => {
+                    window.open(socketIncomingCall.meetingLink, '_blank');
+                    setSocketIncomingCall(null);
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-600/30 transition hover:bg-teal-700"
+                >
+                  {socketIncomingCall.callType === 'audio' ? <Phone size={20} /> : <Video size={20} />}
                   Accept
                 </button>
               </div>
@@ -339,7 +409,7 @@ const markAllRead = () => {
                   </span>
                 )}
               </button>
-              
+
               {showNotifications && (
                 <>
                   <div
@@ -392,7 +462,7 @@ const markAllRead = () => {
                 </>
               )}
             </div>
-            
+
             <Link
               to={`${basePath}/messages`}
               className="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100"

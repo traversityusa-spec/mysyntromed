@@ -263,11 +263,30 @@ io.on('connection', (socket) => {
 
   socket.on('typing', (data: { to: string; isTyping: boolean; senderName?: string; senderId?: string }) => {
     console.log('[SOCKET] Typing:', data.isTyping, 'from:', data.senderName, 'senderId:', data.senderId, 'to:', data.to);
-    io.to(`user:${data.to}`).emit('userTyping', { 
+    io.to(`user:${data.to}`).emit('userTyping', {
       isTyping: data.isTyping,
       senderName: data.senderName || 'User',
       senderId: data.senderId || ''
     });
+  });
+
+  socket.on('callInvite', (data: { to: string; callType: string; callerName: string; meetingLink: string }) => {
+    console.log('[SOCKET] Call invite from:', data.callerName, 'type:', data.callType, 'to:', data.to);
+    io.to(`user:${data.to}`).emit('incomingCall', {
+      callType: data.callType,
+      callerName: data.callerName,
+      meetingLink: data.meetingLink,
+    });
+  });
+
+  socket.on('callAccepted', (data: { to: string }) => {
+    console.log('[SOCKET] Call accepted, notifying:', data.to);
+    io.to(`user:${data.to}`).emit('callAnswered', {});
+  });
+
+  socket.on('callEnded', (data: { to: string }) => {
+    console.log('[SOCKET] Call ended, notifying:', data.to);
+    io.to(`user:${data.to}`).emit('callRejected', {});
   });
 
   socket.on('disconnect', () => {

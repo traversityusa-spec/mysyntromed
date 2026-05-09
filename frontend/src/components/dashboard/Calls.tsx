@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useState, useCallback } from 'react';
 import {
   AlertTriangle,
   Calendar,
@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { useSearchParams } from 'react-router-dom';
 import { db, liveCallService, notificationService, type CallSession, type ScheduledCall, type UserProfile } from '@/lib/firestore';
+import { emitCallInvite, emitCallEnded, onCallAnswered, onCallEnd } from '@/lib/socket';
 
 const checkMediaPermissions = async (): Promise<{ camera: boolean; microphone: boolean }> => {
   try {
@@ -99,6 +100,20 @@ const Calls = () => {
     });
     return () => unsub();
   }, [outgoingSessionId]);
+
+  useEffect(() => {
+    const unsubAnswered = onCallAnswered(() => {
+      setCallStatus('Call answered - connecting...');
+    });
+    const unsubEnd = onCallEnd(() => {
+      setCallStatus('Call not answered');
+      setOutgoingSessionId(null);
+    });
+    return () => {
+      unsubAnswered();
+      unsubEnd();
+    };
+  }, []);
 
   const handleSchedule = async (e: FormEvent) => {
     e.preventDefault();
@@ -232,7 +247,8 @@ const Calls = () => {
           callType: type,
         });
         setOutgoingSessionId(sessionId);
-        setCallStatus('Calling specialist…');
+        setCallStatus('Calling specialist...');
+        emitCallInvite(receiverId, type, sessionUser.displayName || 'Client', meetingLink);
       } catch (err) {
         setError('Failed to start a call. Please try again.');
       }
@@ -256,7 +272,8 @@ const Calls = () => {
         callType: type,
       });
       setOutgoingSessionId(sessionId);
-      setCallStatus('Calling client…');
+      setCallStatus('Calling client...');
+      emitCallInvite(client.uid, type, sessionUser.displayName || 'Specialist', meetingLink);
     }
   };
 
@@ -272,7 +289,9 @@ const Calls = () => {
 
   const handleEndLiveCall = async () => {
     if (activeSession?.id) {
+      const receiverId = activeSession.receiverId;
       await liveCallService.updateStatus(activeSession.id, 'ended');
+      emitCallEnded(receiverId);
     }
     setActiveSession(null);
     setActiveCallLink(null);
