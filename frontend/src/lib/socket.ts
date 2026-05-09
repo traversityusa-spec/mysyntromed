@@ -7,6 +7,7 @@ let reconnectAttempts = 0;
 
 export type IncomingCallData = {
   callType: 'audio' | 'video';
+  callerId?: string;
   callerName: string;
   meetingLink: string;
   sessionId?: string;
@@ -112,9 +113,15 @@ export const emitTyping = (to: string, isTyping: boolean, senderName?: string): 
   }
 };
 
-export const emitCallInvite = (to: string, callType: 'audio' | 'video', callerName: string, meetingLink: string): void => {
+export const emitCallInvite = (
+  to: string,
+  callType: 'audio' | 'video',
+  callerName: string,
+  meetingLink: string,
+  sessionId?: string
+): void => {
   if (socket?.connected) {
-    socket.emit('callInvite', { to, callType, callerName, meetingLink });
+    socket.emit('callInvite', { to, callType, callerId: currentUserId || undefined, callerName, meetingLink, sessionId });
     console.log('[SOCKET] Emit call invite to:', to, 'type:', callType);
   }
 };

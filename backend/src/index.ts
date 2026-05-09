@@ -270,12 +270,14 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('callInvite', (data: { to: string; callType: string; callerName: string; meetingLink: string }) => {
+  socket.on('callInvite', (data: { to: string; callType: string; callerId?: string; callerName: string; meetingLink: string; sessionId?: string }) => {
     console.log('[SOCKET] Call invite from:', data.callerName, 'type:', data.callType, 'to:', data.to);
     io.to(`user:${data.to}`).emit('incomingCall', {
       callType: data.callType,
+      callerId: data.callerId,
       callerName: data.callerName,
       meetingLink: data.meetingLink,
+      sessionId: data.sessionId,
     });
   });
 

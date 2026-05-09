@@ -16,13 +16,13 @@ import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { useSearchParams } from 'react-router-dom';
 import { db, liveCallService, notificationService, type CallSession, type ScheduledCall, type UserProfile } from '@/lib/firestore';
-import { emitCallInvite, emitCallEnded, onCallAnswered, onCallEnd } from '@/lib/socket';
+import { emitCallInvite, emitCallAccepted, emitCallEnded, onCallAnswered, onCallEnd } from '@/lib/socket';
 
-const checkMediaPermissions = async (): Promise<{ camera: boolean; microphone: boolean }> => {
+const checkMediaPermissions = async (type: 'audio' | 'video' = 'video'): Promise<{ camera: boolean; microphone: boolean }> => {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
     stream.getTracks().forEach(track => track.stop());
-    return { camera: true, microphone: true };
+    return { camera: type === 'video', microphone: true };
   } catch {
     try {
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -150,7 +150,7 @@ const Calls = () => {
   };
 
   const handleStartCall = async (meetingLink?: string, call?: ScheduledCall) => {
-    const permissions = await checkMediaPermissions();
+    const permissions = await checkMediaPermissions('video');
     if (!permissions.camera || !permissions.microphone) {
       setError('Camera or microphone access denied. Please allow access to start video calls.');
       return;
@@ -218,9 +218,12 @@ const Calls = () => {
   const handleStartInstantCall = async (type: 'audio' | 'video') => {
     if (!user?.uid || !sessionUser) return;
 
-    const permissions = await checkMediaPermissions();
-    if (!permissions.camera && !permissions.microphone) {
-      setError('Camera and microphone access denied. Please allow access to start video calls.');
+    const permissions = await checkMediaPermissions(type);
+    if (!permissions.microphone || (type === 'video' && !permissions.camera)) {
+      setError(type === 'video'
+        ? 'Camera or microphone access denied. Please allow access to start video calls.'
+        : 'Microphone access denied. Please allow access to start audio calls.'
+      );
       return;
     }
 
@@ -248,7 +251,7 @@ const Calls = () => {
         });
         setOutgoingSessionId(sessionId);
         setCallStatus('Calling specialist...');
-        emitCallInvite(receiverId, type, sessionUser.displayName || 'Client', meetingLink);
+        emitCallInvite(receiverId, type, sessionUser.displayName || 'Client', meetingLink, sessionId);
       } catch (err) {
         setError('Failed to start a call. Please try again.');
       }
@@ -273,13 +276,14 @@ const Calls = () => {
       });
       setOutgoingSessionId(sessionId);
       setCallStatus('Calling client...');
-      emitCallInvite(client.uid, type, sessionUser.displayName || 'Specialist', meetingLink);
+      emitCallInvite(client.uid, type, sessionUser.displayName || 'Specialist', meetingLink, sessionId);
     }
   };
 
   const handleAcceptCall = async (session: CallSession) => {
     await liveCallService.updateStatus(session.id, 'accepted');
-    setActiveSession(session);
+    emitCallAccepted(session.callerId);
+    setActiveSession({ ...session, status: 'accepted' });
     setActiveCallLink(session.meetingLink);
   };
 
@@ -289,9 +293,9 @@ const Calls = () => {
 
   const handleEndLiveCall = async () => {
     if (activeSession?.id) {
-      const receiverId = activeSession.receiverId;
+      const otherParticipantId = activeSession.callerId === user?.uid ? activeSession.receiverId : activeSession.callerId;
       await liveCallService.updateStatus(activeSession.id, 'ended');
-      emitCallEnded(receiverId);
+      emitCallEnded(otherParticipantId);
     }
     setActiveSession(null);
     setActiveCallLink(null);

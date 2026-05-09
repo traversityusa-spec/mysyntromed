@@ -7,7 +7,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, userService, notificationService, typingService, notificationSoundService, type Message, type UserProfile } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
-import { initSocket, emitMessage, emitTyping, disconnectSocket } from '@/lib/socket';
+import { initSocket, emitMessage, emitTyping } from '@/lib/socket';
 
 type ConversationPreview = {
   id: string;
@@ -110,9 +110,6 @@ const Messages = () => {
     if (user?.uid) {
       initSocket(user.uid);
     }
-    return () => {
-      disconnectSocket();
-    };
   }, [user?.uid]);
 
   useEffect(() => {

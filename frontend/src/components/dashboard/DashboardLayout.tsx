@@ -117,6 +117,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   useEffect(() => {
     if (!user?.uid) return;
+    initSocket(user.uid);
     const messageUnsub = messageService.subscribeToUserMessages(user.uid, (messages) => {
       try {
         const unread = messages.filter((m) => !m.read && m.senderId !== user.uid).length;
@@ -158,7 +159,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       if (data) {
         playNotificationSound();
         showToast('call', `Incoming ${data.callType} call from ${data.callerName}`, 'Tap to join');
-        setSocketIncomingCall(data);
+        if (!data.sessionId) {
+          setSocketIncomingCall(data);
+        }
         const timer = setTimeout(() => {
           setSocketIncomingCall(prev => prev === data ? null : prev);
         }, 30000);
@@ -213,7 +216,8 @@ const markAllRead = () => {
     navigate('/portal');
   };
 
-  const handleAcceptCall = (session: CallSession) => {
+  const handleAcceptCall = async (session: CallSession) => {
+    await liveCallService.updateStatus(session.id, 'accepted');
     emitCallAccepted(session.callerId);
     navigate(`${basePath}/calls?join=${session.id}`);
   };
@@ -360,15 +364,33 @@ const markAllRead = () => {
 
               <div className="mt-8 flex w-full gap-4">
                 <button
-                  onClick={() => setSocketIncomingCall(null)}
+                  onClick={async () => {
+                    if (socketIncomingCall.sessionId) {
+                      await liveCallService.updateStatus(socketIncomingCall.sessionId, 'rejected');
+                    }
+                    if (socketIncomingCall.callerId) {
+                      emitCallEnded(socketIncomingCall.callerId);
+                    }
+                    setSocketIncomingCall(null);
+                  }}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-100 py-3.5 font-semibold text-red-700 transition hover:bg-red-200"
                 >
                   <Phone size={20} className="rotate-[135deg]" />
                   Decline
                 </button>
                 <button
-                  onClick={() => {
-                    window.open(socketIncomingCall.meetingLink, '_blank');
+                  onClick={async () => {
+                    if (socketIncomingCall.sessionId) {
+                      await liveCallService.updateStatus(socketIncomingCall.sessionId, 'accepted');
+                    }
+                    if (socketIncomingCall.callerId) {
+                      emitCallAccepted(socketIncomingCall.callerId);
+                    }
+                    if (socketIncomingCall.sessionId) {
+                      navigate(`${basePath}/calls?join=${socketIncomingCall.sessionId}`);
+                    } else {
+                      window.open(socketIncomingCall.meetingLink, '_blank');
+                    }
                     setSocketIncomingCall(null);
                   }}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-600/30 transition hover:bg-teal-700"
