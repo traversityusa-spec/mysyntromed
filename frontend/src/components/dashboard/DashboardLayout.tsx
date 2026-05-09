@@ -24,7 +24,7 @@ import { messageService, notificationService, liveCallService, type AppNotificat
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
-import { initSocket, type IncomingCallData } from '@/lib/socket';
+import { initSocket, emitCallAccepted, emitCallEnded, type IncomingCallData } from '@/lib/socket';
 
 type NavItem = {
   label: string;
@@ -153,7 +153,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       }
     });
 
-    const handleSocketCall = (data?: IncomingCallData) => {
+    const handleSocketCall = (e: Event) => {
+      const data = (e as CustomEvent<IncomingCallData>).detail;
       if (data) {
         playNotificationSound();
         showToast('call', `Incoming ${data.callType} call from ${data.callerName}`, 'Tap to join');
@@ -169,21 +170,15 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       setSocketIncomingCall(null);
     };
 
-    window.addEventListener('socket:incomingCall', (e: Event) => {
-      const data = (e as CustomEvent<IncomingCallData>).detail;
-      handleSocketCall(data);
-    });
-    window.addEventListener('socket:callRejected', handleSocketCallRejected as EventListener);
+    window.addEventListener('socket:incomingCall', handleSocketCall);
+    window.addEventListener('socket:callRejected', handleSocketCallRejected);
 
     return () => {
       messageUnsub();
       notificationUnsub();
       callsUnsub();
-      window.removeEventListener('socket:incomingCall', (e: Event) => {
-        const data = (e as CustomEvent<IncomingCallData>).detail;
-        handleSocketCall(data);
-      });
-      window.removeEventListener('socket:callRejected', handleSocketCallRejected as EventListener);
+      window.removeEventListener('socket:incomingCall', handleSocketCall);
+      window.removeEventListener('socket:callRejected', handleSocketCallRejected);
     };
   }, [user?.uid, soundEnabled]);
 
@@ -219,10 +214,12 @@ const markAllRead = () => {
   };
 
   const handleAcceptCall = (session: CallSession) => {
+    emitCallAccepted(session.callerId);
     navigate(`${basePath}/calls?join=${session.id}`);
   };
 
   const handleRejectCall = async (session: CallSession) => {
+    emitCallEnded(session.callerId);
     await liveCallService.updateStatus(session.id, 'rejected');
   };
 
