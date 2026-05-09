@@ -104,9 +104,10 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const incomingWebRTCCalls = useIncomingCalls(user?.uid || '');
 
   useEffect(() => {
+    console.log('incomingWebRTCCalls changed:', incomingWebRTCCalls);
     if (incomingWebRTCCalls.length > 0 && !activeWebRTCCall && !socketIncomingCall) {
       const latestCall = incomingWebRTCCalls[incomingWebRTCCalls.length - 1];
-      console.log('Incoming WebRTC call detected:', latestCall);
+      console.log('Setting up incoming WebRTC call from DashboardLayout:', latestCall);
       setActiveWebRTCCall({
         callerId: latestCall.callerId,
         callerName: latestCall.callerName,

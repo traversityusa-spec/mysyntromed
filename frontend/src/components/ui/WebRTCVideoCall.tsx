@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp, query, where } from 'firebase/firestore';
+import { doc, collection, onSnapshot, addDoc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { useAuth } from '@/lib/AuthContext';
 
 const rtcConfig: RTCConfiguration = {
@@ -39,7 +39,6 @@ export type CallOffer = {
 type CallState = 'idle' | 'calling' | 'ringing' | 'connected' | 'ended';
 
 interface WebRTCVideoCallProps {
-  sessionId?: string;
   callerId?: string;
   callerName?: string;
   callerRole?: string;
@@ -52,9 +51,9 @@ interface WebRTCVideoCallProps {
 }
 
 export function WebRTCVideoCall({
-  sessionId,
   callerId,
   callerName,
+  callerRole,
   receiverId,
   receiverName,
   receiverRole = 'client',
@@ -68,6 +67,7 @@ export function WebRTCVideoCall({
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const currentOfferIdRef = useRef<string | null>(null);
+  const isSubscribedRef = useRef(false);
 
   const [callState, setCallState] = useState<CallState>(isInitiator ? 'calling' : 'idle');
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -76,7 +76,7 @@ export function WebRTCVideoCall({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [incomingCallData, setIncomingCallData] = useState<CallOffer | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [otherPartyName, setOtherPartyName] = useState<string>(receiverName || callerName || 'User');
+  const [otherPartyName, setOtherPartyName] = useState<string>(isInitiator ? (receiverName || '') : (callerName || 'User'));
 
   const cleanup = useCallback(() => {
     if (peerConnectionRef.current) {
@@ -128,7 +128,7 @@ export function WebRTCVideoCall({
       console.error('Error accessing media devices:', err);
       setError('Unable to access camera/microphone. Please check permissions.');
       cleanup();
-      onCallEnd?.();
+      setTimeout(() => onCallEnd?.(), 100);
       return null;
     }
   }, [callType, cleanup, onCallEnd]);
@@ -167,8 +167,12 @@ export function WebRTCVideoCall({
   }, [user?.uid, receiverId, endCall]);
 
   const createOffer = useCallback(async () => {
-    if (!user?.uid || !receiverId) return;
+    if (!user?.uid || !receiverId) {
+      console.log('[WebRTC] Cannot create offer - missing user or receiverId');
+      return;
+    }
 
+    console.log('[WebRTC] Creating peer connection and offer');
     try {
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
@@ -196,12 +200,12 @@ export function WebRTCVideoCall({
 
       currentOfferIdRef.current = docRef.id;
       setCallState('calling');
-      console.log('Offer created and saved:', docRef.id);
+      console.log('Offer created with ID:', docRef.id);
     } catch (err) {
       console.error('Error creating offer:', err);
       setError('Failed to start call');
       cleanup();
-      onCallEnd?.();
+      setTimeout(() => onCallEnd?.(), 100);
     }
   }, [user?.uid, receiverId, receiverName, receiverRole, sessionUser, callType, createPeerConnection, cleanup, onCallEnd]);
 
@@ -227,7 +231,6 @@ export function WebRTCVideoCall({
       });
 
       setCallState('connected');
-      setOtherPartyName(offer.callerName);
 
       await addDoc(collection(db, 'ice_candidates'), {
         senderId: user?.uid,
@@ -239,7 +242,7 @@ export function WebRTCVideoCall({
       console.error('Error answering call:', err);
       setError('Failed to answer call');
       cleanup();
-      onCallEnd?.();
+      setTimeout(() => onCallEnd?.(), 100);
     }
   }, [createPeerConnection, user?.uid, cleanup, onCallEnd]);
 
@@ -275,10 +278,15 @@ export function WebRTCVideoCall({
 
   useEffect(() => {
     const initCall = async () => {
+      console.log('[WebRTC] initCall starting', { isInitiator, receiverId });
       const stream = await setupLocalStream();
-      if (!stream) return;
+      if (!stream) {
+        console.log('[WebRTC] No stream available');
+        return;
+      }
 
       if (isInitiator && receiverId) {
+        console.log('[WebRTC] Creating offer for receiver:', receiverId);
         await createOffer();
       }
     };
@@ -288,76 +296,125 @@ export function WebRTCVideoCall({
     return () => {
       cleanup();
     };
-  }, []);
+  }, [isInitiator, receiverId, setupLocalStream, createOffer, cleanup]);
 
-  useEffect(() => {
-    if (!user?.uid) return;
+useEffect(() => {
+    console.log('[WebRTC] Component mounting', { callerId, receiverId, isInitiator, userId: user?.uid });
+    if (!user?.uid) {
+      console.log('[WebRTC] No user logged in');
+      return;
+    }
 
     const unsub = onSnapshot(
       query(collection(db, 'call_offers'), where('receiverId', '==', user.uid)),
-      (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
+      async (snapshot) => {
+        console.log('[WebRTC] Call offers snapshot received, docs:', snapshot.docs.length);
+        for (const change of snapshot.docChanges()) {
           const data = change.doc.data() as CallOffer;
           const offerId = change.doc.id;
+          console.log('[WebRTC] Doc change:', change.type, offerId, data);
 
           if (change.type === 'added' && data.status === 'pending') {
-            if (data.callerId !== user.uid && callState === 'idle') {
-              console.log('Incoming call detected:', data);
+            if (data.callerId !== user.uid) {
+              console.log('[WebRTC] INCOMING CALL for receiver:', data);
               setIncomingCallData({ ...data, id: offerId });
               setOtherPartyName(data.callerName);
               setCallState('ringing');
             }
           }
 
-          if (change.type === 'modified') {
-            if (data.status === 'answered' && data.answer && isInitiator && currentOfferIdRef.current === offerId) {
+          if (change.type === 'modified' && data.status === 'answered' && data.answer) {
+            if (currentOfferIdRef.current === offerId && isInitiator) {
               const pc = peerConnectionRef.current;
               if (pc) {
                 try {
                   await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
                   setCallState('connected');
-                  setOtherPartyName(data.receiverName);
+                  console.log('[WebRTC] Call connected - answer received');
                 } catch (e) {
-                  console.error('Error setting remote description:', e);
+                  console.error('[WebRTC] Error setting remote description:', e);
                 }
               }
             }
+          }
 
-            if (data.status === 'rejected' || data.status === 'ended') {
-              if (callState === 'calling' || callState === 'ringing') {
-                endCall();
+          if (change.type === 'modified' && (data.status === 'rejected' || data.status === 'ended')) {
+            console.log('[WebRTC] Call rejected/ended:', data.status);
+            if (callState === 'calling' || callState === 'ringing') {
+              endCall();
+            }
+          }
+        }
+      }
+    );
+
+    const unsubCaller = onSnapshot(
+      query(collection(db, 'call_offers'), where('callerId', '==', user.uid)),
+      async (snapshot) => {
+        console.log('[WebRTC] Caller offers snapshot received, docs:', snapshot.docs.length);
+        for (const change of snapshot.docChanges()) {
+          const data = change.doc.data() as CallOffer;
+          const offerId = change.doc.id;
+          console.log('[WebRTC] Caller doc change:', change.type, offerId, data);
+
+          if (change.type === 'added' && data.status === 'pending') {
+            console.log('[WebRTC] My outgoing call created:', offerId);
+          }
+
+          if (change.type === 'modified' && data.status === 'answered' && data.answer) {
+            console.log('[WebRTC] Answer received for my call:', offerId);
+            if (currentOfferIdRef.current === offerId && isInitiator) {
+              const pc = peerConnectionRef.current;
+              if (pc && pc.signalingState === 'have-local-offer') {
+                try {
+                  await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                  setCallState('connected');
+                  console.log('[WebRTC] Call connected - answer processed');
+                } catch (e) {
+                  console.error('[WebRTC] Error setting remote description:', e);
+                }
               }
             }
           }
-        });
+
+          if (change.type === 'modified' && (data.status === 'rejected' || data.status === 'ended')) {
+            console.log('[WebRTC] My call rejected/ended:', data.status);
+            if (callState === 'calling' || callState === 'ringing') {
+              endCall();
+            }
+          }
+        }
       }
     );
 
     const unsubCandidates = onSnapshot(
       query(collection(db, 'ice_candidates'), where('receiverId', '==', user.uid)),
       async (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
+        console.log('[WebRTC] ICE candidates snapshot:', snapshot.docs.length);
+        for (const change of snapshot.docChanges()) {
           if (change.type === 'added') {
             const data = change.doc.data() as any;
             if (data.candidate === 'answer_accepted' || data.candidate === 'call_ended') {
-              return;
+              continue;
             }
 
             const pc = peerConnectionRef.current;
             if (pc && pc.remoteDescription) {
               try {
                 await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                console.log('[WebRTC] ICE candidate added');
               } catch (err) {
-                console.error('Error adding ICE candidate:', err);
+                console.error('[WebRTC] Error adding ICE candidate:', err);
               }
             }
           }
-        });
+        }
       }
     );
 
     return () => {
       unsub();
+      unsubCaller();
       unsubCandidates();
     };
   }, [user?.uid, callState, isInitiator, endCall]);
@@ -381,7 +438,7 @@ export function WebRTCVideoCall({
                 rejectCall(incomingCallData);
                 setIncomingCallData(null);
                 cleanup();
-                onCallEnd?.();
+                setTimeout(() => onCallEnd?.(), 100);
               }}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white hover:bg-red-700"
             >
@@ -412,7 +469,7 @@ export function WebRTCVideoCall({
           <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-teal-600 animate-pulse">
             <User size={48} className="text-white" />
           </div>
-          <h2 className="text-xl font-semibold text-white">Calling {receiverName || otherPartyName || '...'}</h2>
+          <h2 className="text-xl font-semibold text-white">Calling {otherPartyName || receiverName || '...'}</h2>
           <p className="mt-2 text-slate-400">Waiting for response...</p>
           <button
             onClick={endCall}
@@ -442,7 +499,7 @@ export function WebRTCVideoCall({
               <div className="mb-6 flex h-32 w-32 items-center justify-center rounded-full bg-teal-600">
                 <User size={64} className="text-white" />
               </div>
-              <p className="text-lg font-medium text-white">{otherPartyName}</p>
+              <p className="text-lg font-medium text-white">{otherPartyName || receiverName || callerName}</p>
               <p className="text-sm text-slate-400">{callType === 'audio' ? 'Audio Call' : 'Connected'}</p>
             </div>
           )}
@@ -506,17 +563,24 @@ export function useIncomingCalls(userId: string) {
   useEffect(() => {
     if (!userId) return;
 
+    console.log('[useIncomingCalls] Subscribing to calls for user:', userId);
+
     const unsub = onSnapshot(
       query(collection(db, 'call_offers'), where('receiverId', '==', userId), where('status', '==', 'pending')),
       (snapshot) => {
+        console.log('[useIncomingCalls] Snapshot received, docs:', snapshot.docs.length);
         const calls = snapshot.docs
           .map(doc => ({ ...doc.data(), id: doc.id } as CallOffer))
           .filter(call => call.callerId !== userId);
+        console.log('[useIncomingCalls] Filtered calls:', calls.length, calls);
         setIncomingCalls(calls);
       }
     );
 
-    return () => unsub();
+    return () => {
+      console.log('[useIncomingCalls] Unsubscribing');
+      unsub();
+    };
   }, [userId]);
 
   return incomingCalls;

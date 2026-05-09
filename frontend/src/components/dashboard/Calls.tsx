@@ -44,6 +44,10 @@ const Calls = () => {
   const role = sessionUser?.role || 'client';
 
   useEffect(() => {
+    console.log('Session data:', { role, assignedSpecialistId: sessionUser?.assignedSpecialistId, assignedSpecialistName: sessionUser?.assignedSpecialistName, clientsCount: assignedClients.length });
+  }, [role, sessionUser?.assignedSpecialistId, sessionUser?.assignedSpecialistName, assignedClients.length]);
+
+  useEffect(() => {
     if (incomingWebRTCCalls.length > 0 && !activeCallSession) {
       const latestCall = incomingWebRTCCalls[incomingWebRTCCalls.length - 1];
       console.log('Incoming call detected in Calls:', latestCall);
@@ -108,40 +112,65 @@ const Calls = () => {
     }
   };
 
-  const handleStartCall = async (call?: ScheduledCall) => {
-    const targetId = role === 'client' ? sessionUser?.assignedSpecialistId : selectedClientId;
-    const targetName = role === 'client' ? sessionUser?.assignedSpecialistName : assignedClients.find(c => c.uid === selectedClientId)?.displayName || 'User';
+const handleStartCall = async (call?: ScheduledCall) => {
+    let targetId: string | undefined;
+    let targetName: string;
+
+    if (role === 'client') {
+      targetId = sessionUser?.assignedSpecialistId;
+      targetName = sessionUser?.assignedSpecialistName || 'Specialist';
+    } else {
+      targetId = selectedClientId;
+      const client = assignedClients.find(c => c.uid === selectedClientId);
+      targetName = client?.displayName || client?.email || 'Client';
+    }
+
+    console.log('handleStartCall - role:', role, 'targetId:', targetId, 'targetName:', targetName, 'assignedClients:', assignedClients.length);
 
     if (!targetId) {
-      setError('No recipient available for the call.');
+      setError(role === 'specialist' ? 'Please select a client first' : 'No specialist assigned to you yet.');
       return;
     }
 
     setActiveCallSession({
       callerId: user?.uid || '',
       callerName: sessionUser?.displayName || 'User',
+      callerRole: role,
       receiverId: targetId,
       receiverName: targetName,
       callType: 'video',
+      receiverRole: role === 'client' ? 'specialist' : 'client',
     });
   };
 
   const handleStartInstantCall = async (type: 'audio' | 'video') => {
-    const targetId = role === 'client' ? sessionUser?.assignedSpecialistId : selectedClientId;
-    const targetName = role === 'client' ? sessionUser?.assignedSpecialistName : assignedClients.find(c => c.uid === selectedClientId)?.displayName || 'User';
+    let targetId: string | undefined;
+    let targetName: string;
+
+    if (role === 'client') {
+      targetId = sessionUser?.assignedSpecialistId;
+      targetName = sessionUser?.assignedSpecialistName || 'Specialist';
+    } else {
+      targetId = selectedClientId;
+      const client = assignedClients.find(c => c.uid === selectedClientId);
+      targetName = client?.displayName || client?.email || 'Client';
+    }
+
+    console.log('handleStartInstantCall - role:', role, 'targetId:', targetId, 'targetName:', targetName);
 
     if (!targetId) {
-      setError('No recipient available for the call.');
+      setError(role === 'specialist' ? 'Please select a client first' : 'No specialist assigned to you yet.');
       return;
     }
 
+    setShowCallTypeSelection(false);
     setActiveCallSession({
       callerId: user?.uid || '',
       callerName: sessionUser?.displayName || 'User',
+      callerRole: role,
       receiverId: targetId,
       receiverName: targetName,
       callType: type,
-      callerRole: role,
       receiverRole: role === 'client' ? 'specialist' : 'client',
     });
   };
