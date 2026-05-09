@@ -1,12 +1,10 @@
-import { type FormEvent, useEffect, useState, useCallback } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import {
-  AlertTriangle,
   Calendar,
   CalendarPlus,
   Check,
   Clock,
   RefreshCw,
-  Shield,
   Video,
   X,
   Phone,
@@ -14,25 +12,8 @@ import {
 import { useCalls } from '@/lib/dashboard';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
-import { useSearchParams } from 'react-router-dom';
-import { db, liveCallService, notificationService, type CallSession, type ScheduledCall, type UserProfile } from '@/lib/firestore';
-import { emitCallInvite, emitCallAccepted, emitCallEnded, onCallAnswered, onCallEnd } from '@/lib/socket';
-
-const checkMediaPermissions = async (type: 'audio' | 'video' = 'video'): Promise<{ camera: boolean; microphone: boolean }> => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
-    stream.getTracks().forEach(track => track.stop());
-    return { camera: type === 'video', microphone: true };
-  } catch {
-    try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioStream.getTracks().forEach(track => track.stop());
-      return { camera: false, microphone: true };
-    } catch {
-      return { camera: false, microphone: false };
-    }
-  }
-};
+import { notificationService, type ScheduledCall, type UserProfile, db } from '@/lib/firestore';
+import { WebRTCVideoCall, useIncomingCalls } from '@/components/ui/WebRTCVideoCall';
 
 const Calls = () => {
   const { user, sessionUser } = useAuth();
@@ -44,18 +25,34 @@ const Calls = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeCallLink, setActiveCallLink] = useState<string | null>(null);
-  const [incomingCalls, setIncomingCalls] = useState<CallSession[]>([]);
-  const [activeSession, setActiveSession] = useState<CallSession | null>(null);
-  const [outgoingSessionId, setOutgoingSessionId] = useState<string | null>(null);
-  const [callStatus, setCallStatus] = useState<string | null>(null);
   const [assignedClients, setAssignedClients] = useState<UserProfile[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [rescheduleCall, setRescheduleCall] = useState<ScheduledCall | null>(null);
   const [showCallTypeSelection, setShowCallTypeSelection] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
 
+  const [activeCallSession, setActiveCallSession] = useState<{
+    callerId: string;
+    callerName: string;
+    receiverId: string;
+    receiverName: string;
+    callType: 'audio' | 'video';
+  } | null>(null);
+
+  const incomingWebRTCCalls = useIncomingCalls(user?.uid || '');
   const role = sessionUser?.role || 'client';
+
+  useEffect(() => {
+    if (incomingWebRTCCalls.length > 0 && !activeCallSession) {
+      const latestCall = incomingWebRTCCalls[incomingWebRTCCalls.length - 1];
+      setActiveCallSession({
+        callerId: latestCall.callerId,
+        callerName: latestCall.callerName,
+        receiverId: latestCall.receiverId,
+        receiverName: latestCall.receiverName,
+        callType: latestCall.callType,
+      });
+    }
+  }, [incomingWebRTCCalls, activeCallSession]);
 
   useEffect(() => {
     if (role !== 'specialist' || !user?.uid) return;
@@ -71,49 +68,6 @@ const Calls = () => {
     };
     loadClients();
   }, [role, user?.uid, selectedClientId]);
-
-  useEffect(() => {
-    const joinSessionId = searchParams.get('join');
-    if (joinSessionId) {
-      setOutgoingSessionId(joinSessionId);
-      setSearchParams({});
-    }
-  }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    if (!outgoingSessionId) return;
-    const unsub = liveCallService.subscribeToSession(outgoingSessionId, (session) => {
-      if (!session) return;
-      if (session.status === 'accepted') {
-        setActiveSession(session);
-        setActiveCallLink(session.meetingLink);
-        setCallStatus('Connected');
-      } else if (session.status === 'rejected') {
-        setCallStatus('Rejected');
-        setOutgoingSessionId(null);
-      } else if (session.status === 'ended') {
-        setCallStatus('Ended');
-        setOutgoingSessionId(null);
-        setActiveSession(null);
-        setActiveCallLink(null);
-      }
-    });
-    return () => unsub();
-  }, [outgoingSessionId]);
-
-  useEffect(() => {
-    const unsubAnswered = onCallAnswered(() => {
-      setCallStatus('Call answered - connecting...');
-    });
-    const unsubEnd = onCallEnd(() => {
-      setCallStatus('Call not answered');
-      setOutgoingSessionId(null);
-    });
-    return () => {
-      unsubAnswered();
-      unsubEnd();
-    };
-  }, []);
 
   const handleSchedule = async (e: FormEvent) => {
     e.preventDefault();
@@ -149,18 +103,41 @@ const Calls = () => {
     }
   };
 
-  const handleStartCall = async (meetingLink?: string, call?: ScheduledCall) => {
-    const permissions = await checkMediaPermissions('video');
-    if (!permissions.camera || !permissions.microphone) {
-      setError('Camera or microphone access denied. Please allow access to start video calls.');
+  const handleStartCall = async (call?: ScheduledCall) => {
+    const targetId = role === 'client' ? sessionUser?.assignedSpecialistId : selectedClientId;
+    const targetName = role === 'client' ? sessionUser?.assignedSpecialistName : assignedClients.find(c => c.uid === selectedClientId)?.displayName || 'User';
+
+    if (!targetId) {
+      setError('No recipient available for the call.');
       return;
     }
-    const link = meetingLink || `https://meet.jit.si/mysyntromed-instant-${Date.now()}`;
-    if (link.includes('meet.google.com')) {
-      window.open(link, '_blank');
-    } else {
-      setActiveCallLink(link);
+
+    setActiveCallSession({
+      callerId: user?.uid || '',
+      callerName: sessionUser?.displayName || 'User',
+      receiverId: targetId,
+      receiverName: targetName,
+      callType: 'video',
+    });
+  };
+
+  const handleStartInstantCall = async (type: 'audio' | 'video') => {
+    const targetId = role === 'client' ? sessionUser?.assignedSpecialistId : selectedClientId;
+    const targetName = role === 'client' ? sessionUser?.assignedSpecialistName : assignedClients.find(c => c.uid === selectedClientId)?.displayName || 'User';
+
+    if (!targetId) {
+      setError('No recipient available for the call.');
+      return;
     }
+
+    setShowCallTypeSelection(false);
+    setActiveCallSession({
+      callerId: user?.uid || '',
+      callerName: sessionUser?.displayName || 'User',
+      receiverId: targetId,
+      receiverName: targetName,
+      callType: type,
+    });
   };
 
   const handleReschedule = (call: ScheduledCall) => {
@@ -215,90 +192,8 @@ const Calls = () => {
     }
   };
 
-  const handleStartInstantCall = async (type: 'audio' | 'video') => {
-    if (!user?.uid || !sessionUser) return;
-
-    const permissions = await checkMediaPermissions(type);
-    if (!permissions.microphone || (type === 'video' && !permissions.camera)) {
-      setError(type === 'video'
-        ? 'Camera or microphone access denied. Please allow access to start video calls.'
-        : 'Microphone access denied. Please allow access to start audio calls.'
-      );
-      return;
-    }
-
-    setCallStatus(null);
-    setShowCallTypeSelection(false);
-    const meetingLink = `https://meet.jit.si/mysyntromed-live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${type === 'audio' ? '#config.startAudioOnly=true' : ''}`;
-
-    if (role === 'client') {
-      try {
-        const receiverId = sessionUser.assignedSpecialistId;
-        const receiverName = sessionUser.assignedSpecialistName;
-        if (!receiverId || !receiverName) {
-          setError('No specialist assigned yet.');
-          return;
-        }
-        const sessionId = await liveCallService.createSession({
-          callerId: user.uid,
-          callerName: sessionUser.displayName || 'Client',
-          callerRole: 'client',
-          receiverId,
-          receiverName,
-          receiverRole: 'specialist',
-          meetingLink,
-          callType: type,
-        });
-        setOutgoingSessionId(sessionId);
-        setCallStatus('Calling specialist...');
-        emitCallInvite(receiverId, type, sessionUser.displayName || 'Client', meetingLink, sessionId);
-      } catch (err) {
-        setError('Failed to start a call. Please try again.');
-      }
-      return;
-    }
-
-    if (role === 'specialist') {
-      const client = assignedClients.find(c => c.uid === selectedClientId);
-      if (!client) {
-        setError('Select a client to start a call.');
-        return;
-      }
-      const sessionId = await liveCallService.createSession({
-        callerId: user.uid,
-        callerName: sessionUser.displayName || 'Specialist',
-        callerRole: 'specialist',
-        receiverId: client.uid,
-        receiverName: client.displayName || client.email || 'Client',
-        receiverRole: 'client',
-        meetingLink,
-        callType: type,
-      });
-      setOutgoingSessionId(sessionId);
-      setCallStatus('Calling client...');
-      emitCallInvite(client.uid, type, sessionUser.displayName || 'Specialist', meetingLink, sessionId);
-    }
-  };
-
-  const handleAcceptCall = async (session: CallSession) => {
-    await liveCallService.updateStatus(session.id, 'accepted');
-    emitCallAccepted(session.callerId);
-    setActiveSession({ ...session, status: 'accepted' });
-    setActiveCallLink(session.meetingLink);
-  };
-
-  const handleRejectCall = async (session: CallSession) => {
-    await liveCallService.updateStatus(session.id, 'rejected');
-  };
-
-  const handleEndLiveCall = async () => {
-    if (activeSession?.id) {
-      const otherParticipantId = activeSession.callerId === user?.uid ? activeSession.receiverId : activeSession.callerId;
-      await liveCallService.updateStatus(activeSession.id, 'ended');
-      emitCallEnded(otherParticipantId);
-    }
-    setActiveSession(null);
-    setActiveCallLink(null);
+  const handleEndWebRTCCall = () => {
+    setActiveCallSession(null);
   };
 
   const formatDate = (date: Date) => {
@@ -375,296 +270,283 @@ const Calls = () => {
         </div>
       )}
 
-      {activeCallLink ? (
-        <div className="flex h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-black">
-          <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-              <span className="text-sm font-medium">Video Consultation Active</span>
-            </div>
-            <button
-              onClick={handleEndLiveCall}
-              className="flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 text-xs font-semibold hover:bg-red-700"
-            >
-              <X size={14} />
-              End Call
-            </button>
-          </div>
-          <iframe
-            src={activeCallLink}
-            allow="camera; microphone; fullscreen; display-capture"
-            className="h-full w-full border-0"
-          />
-        </div>
+      {activeCallSession ? (
+        <WebRTCVideoCall
+          isInitiator={activeCallSession.callerId === user?.uid}
+          callerId={activeCallSession.callerId}
+          callerName={activeCallSession.callerName}
+          receiverId={activeCallSession.receiverId}
+          receiverName={activeCallSession.receiverName}
+          callType={activeCallSession.callType}
+          onCallEnd={handleEndWebRTCCall}
+        />
       ) : (
-        <>
-      {callStatus && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-          {callStatus}
-        </div>
-      )}
-
-      {showScheduleForm && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-navy-900">Schedule a New Call</h2>
-            <button
-              onClick={() => setShowScheduleForm(false)}
-              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
+        <div className="space-y-6">
           {error && (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          {submitted ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                <Check size={32} className="text-emerald-600" />
+          {showScheduleForm && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-navy-900">Schedule a New Call</h2>
+                <button
+                  onClick={() => setShowScheduleForm(false)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <h3 className="text-lg font-semibold text-slate-900">Call Scheduled!</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Your meeting link will be sent via email and in your messages.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSchedule} className="space-y-5">
-              {role === 'specialist' && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Client</label>
-                  <select
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
-                  >
-                    <option value="">Select a client</option>
-                    {assignedClients.map(c => (
-                      <option key={c.uid} value={c.uid}>
-                        {c.displayName || c.email || c.uid}
-                      </option>
-                    ))}
-                  </select>
+
+              {error && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
                 </div>
               )}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Meeting Title</label>
-                <input
-                  type="text"
-                  value={callTitle}
-                  onChange={(e) => setCallTitle(e.target.value)}
-                  required
-                  placeholder="e.g., Weekly Workflow Review"
-                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
-                />
-              </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Date</label>
-                  <div className="relative">
-                    <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="date"
-                      value={callDate}
-                      onChange={(e) => setCallDate(e.target.value)}
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full rounded-lg border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500"
-                    />
+              {submitted ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+                    <Check size={32} className="text-emerald-600" />
                   </div>
+                  <h3 className="text-lg font-semibold text-slate-900">Call Scheduled!</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Your meeting link will be sent via email and in your messages.
+                  </p>
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Time</label>
-                  <div className="relative">
-                    <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="time"
-                      value={callTime}
-                      onChange={(e) => setCallTime(e.target.value)}
-                      required
-                      className="w-full rounded-lg border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start gap-3">
-                  <Video size={18} className="mt-0.5 text-slate-500" />
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">In-App Video Integration</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      A secure video meeting link will be automatically generated and shared with your specialist.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowScheduleForm(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting || !callTitle || !callDate || !callTime}
-                  className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Scheduling...
-                    </>
-                  ) : (
-                    <>
-                      <CalendarPlus size={16} />
-                      Schedule Call
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white">
-              <div className="flex items-center justify-between border-b border-slate-200 p-4">
-                <h2 className="text-lg font-semibold text-navy-900">Upcoming Calls</h2>
-                <button
-                  onClick={() => refreshCalls()}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-              <div className="p-4">
-                {upcomingCalls.length > 0 ? (
-                  <div className="space-y-3">
-                    {upcomingCalls.map((call) => (
-                      <div
-                        key={call.id}
-                        className="flex items-start justify-between rounded-lg border border-slate-200 p-4"
+              ) : (
+                <form onSubmit={handleSchedule} className="space-y-5">
+                  {role === 'specialist' && (
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-slate-700">Client</label>
+                      <select
+                        value={selectedClientId}
+                        onChange={(e) => setSelectedClientId(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                            <Calendar size={18} />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900">{call.title}</p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              {formatDate(call.date)} • {formatTime(call.date)}
-                            </p>
-                            <p className="mt-0.5 text-xs text-slate-400">{call.specialistName}</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          {call.meetingLink && (
-                            <button
-                              onClick={() => handleStartCall(call.meetingLink, call)}
-                              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
-                            >
-                              Join
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleReschedule(call)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            Reschedule
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                        <option value="">Select a client</option>
+                        {assignedClients.map(c => (
+                          <option key={c.uid} value={c.uid}>
+                            {c.displayName || c.email || c.uid}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">Meeting Title</label>
+                    <input
+                      type="text"
+                      value={callTitle}
+                      onChange={(e) => setCallTitle(e.target.value)}
+                      required
+                      placeholder="e.g., Weekly Workflow Review"
+                      className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
+                    />
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center py-8 text-slate-500">
-                    <Calendar size={32} className="mb-2 text-slate-300" />
-                    <p className="text-sm">No upcoming calls</p>
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-slate-700">Date</label>
+                      <div className="relative">
+                        <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="date"
+                          value={callDate}
+                          onChange={(e) => setCallDate(e.target.value)}
+                          required
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full rounded-lg border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-slate-700">Time</label>
+                      <div className="relative">
+                        <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="time"
+                          value={callTime}
+                          onChange={(e) => setCallTime(e.target.value)}
+                          required
+                          className="w-full rounded-lg border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <Video size={18} className="mt-0.5 text-slate-500" />
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">In-App Video Integration</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          A secure video meeting link will be automatically generated and shared with your specialist.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
                     <button
-                      onClick={() => setShowScheduleForm(true)}
-                      className="mt-2 text-sm text-teal-600 hover:underline"
+                      type="button"
+                      onClick={() => setShowScheduleForm(false)}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
-                      Schedule a meeting
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting || !callTitle || !callDate || !callTime}
+                      className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submitting ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          Scheduling...
+                        </>
+                      ) : (
+                        <>
+                          <CalendarPlus size={16} />
+                          Schedule Call
+                        </>
+                      )}
                     </button>
                   </div>
-                )}
-              </div>
+                </form>
+              )}
             </div>
+          )}
 
-            <div className="rounded-xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-200 p-4">
-                <h2 className="text-lg font-semibold text-navy-900">Meeting History</h2>
-              </div>
-              <div className="p-4">
-                {pastCalls.length > 0 ? (
-                  <div className="space-y-3">
-                    {pastCalls.map((call) => (
-                      <div
-                        key={call.id}
-                        className="flex items-start gap-3 rounded-lg border border-slate-100 p-3"
-                      >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-                          <Check size={18} />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-900">{call.title}</p>
-                          <p className="mt-0.5 text-sm text-slate-500">
-                            {formatDate(call.date)} • {call.status}
-                          </p>
-                          <p className="mt-0.5 text-xs text-slate-400">{call.specialistName}</p>
-                        </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-200 p-4">
+                    <h2 className="text-lg font-semibold text-navy-900">Upcoming Calls</h2>
+                    <button
+                      onClick={() => refreshCalls()}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      <RefreshCw size={16} />
+                    </button>
+                  </div>
+                  <div className="p-4">
+                    {upcomingCalls.length > 0 ? (
+                      <div className="space-y-3">
+                        {upcomingCalls.map((call) => (
+                          <div
+                            key={call.id}
+                            className="flex items-start justify-between rounded-lg border border-slate-200 p-4"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                                <Calendar size={18} />
+                              </div>
+                              <div>
+                                <p className="font-medium text-slate-900">{call.title}</p>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  {formatDate(call.date)} • {formatTime(call.date)}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-400">{call.specialistName}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleStartCall(call)}
+                                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+                              >
+                                Join
+                              </button>
+                              <button
+                                onClick={() => handleReschedule(call)}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                              >
+                                Reschedule
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : (
+                      <div className="flex flex-col items-center py-8 text-slate-500">
+                        <Calendar size={32} className="mb-2 text-slate-300" />
+                        <p className="text-sm">No upcoming calls</p>
+                        <button
+                          onClick={() => setShowScheduleForm(true)}
+                          className="mt-2 text-sm text-teal-600 hover:underline"
+                        >
+                          Schedule a meeting
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center py-8 text-slate-500">
-                    <Clock size={32} className="mb-2 text-slate-300" />
-                    <p className="text-sm">No past meetings</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+                </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="text-lg font-semibold text-navy-900">Integration</h2>
-            <div className="mt-4 flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-600">
-                <Video size={24} />
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 p-4">
+                    <h2 className="text-lg font-semibold text-navy-900">Meeting History</h2>
+                  </div>
+                  <div className="p-4">
+                    {pastCalls.length > 0 ? (
+                      <div className="space-y-3">
+                        {pastCalls.map((call) => (
+                          <div
+                            key={call.id}
+                            className="flex items-start gap-3 rounded-lg border border-slate-100 p-3"
+                          >
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                              <Check size={18} />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-slate-900">{call.title}</p>
+                              <p className="mt-0.5 text-sm text-slate-500">
+                                {formatDate(call.date)} • {call.status}
+                              </p>
+                              <p className="mt-0.5 text-xs text-slate-400">{call.specialistName}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center py-8 text-slate-500">
+                        <Clock size={32} className="mb-2 text-slate-300" />
+                        <p className="text-sm">No past meetings</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-slate-900">In-App Video System</p>
-                <p className="text-sm text-slate-500">
-                  All scheduled and instant calls run securely inside your dashboard without leaving the portal.
-                </p>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <h2 className="text-lg font-semibold text-navy-900">WebRTC Integration</h2>
+                <div className="mt-4 flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-600">
+                    <Video size={24} />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">In-App Video System</p>
+                    <p className="text-sm text-slate-500">
+                      All calls run peer-to-peer using WebRTC - no external platforms needed.
+                    </p>
+                  </div>
+                  <div className="ml-auto">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+                      <Check size={12} />
+                      Active
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="ml-auto">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-                  <Check size={12} />
-                  Active
-                </span>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-        </>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
