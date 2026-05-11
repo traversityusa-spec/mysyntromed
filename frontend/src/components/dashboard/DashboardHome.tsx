@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  Calendar,
   CalendarCheck,
   Check,
   Circle,
@@ -15,7 +14,6 @@ import {
   RefreshCw,
   Shield,
   User,
-  Video,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useDashboardData, useUserProfile } from '@/lib/dashboard';
@@ -27,7 +25,6 @@ import { DateTimeDisplay } from '@/lib/datetime';
 const quickActions = [
   { label: 'Message Specialist', icon: MessageSquare, to: '/portal/messages', color: 'bg-blue-50 text-blue-700' },
   { label: 'Submit Request', icon: Plus, to: '/portal/requests', color: 'bg-teal-50 text-teal-700' },
-  { label: 'Schedule Meeting', icon: Calendar, to: '/portal/calls', color: 'bg-purple-50 text-purple-700' },
   { label: 'Urgent Support', icon: AlertTriangle, to: '/portal/requests', color: 'bg-red-50 text-red-700', urgent: true },
 ];
 
@@ -180,21 +177,10 @@ const ClientDashboardContent = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { label: 'Open Requests', value: stats.openRequests, sub: `${stats.inProgressRequests} in progress`, icon: ClipboardList, color: 'bg-teal-50 text-teal-600' },
           { label: 'Completed Today', value: stats.completedToday, sub: 'Tasks completed', icon: Check, color: 'bg-emerald-50 text-emerald-600' },
-          {
-            label: 'Next Call',
-            value: stats.nextCall
-              ? new Date(stats.nextCall.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-              : 'None',
-            sub: stats.nextCall
-              ? new Date(stats.nextCall.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-              : 'Schedule a meeting',
-            icon: Phone,
-            color: 'bg-purple-50 text-purple-600',
-          },
           { label: 'Messages', value: stats.unreadMessages, sub: 'Unread messages', icon: MessageSquare, color: 'bg-blue-50 text-blue-600' },
         ].map((card) => {
           const Icon = card.icon;
@@ -269,13 +255,6 @@ const ClientDashboardContent = () => {
               >
                 <MessageSquare size={16} />
                 Message Specialist
-              </Link>
-              <Link
-                to="/portal/calls"
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <Phone size={16} />
-                Start Call
               </Link>
             </div>
           </div>
@@ -354,17 +333,6 @@ const ClientDashboardContent = () => {
                 >
                   <MessageSquare size={14} />
                   Message
-                </Link>
-                <Link
-                  to="/portal/calls"
-                  className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                    sessionUser?.assignedSpecialistId
-                      ? 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                      : 'border-slate-200 text-slate-400 cursor-not-allowed bg-slate-50'
-                  }`}
-                >
-                  <CalendarCheck size={14} />
-                  Schedule
                 </Link>
               </div>
             </div>

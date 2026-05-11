@@ -82,25 +82,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const { user, sessionUser, logout } = useAuth();
 
 const role = sessionUser?.role || 'client';
-const basePath = role === 'admin' ? '/admin' : role === 'specialist' ? '/specialist' : '/portal';
+  const basePath = role === 'admin' ? '/admin' : role === 'specialist' ? '/specialist' : '/portal';
   const displayedNavItems = getNavItems(role, pendingAssignments);
-
-  useEffect(() => {
-    console.log('incomingWebRTCCalls changed:', incomingWebRTCCalls);
-    if (incomingWebRTCCalls.length > 0 && !activeWebRTCCall && !socketIncomingCall) {
-      const latestCall = incomingWebRTCCalls[incomingWebRTCCalls.length - 1];
-      console.log('Setting up incoming WebRTC call from DashboardLayout:', latestCall);
-      setActiveWebRTCCall({
-        callerId: latestCall.callerId,
-        callerName: latestCall.callerName,
-        callerRole: latestCall.callerRole,
-        receiverId: latestCall.receiverId,
-        receiverName: latestCall.receiverName,
-        receiverRole: latestCall.receiverRole,
-        callType: latestCall.callType,
-      });
-    }
-  }, [incomingWebRTCCalls, activeWebRTCCall, socketIncomingCall]);
 
   const playNotificationSound = () => {
     try {
