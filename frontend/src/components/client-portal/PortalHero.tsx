@@ -92,15 +92,6 @@ export const PortalHero = () => {
                       <p className="text-slate-400 text-xs">3 in progress</p>
                     </div>
                   </div>
-                  <div className="bg-slate-700/50 rounded-lg p-3 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-500/20 rounded-lg flex items-center justify-center">
-                      <span className="text-teal-400 text-sm">📅</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-white text-sm font-medium">Scheduled Calls</p>
-                      <p className="text-slate-400 text-xs">Next: Tomorrow 2:00 PM</p>
-                    </div>
-                  </div>
                 </div>
               </div>
               

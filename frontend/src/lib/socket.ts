@@ -5,19 +5,6 @@ let socket: Socket | null = null;
 let currentUserId: string | null = null;
 let reconnectAttempts = 0;
 
-export type IncomingCallData = {
-  callType: 'audio' | 'video';
-  callerId?: string;
-  callerName: string;
-  meetingLink: string;
-  sessionId?: string;
-};
-
-type CallEventCallback = (data?: IncomingCallData) => void;
-const callInviteListeners: CallEventCallback[] = [];
-const callAnsweredListeners: CallEventCallback[] = [];
-const callEndListeners: CallEventCallback[] = [];
-
 export const initSocket = (userId: string): Socket => {
   if (socket?.connected && currentUserId === userId) {
     return socket;
@@ -68,24 +55,6 @@ export const initSocket = (userId: string): Socket => {
     window.dispatchEvent(new CustomEvent('socket:typing', { detail: data }));
   });
 
-  socket.on('incomingCall', (data: IncomingCallData) => {
-    console.log('[SOCKET] Incoming call:', data);
-    callInviteListeners.forEach(cb => cb(data));
-    window.dispatchEvent(new CustomEvent('socket:incomingCall', { detail: data }));
-  });
-
-  socket.on('callAnswered', () => {
-    console.log('[SOCKET] Call answered');
-    callAnsweredListeners.forEach(cb => cb());
-    window.dispatchEvent(new CustomEvent('socket:callAnswered'));
-  });
-
-  socket.on('callRejected', () => {
-    console.log('[SOCKET] Call rejected/ended');
-    callEndListeners.forEach(cb => cb());
-    window.dispatchEvent(new CustomEvent('socket:callRejected'));
-  });
-
   if (!socket.connected) {
     console.log('[SOCKET] Attempting to connect...');
   }
@@ -111,57 +80,6 @@ export const emitTyping = (to: string, isTyping: boolean, senderName?: string): 
     socket.emit('typing', { to, isTyping, senderName: senderName || 'User', senderId: currentUserId || '' });
     console.log('[SOCKET] Emitting typing:', isTyping, 'senderName:', senderName, 'to:', to);
   }
-};
-
-export const emitCallInvite = (
-  to: string,
-  callType: 'audio' | 'video',
-  callerName: string,
-  meetingLink: string,
-  sessionId?: string
-): void => {
-  if (socket?.connected) {
-    socket.emit('callInvite', { to, callType, callerId: currentUserId || undefined, callerName, meetingLink, sessionId });
-    console.log('[SOCKET] Emit call invite to:', to, 'type:', callType);
-  }
-};
-
-export const emitCallAccepted = (to: string): void => {
-  if (socket?.connected) {
-    socket.emit('callAccepted', { to });
-    console.log('[SOCKET] Emit call accepted to:', to);
-  }
-};
-
-export const emitCallEnded = (to: string): void => {
-  if (socket?.connected) {
-    socket.emit('callEnded', { to });
-    console.log('[SOCKET] Emit call ended to:', to);
-  }
-};
-
-export const onCallInvite = (callback: CallEventCallback): (() => void) => {
-  callInviteListeners.push(callback);
-  return () => {
-    const idx = callInviteListeners.indexOf(callback);
-    if (idx > -1) callInviteListeners.splice(idx, 1);
-  };
-};
-
-export const onCallAnswered = (callback: CallEventCallback): (() => void) => {
-  callAnsweredListeners.push(callback);
-  return () => {
-    const idx = callAnsweredListeners.indexOf(callback);
-    if (idx > -1) callAnsweredListeners.splice(idx, 1);
-  };
-};
-
-export const onCallEnd = (callback: CallEventCallback): (() => void) => {
-  callEndListeners.push(callback);
-  return () => {
-    const idx = callEndListeners.indexOf(callback);
-    if (idx > -1) callEndListeners.splice(idx, 1);
-  };
 };
 
 export const disconnectSocket = (): void => {

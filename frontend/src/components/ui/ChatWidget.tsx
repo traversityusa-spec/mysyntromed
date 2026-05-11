@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircle, X, Send, Loader2, Bot, PhoneCall, Mail } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, Bot, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CONTACT_INFO } from '@/lib/constants';
 
@@ -66,7 +66,7 @@ export const ChatWidget = () => {
       let showContact = false;
 
       // Intent matching
-      if (lowerText.includes('human') || lowerText.includes('contact') || lowerText.includes('call') || lowerText.includes('email') || lowerText.includes('talk')) {
+      if (lowerText.includes('human') || lowerText.includes('contact') || lowerText.includes('email') || lowerText.includes('talk')) {
         responseText = "I can certainly connect you to our administrative team! Here is our direct contact information:";
         showContact = true;
       } else {
@@ -151,7 +151,7 @@ export const ChatWidget = () => {
                     >
                       <p className="text-xs font-bold text-navy-900 mb-3 uppercase tracking-wider">Direct Connect</p>
                       <a href={`tel:${CONTACT_INFO.phone}`} className="flex items-center gap-3 text-slate-600 hover:text-teal-600 mb-3 transition-colors bg-slate-50 p-2 rounded-lg">
-                        <PhoneCall size={16} className="text-teal-500" />
+
                         <span className="text-sm font-medium">{CONTACT_INFO.phoneFormatted}</span>
                       </a>
                       <a href={`mailto:${CONTACT_INFO.email}`} className="flex items-center gap-3 text-slate-600 hover:text-teal-600 transition-colors bg-slate-50 p-2 rounded-lg">

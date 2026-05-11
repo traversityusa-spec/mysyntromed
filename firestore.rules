@@ -5,8 +5,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
     function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+      return getUserData(userId).role;
     }
 
     function isAdmin() {
@@ -34,6 +38,10 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function isSpecialistOrAdmin() {
+      return isSpecialist() || isAdmin();
+    }
+
 function isValidEmail(email) {
       return email.matches('.*@.*');
     }
@@ -51,7 +59,12 @@ function isValidEmail(email) {
     }
 
     match /users/{userId} {
-      allow read: if signedIn() && (isOwner(userId) || isAdmin());
+      allow read: if signedIn() && (
+        isOwner(userId) ||
+        isAdmin() ||
+        (isSpecialist() && getUserData(userId).role == 'client') ||
+        (isClient() && getUserData(userId).role == 'specialist')
+      );
       allow create: if signedIn() && request.auth.uid == userId
         && request.resource.data.displayName is string
         && isValidDisplayName(request.resource.data.displayName)
@@ -136,6 +149,42 @@ function isValidEmail(email) {
         isAdmin()
       );
       allow delete: if isAdmin();
+    }
+
+    match /call_offers/{offerId} {
+      allow read: if signedIn() && (
+        resource.data.callerId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if signedIn() && (
+        request.resource.data.callerId == request.auth.uid ||
+        request.resource.data.receiverId == request.auth.uid
+      );
+      allow update: if signedIn() && (
+        resource.data.callerId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if signedIn() && (
+        resource.data.callerId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    match /ice_candidates/{candidateId} {
+      allow read: if signedIn() && (
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if signedIn() && (
+        request.resource.data.senderId == request.auth.uid ||
+        request.resource.data.receiverId == request.auth.uid
+      );
+      allow update: if false;
+      allow delete: if false;
     }
 
     match /activity/{activityId} {

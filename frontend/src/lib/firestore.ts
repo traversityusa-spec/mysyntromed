@@ -130,33 +130,6 @@ export type Request = {
   assignmentRequestId?: string;
 };
 
-export type ScheduledCall = {
-  id: string;
-  userId: string;
-  title: string;
-  date: Date;
-  specialistId: string;
-  specialistName: string;
-  meetingLink?: string;
-  status: 'scheduled' | 'completed' | 'cancelled';
-  createdAt: Date;
-};
-
-export type CallSession = {
-  id: string;
-  callerId: string;
-  callerName: string;
-  callerRole: 'client' | 'admin' | 'specialist';
-  receiverId: string;
-  receiverName: string;
-  receiverRole: 'client' | 'admin' | 'specialist';
-  meetingLink: string;
-  status: 'ringing' | 'accepted' | 'rejected' | 'ended';
-  callType: 'audio' | 'video';
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 export type ActivityItem = {
   id: string;
   userId: string;
@@ -173,7 +146,7 @@ export type AppNotification = {
   userId: string;
   title: string;
   message: string;
-  type: 'request' | 'message' | 'call' | 'system' | 'assignment';
+  type: 'request' | 'message' | 'system' | 'assignment';
   read: boolean;
   createdAt: Date;
 };
@@ -849,145 +822,6 @@ export const requestService = {
         }))
         .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
       callback(requests);
-    });
-  },
-};
-
-export const callService = {
-  async getUpcomingCalls(userId: string, role: 'client' | 'admin' | 'specialist' = 'client'): Promise<ScheduledCall[]> {
-    const q = query(
-      collection(db, 'calls'),
-      where(role === 'specialist' ? 'specialistId' : 'userId', '==', userId)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-      .map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate() || new Date(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      }))
-      .filter((call: any) => call.status === 'scheduled')
-      .sort((a: any, b: any) => a.date.getTime() - b.date.getTime()) as ScheduledCall[];
-  },
-
-  async getPastCalls(userId: string, role: 'client' | 'admin' | 'specialist' = 'client'): Promise<ScheduledCall[]> {
-    const q = query(
-      collection(db, 'calls'),
-      where(role === 'specialist' ? 'specialistId' : 'userId', '==', userId)
-    );
-    const snapshot = await getDocs(q);
-    const calls = snapshot.docs
-      .map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate() || new Date(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      }))
-      .filter((call: any) => call.status === 'completed' || call.status === 'cancelled')
-      .sort((a: any, b: any) => b.date.getTime() - a.date.getTime()) as ScheduledCall[];
-    return calls.slice(0, 20);
-  },
-
-  async scheduleCall(call: Omit<ScheduledCall, 'id' | 'createdAt' | 'status'>): Promise<string> {
-    const array = new Uint8Array(12);
-    crypto.getRandomValues(array);
-    const meetingId = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
-    const docRef = await addDoc(collection(db, 'calls'), {
-      ...call,
-      status: 'scheduled',
-      meetingLink: `https://meet.jit.si/mysyntromed-${meetingId}`,
-      createdAt: serverTimestamp(),
-    });
-
-    await addDoc(collection(db, 'activity'), {
-      title: `Call scheduled: ${call.title}`,
-      type: 'Call',
-      userId: call.userId,
-      specialistId: call.specialistId,
-      specialistName: call.specialistName,
-      status: 'pending',
-      createdAt: serverTimestamp(),
-    });
-
-    return docRef.id;
-  },
-};
-
-export const liveCallService = {
-  async createSession(input: Omit<CallSession, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Promise<string> {
-    const docRef = await addDoc(collection(db, 'call_sessions'), {
-      ...input,
-      participants: [input.callerId, input.receiverId],
-      status: 'ringing',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
-  },
-
-  async updateStatus(sessionId: string, status: CallSession['status']): Promise<void> {
-    const docRef = doc(db, 'call_sessions', sessionId);
-    await updateDoc(docRef, { status, updatedAt: serverTimestamp() });
-  },
-
-  subscribeToIncomingCalls(userId: string, callback: (sessions: CallSession[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, 'call_sessions'),
-      where('receiverId', '==', userId),
-      where('status', '==', 'ringing')
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const sessions = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-        } as CallSession;
-      });
-      callback(sessions);
-    });
-  },
-
-  subscribeToSession(sessionId: string, callback: (session: CallSession | null) => void): Unsubscribe {
-    const docRef = doc(db, 'call_sessions', sessionId);
-    return onSnapshot(docRef, (snap) => {
-      if (!snap.exists()) {
-        callback(null);
-        return;
-      }
-      const data = snap.data();
-      callback({
-        id: snap.id,
-        ...data,
-        createdAt: data.createdAt?.toDate() || new Date(),
-        updatedAt: data.updatedAt?.toDate() || new Date(),
-      } as CallSession);
-    });
-  },
-
-  subscribeToUserSessions(userId: string, callback: (sessions: CallSession[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, 'call_sessions'),
-      where('participants', 'array-contains', userId)
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const sessions = snapshot.docs
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
-          } as CallSession;
-        })
-        .filter((s) => s.status !== 'ended' && s.status !== 'rejected');
-      callback(sessions);
     });
   },
 };

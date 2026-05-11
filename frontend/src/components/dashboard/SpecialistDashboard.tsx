@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Video, Stethoscope, Bell, UserPlus } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { notificationService } from '@/lib/firestore';
-import type { Request, ScheduledCall, UserProfile, AppNotification } from '@/lib/firestore';
+import type { Request, UserProfile, AppNotification } from '@/lib/firestore';
 import { DateTimeDisplay } from '@/lib/datetime';
 
 export const SpecialistDashboard = () => {
   const { sessionUser } = useAuth();
   const [requests, setRequests] = useState<Request[]>([]);
-  const [calls, setCalls] = useState<ScheduledCall[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -22,14 +21,12 @@ export const SpecialistDashboard = () => {
       try {
         if (!sessionUser?.uid) {
           setRequests([]);
-          setCalls([]);
           setClients([]);
           setLoading(false);
           return;
         }
-        const [reqSnap, callsSnap, clientsSnap] = await Promise.all([
+        const [reqSnap, clientsSnap] = await Promise.all([
           getDocs(query(collection(db, 'requests'), where('specialistId', '==', sessionUser.uid))),
-          getDocs(query(collection(db, 'calls'), where('specialistId', '==', sessionUser.uid))),
           getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid))),
         ]);
 
@@ -38,12 +35,6 @@ export const SpecialistDashboard = () => {
             .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime())
         );
         
-        setCalls(
-          callsSnap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().date?.toDate() } as ScheduledCall))
-            .filter(c => c.status === 'scheduled')
-            .sort((a, b) => a.date.getTime() - b.date.getTime())
-        );
-
         setClients(
           clientsSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile))
         );
@@ -75,8 +66,7 @@ export const SpecialistDashboard = () => {
   const stats = [
     { label: 'Active Clients', value: clients.length || 0, icon: Users, color: 'bg-blue-50 text-blue-600' },
     { label: 'Pending Requests', value: requests.filter(r => r.status === 'pending').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
-    { label: 'Upcoming Calls', value: calls.length, icon: Video, color: 'bg-teal-50 text-teal-600' },
-    { label: 'Tasks Completed', value: requests.filter(r => r.status === 'completed').length, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Completed Tasks', value: requests.filter(r => r.status === 'completed').length, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
   ];
 
   return (
@@ -211,37 +201,6 @@ export const SpecialistDashboard = () => {
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-xl border border-slate-200 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-200 p-4">
-              <h2 className="text-lg font-semibold text-navy-900">Today's Schedule</h2>
-            </div>
-            <div className="p-4">
-              {loading ? (
-                <div className="py-8 text-center text-slate-400 animate-pulse">Loading schedule...</div>
-              ) : calls.length > 0 ? (
-                <div className="space-y-3">
-                  {calls.slice(0, 4).map((call) => (
-                    <div key={call.id} className="rounded-lg border border-slate-100 p-3 bg-slate-50">
-                      <p className="font-medium text-slate-900">{call.title}</p>
-                      <p className="text-xs text-slate-500 mb-2">{call.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                      <button 
-                        onClick={() => window.open(call.meetingLink, '_blank')}
-                        className="w-full rounded bg-teal-600 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
-                      >
-                        Join Call
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-6 text-slate-500">
-                  <Calendar size={32} className="mb-2 text-slate-300" />
-                  <p className="text-sm">Your schedule is clear</p>
-                </div>
-              )}
-            </div>
-          </div>
-
           <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-navy-900 to-navy-800 p-6 text-white text-center shadow-lg">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/10">
               <MessageSquare size={32} className="text-teal-400" />

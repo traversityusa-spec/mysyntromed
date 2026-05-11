@@ -106,9 +106,9 @@ export const ServicesOverview = () => {
             variants={fadeUp}
             className="md:col-span-4 bg-white rounded-[2rem] p-6 md:p-10 border border-neutral-100 shadow-sm hover:shadow-xl transition-all group"
           >
-            <div className="w-14 h-14 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center mb-8">
-              <Icons.PhoneCall size={28} />
-            </div>
+             <div className="w-14 h-14 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center mb-8">
+               <Icons.MessageSquare size={28} />
+             </div>
             <h3 className="text-2xl font-bold mb-4 text-navy-900">Virtual Receptionists</h3>
             <p className="text-muted leading-relaxed mb-8">
               Professional front-desk support and patient communication.

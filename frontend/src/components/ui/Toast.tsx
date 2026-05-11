@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, MessageSquare } from 'lucide-react';
 
-type ToastType = 'message' | 'request' | 'call' | 'system';
+type ToastType = 'message' | 'request' | 'system';
 
 type Toast = {
   id: string;

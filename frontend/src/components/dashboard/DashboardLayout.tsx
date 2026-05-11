@@ -10,22 +10,18 @@ import {
   List,
   LogOut,
   MessageSquare,
-  Phone,
   Settings,
   Stethoscope,
   User,
   Users,
   Workflow,
   Shield,
-  Video,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, notificationService, type AppNotification } from '@/lib/firestore';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
-import { initSocket, emitCallAccepted, emitCallEnded, type IncomingCallData } from '@/lib/socket';
-import { useIncomingCalls, WebRTCVideoCall } from '@/components/ui/WebRTCVideoCall';
 
 type NavItem = {
   label: string;
@@ -43,7 +39,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
       { label: 'Requests', icon: Workflow, to: `${portal}/requests` },
-      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
     ];
   }
@@ -63,7 +58,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
     { label: 'Dashboard', icon: Home, to: '/portal/dashboard' },
     { label: 'Messages', icon: MessageSquare, to: '/portal/messages' },
     { label: 'Requests', icon: Workflow, to: '/portal/requests' },
-    { label: 'Calls', icon: Phone, to: '/portal/calls' },
     { label: 'Specialist', icon: User, to: '/portal/specialist' },
     { label: 'Activity', icon: ChartBar, to: '/portal/activity' },
     { label: 'Settings', icon: Settings, to: '/portal/settings' },
@@ -79,29 +73,17 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [socketIncomingCall, setSocketIncomingCall] = useState<IncomingCallData | null>(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingAssignments, setPendingAssignments] = useState(0);
-  const [activeWebRTCCall, setActiveWebRTCCall] = useState<{
-    callerId: string;
-    callerName: string;
-    callerRole: string;
-    receiverId: string;
-    receiverName: string;
-    receiverRole: string;
-    callType: 'audio' | 'video';
-  } | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const initialSoundLoadRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, sessionUser, logout } = useAuth();
 
-  const role = sessionUser?.role || 'client';
-  const basePath = role === 'admin' ? '/admin' : role === 'specialist' ? '/specialist' : '/portal';
+const role = sessionUser?.role || 'client';
+const basePath = role === 'admin' ? '/admin' : role === 'specialist' ? '/specialist' : '/portal';
   const displayedNavItems = getNavItems(role, pendingAssignments);
-
-  const incomingWebRTCCalls = useIncomingCalls(user?.uid || '');
 
   useEffect(() => {
     console.log('incomingWebRTCCalls changed:', incomingWebRTCCalls);
@@ -145,7 +127,6 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   useEffect(() => {
     if (!user?.uid) return;
-    initSocket(user.uid);
     const messageUnsub = messageService.subscribeToUserMessages(user.uid, (messages) => {
       try {
         const unread = messages.filter((m) => !m.read && m.senderId !== user.uid).length;
@@ -176,33 +157,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       }
     });
 
-    const handleSocketCall = (e: Event) => {
-      const data = (e as CustomEvent<IncomingCallData>).detail;
-      if (data) {
-        playNotificationSound();
-        showToast('call', `Incoming ${data.callType} call from ${data.callerName}`, 'Tap to join');
-        if (!data.sessionId) {
-          setSocketIncomingCall(data);
-        }
-        const timer = setTimeout(() => {
-          setSocketIncomingCall(prev => prev === data ? null : prev);
-        }, 30000);
-        return () => clearTimeout(timer);
-      }
-    };
-
-    const handleSocketCallRejected = () => {
-      setSocketIncomingCall(null);
-    };
-
-    window.addEventListener('socket:incomingCall', handleSocketCall);
-    window.addEventListener('socket:callRejected', handleSocketCallRejected);
-
     return () => {
       messageUnsub();
       notificationUnsub();
-      window.removeEventListener('socket:incomingCall', handleSocketCall);
-      window.removeEventListener('socket:callRejected', handleSocketCallRejected);
     };
   }, [user?.uid, soundEnabled]);
 
@@ -235,10 +192,6 @@ const markAllRead = () => {
   const handleLogout = async () => {
     await logout();
     navigate('/portal');
-  };
-
-  const handleEndWebRTCCall = () => {
-    setActiveWebRTCCall(null);
   };
 
   const renderNavItem = (item: NavItem) => {
@@ -321,67 +274,6 @@ const markAllRead = () => {
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setMobileSidebarOpen(false)}
         />
-      )}
-
-      {activeWebRTCCall && (
-        <WebRTCVideoCall
-          isInitiator={false}
-          callerId={activeWebRTCCall.callerId}
-          callerName={activeWebRTCCall.callerName}
-          callerRole={activeWebRTCCall.callerRole}
-          receiverId={activeWebRTCCall.receiverId}
-          receiverName={activeWebRTCCall.receiverName}
-          receiverRole={activeWebRTCCall.receiverRole}
-          callType={activeWebRTCCall.callType}
-          onCallEnd={handleEndWebRTCCall}
-        />
-      )}
-
-      {socketIncomingCall && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm transition-all duration-300">
-          <div className="w-full max-w-md animate-[slideUp_0.3s_ease-out] rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex flex-col items-center text-center">
-              <div className="relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-amber-100">
-                <div className="absolute inset-0 animate-ping rounded-full bg-amber-100 opacity-75" />
-                {socketIncomingCall.callType === 'audio' ? (
-                  <Phone size={40} className="relative z-10 animate-bounce text-amber-600" />
-                ) : (
-                  <Video size={40} className="relative z-10 animate-bounce text-amber-600" />
-                )}
-              </div>
-              <h2 className="text-2xl font-bold text-navy-900">Incoming {socketIncomingCall.callType === 'audio' ? 'Audio' : 'Video'} Call</h2>
-              <p className="mt-2 text-lg text-slate-600">{socketIncomingCall.callerName}</p>
-              <p className="mt-1 text-sm text-slate-400 capitalize">wants to connect with you</p>
-
-              <div className="mt-8 flex w-full gap-4">
-                <button
-onClick={async () => {
-                      if (socketIncomingCall.callerId) {
-                        emitCallEnded(socketIncomingCall.callerId);
-                      }
-                      setSocketIncomingCall(null);
-                    }}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-100 py-3.5 font-semibold text-red-700 transition hover:bg-red-200"
-                >
-                  <Phone size={20} className="rotate-[135deg]" />
-                  Decline
-                </button>
-                <button
-                  onClick={async () => {
-                    if (socketIncomingCall.callerId) {
-                      emitCallAccepted(socketIncomingCall.callerId);
-                    }
-                    setSocketIncomingCall(null);
-                  }}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 font-semibold text-white shadow-lg shadow-teal-600/30 transition hover:bg-teal-700"
-                >
-                  {socketIncomingCall.callType === 'audio' ? <Phone size={20} /> : <Video size={20} />}
-                  Accept
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       <div className="flex flex-1 flex-col">

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { MessageSquare, Headphones, Calendar, Activity } from 'lucide-react';
+import { MessageSquare, Headphones, Activity } from 'lucide-react';
 
 const FEATURES = [
   {
@@ -11,11 +11,6 @@ const FEATURES = [
     icon: Headphones,
     title: 'Request Support',
     description: 'Submit requests such as chart preparation, administrative support, or patient follow-ups. Track progress from start to completion.'
-  },
-  {
-    icon: Calendar,
-    title: 'Scheduled Calls',
-    description: 'Book video calls with your specialist whenever you need to review workflows or discuss updates.'
   },
   {
     icon: Activity,

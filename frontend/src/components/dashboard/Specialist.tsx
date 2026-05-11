@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar, Check, Clock, Mail, MessageSquare, Phone, Star, Video, RefreshCw } from 'lucide-react';
+import { Calendar, Check, Clock, Mail, MessageSquare, Phone, Star, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { ratingService, userService, requestService, notificationService, type SpecialistRating, type UserProfile, type AppNotification } from '@/lib/firestore';
@@ -223,26 +223,17 @@ const Specialist = () => {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  to="/portal/messages"
-                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
-                    hasAssignment ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                  }`}
-                >
-                  <MessageSquare size={16} />
-                  Message
-                </Link>
-                <Link
-                  to="/portal/calls"
-                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium ${
-                    hasAssignment ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'
-                  }`}
-                >
-                  <Calendar size={16} />
-                  Schedule Call
-                </Link>
-              </div>
+               <div className="flex flex-wrap gap-2">
+                 <Link
+                   to="/portal/messages"
+                   className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
+                     hasAssignment ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                   }`}
+                 >
+                   <MessageSquare size={16} />
+                   Message
+                 </Link>
+               </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-4">
@@ -301,21 +292,14 @@ const Specialist = () => {
                 <MessageSquare size={18} className="text-slate-400" />
                 <span className="text-sm font-medium text-slate-700">Send a Message</span>
               </Link>
-              <Link
-                to="/portal/calls"
-                className="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 transition hover:bg-slate-50"
-              >
-                <Video size={18} className="text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">Schedule a Call</span>
-              </Link>
-              <Link
-                to="/portal/requests"
-                className="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 transition hover:bg-slate-50"
-              >
-                <Clock size={18} className="text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">Submit a Request</span>
-              </Link>
-            </div>
+<Link
+                 to="/portal/requests"
+                 className="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 transition hover:bg-slate-50"
+               >
+                 <Clock size={18} className="text-slate-400" />
+                 <span className="text-sm font-medium text-slate-700">Submit a Request</span>
+               </Link>
+             </div>
           </div>
 
           {hasAssignment && (

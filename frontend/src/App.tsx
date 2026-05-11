@@ -9,7 +9,6 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import Messages from "@/components/dashboard/Messages";
 import Requests from "@/components/dashboard/Requests";
-import Calls from "@/components/dashboard/Calls";
 import Specialist from "@/components/dashboard/Specialist";
 import Activity from "@/components/dashboard/Activity";
 import Settings from "@/components/dashboard/Settings";
@@ -183,15 +182,14 @@ function AppRoutes() {
       <Route path="/specialist" element={<AuthRoute><SpecialistAuth /></AuthRoute>} />
       <Route path="/reset-password" element={<ResetPasswordRoute><ResetPassword /></ResetPasswordRoute>} />
       
-      {/* Client Workspace */}
+       {/* Client Workspace */}
 
-      <Route path="/portal/dashboard" element={<DashboardPage><DashboardHome /></DashboardPage>} />
-      <Route path="/portal/messages" element={<DashboardPage><Messages /></DashboardPage>} />
-      <Route path="/portal/requests" element={<DashboardPage><Requests /></DashboardPage>} />
-      <Route path="/portal/calls" element={<DashboardPage><Calls /></DashboardPage>} />
-      <Route path="/portal/specialist" element={<DashboardPage><Specialist /></DashboardPage>} />
-      <Route path="/portal/activity" element={<DashboardPage><Activity /></DashboardPage>} />
-      <Route path="/portal/settings" element={<DashboardPage><Settings /></DashboardPage>} />
+       <Route path="/portal/dashboard" element={<DashboardPage><DashboardHome /></DashboardPage>} />
+       <Route path="/portal/messages" element={<DashboardPage><Messages /></DashboardPage>} />
+       <Route path="/portal/requests" element={<DashboardPage><Requests /></DashboardPage>} />
+       <Route path="/portal/specialist" element={<DashboardPage><Specialist /></DashboardPage>} />
+       <Route path="/portal/activity" element={<DashboardPage><Activity /></DashboardPage>} />
+       <Route path="/portal/settings" element={<DashboardPage><Settings /></DashboardPage>} />
       
       {/* Admin Workspace */}
       <Route path="/admin/dashboard" element={<AdminPage><AdminDashboard /></AdminPage>} />
@@ -201,13 +199,12 @@ function AppRoutes() {
       <Route path="/admin/analytics" element={<AdminPage><AdminAnalytics /></AdminPage>} />
       <Route path="/admin/settings" element={<AdminPage><Settings /></AdminPage>} />
 
-      {/* Specialist Workspace */}
-      <Route path="/specialist/dashboard" element={<SpecialistPage><DashboardHome /></SpecialistPage>} />
-      <Route path="/specialist/messages" element={<SpecialistPage><Messages /></SpecialistPage>} />
-      <Route path="/specialist/requests" element={<SpecialistPage><Requests /></SpecialistPage>} />
-      <Route path="/specialist/calls" element={<SpecialistPage><Calls /></SpecialistPage>} />
-      <Route path="/specialist/activity" element={<SpecialistPage><Activity /></SpecialistPage>} />
-      <Route path="/specialist/settings" element={<SpecialistPage><Settings /></SpecialistPage>} />
+       {/* Specialist Workspace */}
+       <Route path="/specialist/dashboard" element={<SpecialistPage><DashboardHome /></SpecialistPage>} />
+       <Route path="/specialist/messages" element={<SpecialistPage><Messages /></SpecialistPage>} />
+       <Route path="/specialist/requests" element={<SpecialistPage><Requests /></SpecialistPage>} />
+       <Route path="/specialist/activity" element={<SpecialistPage><Activity /></SpecialistPage>} />
+       <Route path="/specialist/settings" element={<SpecialistPage><Settings /></SpecialistPage>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

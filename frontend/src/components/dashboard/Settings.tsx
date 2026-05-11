@@ -73,10 +73,8 @@ const Settings = () => {
   const [notifications, setNotifications] = useState({
     emailRequests: true,
     emailMessages: true,
-    emailCalls: true,
     pushRequests: true,
     pushMessages: false,
-    pushCalls: true,
   });
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -343,36 +341,26 @@ const Settings = () => {
           </h2>
         </div>
         <div className="divide-y divide-slate-100 p-6">
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="font-medium text-slate-900">Request Updates</p>
-              <p className="text-sm text-slate-500">Get notified when request status changes</p>
-            </div>
-            <Toggle
-              checked={notifications.emailRequests}
-              onChange={(checked) => setNotifications({ ...notifications, emailRequests: checked })}
-            />
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="font-medium text-slate-900">New Messages</p>
-              <p className="text-sm text-slate-500">Get notified of new messages from specialist</p>
-            </div>
-            <Toggle
-              checked={notifications.emailMessages}
-              onChange={(checked) => setNotifications({ ...notifications, emailMessages: checked })}
-            />
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="font-medium text-slate-900">Call Reminders</p>
-              <p className="text-sm text-slate-500">Get reminded before scheduled calls</p>
-            </div>
-            <Toggle
-              checked={notifications.emailCalls}
-              onChange={(checked) => setNotifications({ ...notifications, emailCalls: checked })}
-            />
-          </div>
+           <div className="flex items-center justify-between py-3">
+             <div>
+               <p className="font-medium text-slate-900">Request Updates</p>
+               <p className="text-sm text-slate-500">Get notified when request status changes</p>
+             </div>
+             <Toggle
+               checked={notifications.emailRequests}
+               onChange={(checked) => setNotifications({ ...notifications, emailRequests: checked })}
+             />
+           </div>
+           <div className="flex items-center justify-between py-3">
+             <div>
+               <p className="font-medium text-slate-900">New Messages</p>
+               <p className="text-sm text-slate-500">Get notified of new messages from specialist</p>
+             </div>
+             <Toggle
+               checked={notifications.emailMessages}
+               onChange={(checked) => setNotifications({ ...notifications, emailMessages: checked })}
+             />
+           </div>
         </div>
       </div>
 
