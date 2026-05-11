@@ -120,8 +120,9 @@ const Settings = () => {
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user?.uid) return;
-    
+
     setSaving(true);
+    setSaved(false);
     try {
       if (file.size > 2 * 1024 * 1024) {
         throw new Error('Image must be under 2MB.');
@@ -132,8 +133,11 @@ const Settings = () => {
       setProfileForm((prev) => ({ ...prev, photoURL: url }));
       await updateProfile({ photoURL: url });
       await refreshSessionUser();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error uploading image:', error);
+      alert('Failed to upload image. Please ensure Firebase Storage is enabled in your Firebase console.');
     } finally {
       setSaving(false);
     }
