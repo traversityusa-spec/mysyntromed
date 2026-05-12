@@ -210,7 +210,7 @@ const markAllRead = () => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-100">
+    <div className="flex min-h-screen bg-slate-100 md:h-screen md:overflow-hidden">
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200 bg-white transition-all duration-300 lg:sticky lg:top-0 lg:h-screen ${
           sidebarOpen ? 'w-64' : 'w-20'

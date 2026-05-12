@@ -278,7 +278,8 @@ const Requests = () => {
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
           </div>
         ) : requests && requests.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="hidden sm:block">
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
                 <tr>
@@ -358,6 +359,40 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                 })}
               </tbody>
             </table>
+          </div>
+            </div>
+
+          <div className="space-y-3 sm:hidden">
+            {requests.map((request) => {
+              const reqPriority = typeof request.priority === 'string' ? request.priority.toLowerCase() : 'normal';
+              const reqStatus = typeof request.status === 'string' ? request.status.toLowerCase() : 'pending';
+              return (
+                <div
+                  key={request.id}
+                  onClick={() => setSelectedRequest(request)}
+                  className="rounded-xl border border-slate-200 bg-white p-4 cursor-pointer hover:border-teal-200 transition"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-semibold text-slate-900">{typeof request.type === 'string' ? request.type : 'Request'}</p>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}>
+                      {getStatusIcon(reqStatus as any)}
+                      {reqStatus === 'in_progress' ? 'In Progress' : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-3">{typeof request.description === 'string' ? request.description : ''}</p>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>{formatDate(request.submittedAt)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${priorityColors[reqPriority as keyof typeof priorityColors] || priorityColors.normal}`}>
+                        {reqPriority === 'urgent' && <AlertTriangle size={10} />}
+                        {reqPriority.charAt(0).toUpperCase() + reqPriority.slice(1)}
+                      </span>
+                      <span>{request.specialistName || 'Unassigned'}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center py-12 text-slate-500">

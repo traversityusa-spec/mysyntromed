@@ -655,7 +655,7 @@ const Messages = () => {
   const messageGroups = groupMessagesByDate(messages);
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
+    <div className="flex min-h-0 flex-1 gap-4">
       {/* Conversation List */}
       <div
         className={`flex flex-col rounded-2xl border border-slate-200 bg-white ${

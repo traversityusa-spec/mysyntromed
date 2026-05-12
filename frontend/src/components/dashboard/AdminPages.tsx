@@ -461,7 +461,7 @@ export const AdminClients = () => {
               <p>Fetching clients...</p>
             </div>
           ) : filteredClients.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto hidden sm:block">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
@@ -565,6 +565,67 @@ export const AdminClients = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="space-y-3 sm:hidden">
+              {filteredClients.map(client => (
+                <div key={client.uid} className={`rounded-xl border border-slate-200 bg-white p-4 ${client.disabled ? 'opacity-75' : ''}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-9 w-9 rounded-full ${client.disabled ? 'bg-slate-200 text-slate-400' : 'bg-teal-100 text-teal-700'} flex items-center justify-center font-bold uppercase text-xs`}>
+                        {client.displayName?.charAt(0) || 'C'}
+                      </div>
+                      <div>
+                        <p className={`font-semibold ${client.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{client.displayName || 'Unnamed'}</p>
+                        <p className="text-xs text-slate-500">{client.email}</p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${client.disabled ? 'bg-red-50 text-red-600' : client.isNewUser ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      {client.disabled ? 'Disabled' : client.isNewUser ? 'Pending' : 'Active'}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-500">
+                    <div className="flex justify-between">
+                      <span>Created:</span>
+                      <span>{client.createdAt?.toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Specialist:</span>
+                      <span className="font-medium text-slate-700">
+                        {client.assignedSpecialistName || 'Unassigned'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex gap-2">
+                    <select
+                      value={client.assignedSpecialistId || ''}
+                      disabled={client.disabled}
+                      onChange={(e) => handleAssign(client.uid, e.target.value)}
+                      className="flex-1 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-500 disabled:opacity-50"
+                    >
+                      <option value="">Assign Specialist</option>
+                      {specialists.map(s => (
+                        <option key={s.uid} value={s.uid}>{s.displayName || s.email}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => handleToggleStatus(client.uid, !!client.disabled)}
+                      disabled={actionLoading === client.uid}
+                      className={`p-2 rounded-lg transition-colors ${client.disabled ? 'text-emerald-600 hover:bg-emerald-50' : 'text-red-600 hover:bg-red-50'}`}
+                      title={client.disabled ? "Enable" : "Disable"}
+                    >
+                      {client.disabled ? <UserCheck size={16} /> : <UserMinus size={16} />}
+                    </button>
+                    <button
+                      onClick={() => { setDeletingUser({ uid: client.uid, name: client.displayName || client.email || 'User' }); setDeleteModalOpen(true); }}
+                      className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="p-12 text-center text-slate-500">
@@ -791,7 +852,7 @@ export const AdminSpecialists = () => {
               <p>Fetching specialists...</p>
             </div>
           ) : filteredSpecialists.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto hidden sm:block">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
@@ -865,6 +926,53 @@ export const AdminSpecialists = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="space-y-3 sm:hidden">
+              {filteredSpecialists.map(specialist => (
+                <div key={specialist.uid} className={`rounded-xl border border-slate-200 bg-white p-4 ${specialist.disabled ? 'opacity-75' : ''}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-9 w-9 rounded-full ${specialist.disabled ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-700'} flex items-center justify-center font-bold uppercase text-xs`}>
+                        {specialist.displayName?.charAt(0) || 'S'}
+                      </div>
+                      <div>
+                        <p className={`font-semibold ${specialist.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{specialist.displayName || 'Unnamed'}</p>
+                        <p className="text-xs text-slate-500">{specialist.email}</p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${specialist.disabled ? 'bg-red-50 text-red-600' : specialist.isNewUser ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      {specialist.disabled ? 'Deactivated' : specialist.isNewUser ? 'Pending' : 'Active'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500 mb-3">
+                    <span>Joined:</span>
+                    <span>{specialist.createdAt?.toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      onClick={() => handleToggleStatus(specialist.uid, !!specialist.disabled)}
+                      className={`flex-1 p-2 rounded-lg text-xs font-medium transition-colors ${
+                        specialist.disabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                      }`}
+                    >
+                      {specialist.disabled ? 'Enable' : 'Disable'}
+                    </button>
+                    <button
+                      onClick={() => setViewingWorkFor(specialist)}
+                      className="flex-1 p-2 rounded-lg text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                    >
+                      View Work
+                    </button>
+                    <button
+                      onClick={() => { setDeletingUser({ uid: specialist.uid, name: specialist.displayName || specialist.email || 'User' }); setDeleteModalOpen(true); }}
+                      className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="p-12 text-center text-slate-500">
@@ -971,6 +1079,7 @@ export const AdminConversations = () => {
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [specialists, setSpecialists] = useState<UserProfile[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -1106,10 +1215,12 @@ export const AdminConversations = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
-      <div className="w-96 flex flex-col rounded-2xl border border-slate-200 bg-white">
+    <div className="flex min-h-0 flex-1 gap-4">
+      <div className={`flex flex-col rounded-2xl border border-slate-200 bg-white ${
+        mobileView === 'chat' ? 'hidden lg:flex lg:w-96' : 'w-full lg:w-96'
+      }`}>
         <div className="border-b border-slate-100 p-4">
-          <h2 className="text-xl font-bold text-navy-900">Client-Specialist Conversations</h2>
+          <h2 className="text-xl font-bold text-navy-900">Conversations</h2>
           <p className="text-sm text-slate-500 mt-1">Monitor all messaging activity</p>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -1125,7 +1236,7 @@ export const AdminConversations = () => {
             conversations.map((conv) => (
               <button
                 key={`${conv.clientId}_${conv.specialistId}`}
-                onClick={() => setSelectedConversation({ clientId: conv.clientId, specialistId: conv.specialistId })}
+                onClick={() => { setSelectedConversation({ clientId: conv.clientId, specialistId: conv.specialistId }); setMobileView('chat'); }}
                 className={`w-full border-b border-slate-50 p-4 text-left transition hover:bg-slate-50 ${
                   selectedConversation?.clientId === conv.clientId && selectedConversation?.specialistId === conv.specialistId ? 'bg-teal-50' : ''
                 }`}
@@ -1144,11 +1255,16 @@ export const AdminConversations = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col rounded-2xl border border-slate-200 bg-white">
+      <div className={`flex-1 flex flex-col rounded-2xl border border-slate-200 bg-white ${
+        mobileView === 'list' && selectedConversation ? 'hidden lg:flex' : ''
+      }`}>
         {selectedConversation ? (
           <>
             <div className="border-b border-slate-100 p-4">
               <div className="flex items-center gap-3">
+                <button onClick={() => setMobileView('list')} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" title="Back to conversations">
+                  <X size={20} />
+                </button>
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold">
                   {conversations.find(c => c.clientId === selectedConversation.clientId)?.clientName.charAt(0).toUpperCase()}
                 </div>
