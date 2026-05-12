@@ -3,37 +3,18 @@ import { API_BASE_URL } from './firestore';
 
 let socket: Socket | null = null;
 let currentUserId: string | null = null;
+let listenersInitialized = false;
 
-export const initSocket = (userId: string): Socket => {
-  if (socket?.connected && currentUserId === userId) {
-    console.log('[SOCKET] Already connected for user:', userId, 'socket ID:', socket.id);
-    return socket;
-  }
+const ensureListeners = (userId: string) => {
+  if (!socket) return;
+  if (listenersInitialized && currentUserId === userId) return;
 
-  if (socket) {
-    console.log('[SOCKET] Disconnecting existing socket before reconnecting');
-    socket.removeAllListeners();
-    socket.disconnect();
-    socket = null;
-  }
-
+  socket.removeAllListeners();
+  listenersInitialized = false;
   currentUserId = userId;
 
-  console.log('[SOCKET] Creating new socket connection to:', API_BASE_URL, 'for user:', userId);
-
-  socket = io(API_BASE_URL, {
-    transports: ['websocket', 'polling'],
-    autoConnect: true,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 10000,
-    timeout: 30000,
-    forceNew: true,
-  });
-
   socket.on('connect', () => {
-    console.log('[SOCKET] Connected to server, socket ID:', socket?.id);
+    console.log('[SOCKET] Connected, socket ID:', socket?.id);
     socket?.emit('authenticate', userId);
     window.dispatchEvent(new CustomEvent('socket:connected'));
   });
@@ -56,18 +37,41 @@ export const initSocket = (userId: string): Socket => {
   });
 
   socket.on('newMessage', (message: unknown) => {
-    console.log('[SOCKET] NEW MESSAGE RECEIVED via socket:', JSON.stringify(message, null, 2));
+    console.log('[SOCKET] New message via socket');
     window.dispatchEvent(new CustomEvent('socket:newMessage', { detail: message }));
   });
 
   socket.on('userTyping', (data: { isTyping: boolean; senderName?: string; senderId?: string }) => {
-    console.log('[SOCKET] USER TYPING EVENT:', JSON.stringify(data));
-    if (data.senderId && data.senderId === currentUserId) {
-      console.log('[SOCKET] Ignoring own typing event');
-      return;
-    }
+    if (data.senderId && data.senderId === currentUserId) return;
     window.dispatchEvent(new CustomEvent('socket:typing', { detail: data }));
   });
+
+  listenersInitialized = true;
+};
+
+export const initSocket = (userId: string): Socket => {
+  if (!socket) {
+    console.log('[SOCKET] Creating socket connection to:', API_BASE_URL);
+    socket = io(API_BASE_URL, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      timeout: 30000,
+    });
+  }
+
+  if (currentUserId !== userId) {
+    listenersInitialized = false;
+  }
+
+  ensureListeners(userId);
+
+  if (socket.connected && currentUserId === userId) {
+    console.log('[SOCKET] Already authenticated for:', userId);
+  }
 
   return socket;
 };
