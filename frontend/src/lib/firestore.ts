@@ -720,23 +720,19 @@ export const requestService = {
       console.error('Failed to log activity for request', e);
     }
 
-    try {
-      await notificationService.notifyAdminsOfNewRequest(
-        request.clientName || request.clientEmail || 'A client',
-        request.clientEmail || '',
-        request.type
-      );
-      if (request.specialistId) {
-        await notificationService.notifySpecialistOfNewRequest(
-          request.specialistId,
-          request.clientName || 'A client',
-          request.type,
-        );
-      }
-      await notificationService.notifyClientRequestReceived(resolvedUserId);
-    } catch (e) {
-      console.error('Failed to notify about request', e);
+    notificationService.notifyAdminsOfNewRequest(
+      request.clientName || request.clientEmail || 'A client',
+      request.clientEmail || '',
+      request.type
+    ).catch(e => console.error('Admin notification failed:', e));
+    if (request.specialistId) {
+      notificationService.notifySpecialistOfNewRequest(
+        request.specialistId,
+        request.clientName || 'A client',
+        request.type,
+      ).catch(e => console.error('Specialist notification failed:', e));
     }
+    notificationService.notifyClientRequestReceived(resolvedUserId).catch(e => console.error('Client notification failed:', e));
 
     try {
       const token = await auth.currentUser?.getIdToken();
