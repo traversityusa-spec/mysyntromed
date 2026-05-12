@@ -62,8 +62,8 @@ function isValidEmail(email) {
       allow read: if signedIn() && (
         isOwner(userId) ||
         isAdmin() ||
-        (isSpecialist() && getUserData(userId).role == 'client') ||
-        (isClient() && getUserData(userId).role == 'specialist')
+        (isSpecialist() && (getUserData(userId).role == 'client' || getUserData(userId).role == 'admin')) ||
+        (isClient() && (getUserData(userId).role == 'specialist' || getUserData(userId).role == 'admin'))
       );
       allow create: if signedIn() && request.auth.uid == userId
         && request.resource.data.displayName is string
