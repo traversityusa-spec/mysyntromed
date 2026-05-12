@@ -11,6 +11,7 @@ import Messages from "@/components/dashboard/Messages";
 import Requests from "@/components/dashboard/Requests";
 import Specialist from "@/components/dashboard/Specialist";
 import Activity from "@/components/dashboard/Activity";
+import Calls from "@/components/dashboard/Calls";
 import Settings from "@/components/dashboard/Settings";
 import { AdminClients, AdminSpecialists, AdminConversations, AdminAnalytics } from "@/components/dashboard/AdminPages";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
@@ -186,6 +187,7 @@ function AppRoutes() {
 
        <Route path="/portal/dashboard" element={<DashboardPage><DashboardHome /></DashboardPage>} />
        <Route path="/portal/messages" element={<DashboardPage><Messages /></DashboardPage>} />
+       <Route path="/portal/calls" element={<DashboardPage><Calls /></DashboardPage>} />
        <Route path="/portal/requests" element={<DashboardPage><Requests /></DashboardPage>} />
        <Route path="/portal/specialist" element={<DashboardPage><Specialist /></DashboardPage>} />
        <Route path="/portal/activity" element={<DashboardPage><Activity /></DashboardPage>} />
@@ -202,6 +204,7 @@ function AppRoutes() {
        {/* Specialist Workspace */}
        <Route path="/specialist/dashboard" element={<SpecialistPage><DashboardHome /></SpecialistPage>} />
        <Route path="/specialist/messages" element={<SpecialistPage><Messages /></SpecialistPage>} />
+       <Route path="/specialist/calls" element={<SpecialistPage><Calls /></SpecialistPage>} />
        <Route path="/specialist/requests" element={<SpecialistPage><Requests /></SpecialistPage>} />
        <Route path="/specialist/activity" element={<SpecialistPage><Activity /></SpecialistPage>} />
        <Route path="/specialist/settings" element={<SpecialistPage><Settings /></SpecialistPage>} />

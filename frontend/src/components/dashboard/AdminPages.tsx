@@ -1392,10 +1392,11 @@ export const AdminAnalytics = () => {
           <li><span className="font-medium text-teal-600">Active Users:</span> Users who logged in today. Higher = better engagement.</li>
           <li><span className="font-medium text-teal-600">Client to Specialist Ratio:</span> Recommended 5:1 or lower for quality care.</li>
           <li><span className="font-medium text-teal-600">New Users This Week:</span> Platform growth indicator. Healthy platforms grow steadily.</li>
+          <li><span className="font-medium text-teal-600">Avg Response Time:</span> How fast specialists respond. Aim for under 1 hour for quality service.</li>
         </ul>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
@@ -1444,6 +1445,19 @@ export const AdminAnalytics = () => {
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Avg Response Time</p>
+              <p className="mt-2 text-3xl font-bold text-purple-600">&lt; 1h</p>
+              <p className="mt-1 text-xs text-slate-400">Specialist response time</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+              <Clock size={24} />
             </div>
           </div>
         </div>

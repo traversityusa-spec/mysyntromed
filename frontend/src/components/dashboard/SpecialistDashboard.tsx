@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, CheckCircle, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus } from 'lucide-react';
+import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -214,6 +214,86 @@ export const SpecialistDashboard = () => {
               Open Messages
             </Link>
           </div>
+
+          {clients.length > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 p-4">
+              <h2 className="text-lg font-semibold text-navy-900 flex items-center gap-2">
+                <Users size={18} className="text-indigo-500" />
+                Assigned Doctors
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {clients.map((client) => (
+                <div key={client.uid} className="flex items-center gap-3 p-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white">
+                    {client.displayName?.charAt(0) || 'C'}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-900">{client.displayName || client.email || 'Client'}</p>
+                    <p className="text-xs text-emerald-600 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Active
+                    </p>
+                  </div>
+                  <Link to="/specialist/messages" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
+                    Message
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 p-4">
+              <h2 className="text-lg font-semibold text-navy-900 flex items-center gap-2">
+                <ClipboardList size={18} className="text-teal-500" />
+                Daily Activity
+              </h2>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                    <Check size={14} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Morning Prep</p>
+                    <p className="text-xs text-slate-500">Charts prepared</p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Completed</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                    <Clock size={14} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Post-Clinic Documentation</p>
+                    <p className="text-xs text-slate-500">Finalize notes in EHR</p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">Pending</span>
+              </div>
+            </div>
+          </div>
+
+          <Link to="/specialist/calls" className="block rounded-xl border border-slate-200 bg-gradient-to-r from-purple-50 to-blue-50 p-4 hover:shadow-sm transition">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <p className="font-semibold text-navy-900">Upcoming Calls</p>
+                  <p className="text-xs text-slate-500">View and manage scheduled meetings</p>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-slate-400" />
+            </div>
+          </Link>
         </div>
       </div>
     </div>

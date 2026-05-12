@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  Calendar,
   CalendarCheck,
   Check,
   Circle,
@@ -26,6 +27,7 @@ import { DateTimeDisplay } from '@/lib/datetime';
 const quickActions = [
   { label: 'Message Specialist', icon: MessageSquare, to: '/portal/messages', color: 'bg-blue-50 text-blue-700' },
   { label: 'Submit Request', icon: Plus, to: '/portal/requests', color: 'bg-teal-50 text-teal-700' },
+  { label: 'Schedule Meeting', icon: Calendar, to: '/portal/calls', color: 'bg-purple-50 text-purple-700' },
   { label: 'Urgent Support', icon: AlertTriangle, to: '/portal/requests', color: 'bg-red-50 text-red-700', urgent: true },
 ];
 
@@ -279,6 +281,41 @@ const ClientDashboardContent = () => {
           );
         })}
       </div>
+
+      {/* Specialist Info Card */}
+      {sessionUser?.role === 'client' && sessionUser?.assignedSpecialistId && (
+        <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-teal-50 to-blue-50 p-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xl font-bold text-white shadow-sm">
+                {sessionUser.assignedSpecialistName?.charAt(0) || 'S'}
+              </div>
+              <div>
+                <p className="text-lg font-bold text-navy-900">{sessionUser.assignedSpecialistName || 'Your Specialist'}</p>
+                <p className="text-sm text-slate-500">Medical Scribe Specialist</p>
+                <p className="mt-0.5 text-xs text-emerald-600 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Available — Usually responds within 1 hour
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Link to="/portal/messages" className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-medium text-white hover:bg-teal-700 transition">
+                <MessageSquare size={14} />
+                Message
+              </Link>
+              <Link to="/portal/calls" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                <Phone size={14} />
+                Call
+              </Link>
+              <Link to="/portal/calls" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                <Calendar size={14} />
+                Schedule
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

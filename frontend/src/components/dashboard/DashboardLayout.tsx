@@ -10,6 +10,7 @@ import {
   List,
   LogOut,
   MessageSquare,
+  Phone,
   Settings,
   Stethoscope,
   User,
@@ -38,6 +39,7 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
     return [
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
+      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Requests', icon: Workflow, to: `${portal}/requests` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
     ];
@@ -48,6 +50,7 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Clients', icon: Users, to: `${portal}/clients` },
       { label: 'Specialists', icon: Stethoscope, to: `${portal}/specialists` },
+      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Conversations', icon: MessageSquare, to: `${portal}/conversations`, badge: pendingAssignments },
       { label: 'Analytics', icon: ChartBar, to: `${portal}/analytics` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
@@ -57,6 +60,7 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
   return [
     { label: 'Dashboard', icon: Home, to: '/portal/dashboard' },
     { label: 'Messages', icon: MessageSquare, to: '/portal/messages' },
+    { label: 'Calls', icon: Phone, to: '/portal/calls' },
     { label: 'Requests', icon: Workflow, to: '/portal/requests' },
     { label: 'Specialist', icon: User, to: '/portal/specialist' },
     { label: 'Activity', icon: ChartBar, to: '/portal/activity' },
