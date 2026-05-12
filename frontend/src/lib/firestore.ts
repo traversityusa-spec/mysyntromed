@@ -136,6 +136,7 @@ export type Request = {
   assignedAt?: Date;
   specialistId?: string;
   specialistName?: string;
+  specialistEmail?: string;
   clientName?: string;
   clientEmail?: string;
   seen?: boolean;
@@ -752,7 +753,9 @@ export const requestService = {
             requestType: request.type,
             description: request.description,
             priority: request.priority,
-            loginUrl: window.location.origin
+            loginUrl: window.location.origin,
+            specialistName: request.specialistName,
+            specialistId: request.specialistId,
           })
         }).catch(e => console.error('Failed to send admin email:', e));
       }

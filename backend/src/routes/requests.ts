@@ -5,7 +5,7 @@ import { sendStatusChangeEmail } from '../services/statusEmailService.js';
 const router = Router();
 
 router.post('/notify-admin', async (req, res) => {
-  const { clientName, clientEmail, requestType, description, priority, loginUrl } = req.body;
+  const { clientName, clientEmail, requestType, description, priority, loginUrl, specialistName, specialistId } = req.body;
 
   if (!clientName && !clientEmail) {
     return res.status(400).json({ error: 'Missing clientName or clientEmail' });
@@ -13,6 +13,7 @@ router.post('/notify-admin', async (req, res) => {
 
   try {
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@mysyntromed.com';
+    const baseUrl = loginUrl || 'https://mysyntromed.com';
     
     const result = await sendNewRequestEmailToAdmin({
       adminEmail,
@@ -21,11 +22,29 @@ router.post('/notify-admin', async (req, res) => {
       requestType: requestType || 'Support',
       description: description || '',
       priority: priority || 'normal',
-      loginUrl: loginUrl || 'https://mysyntromed.com',
+      loginUrl: baseUrl,
     });
 
     if (!result.success) {
       console.warn(`[REQUEST EMAIL] Failed to send: ${result.error}`);
+    }
+
+    if (specialistId) {
+      const admin = (await import('../firebaseAdmin.js')).default;
+      const userSnap = await admin.firestore().collection('users').doc(specialistId).get();
+      const specialistEmail = userSnap.exists ? userSnap.data()?.email : null;
+      if (specialistEmail) {
+        await sendStatusChangeEmail({
+          recipientEmail: specialistEmail,
+          recipientName: specialistName || 'Specialist',
+          role: 'specialist',
+          requestType: requestType || 'Request',
+          oldStatus: '',
+          newStatus: 'pending',
+          changedByName: clientName || 'Client',
+          loginUrl: baseUrl,
+        });
+      }
     }
 
     res.json({ success: true });
