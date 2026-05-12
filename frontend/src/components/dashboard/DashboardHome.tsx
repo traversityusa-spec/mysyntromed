@@ -117,7 +117,8 @@ const ClientDashboardContent = () => {
   const { user, sessionUser } = useAuth();
   const { stats, activity, activityFilter, setActivityFilter, loading } = useDashboardData();
   const { profile, markAsOldUser } = useUserProfile();
-  const [clinicStatus, setClinicStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
+  const [morningPrepStatus, setMorningPrepStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
+  const [postClinicStatus, setPostClinicStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
   const [showWelcome, setShowWelcome] = useState(false);
 
   const greeting = useMemo(() => {
@@ -325,10 +326,10 @@ const ClientDashboardContent = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${clinicStatus === 'completed' ? 'bg-emerald-100' : 'bg-slate-100'}`}>
-                    {clinicStatus === 'completed' ? (
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${morningPrepStatus === 'completed' ? 'bg-emerald-100' : morningPrepStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                    {morningPrepStatus === 'completed' ? (
                       <Check className="h-5 w-5 text-emerald-600" />
-                    ) : clinicStatus === 'in_progress' ? (
+                    ) : morningPrepStatus === 'in_progress' ? (
                       <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
                     ) : (
                       <Circle className="h-5 w-5 text-slate-400" />
@@ -339,30 +340,57 @@ const ClientDashboardContent = () => {
                     <p className="text-sm text-slate-500">Specialist prepares charts and patient details</p>
                   </div>
                 </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${clinicStatus === 'completed' ? 'bg-emerald-100 text-emerald-700' : clinicStatus === 'in_progress' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                  {clinicStatus === 'completed' ? 'Completed' : clinicStatus === 'in_progress' ? 'In Progress' : 'Not Started'}
-                </span>
+                <select
+                  value={morningPrepStatus}
+                  onChange={(e) => setMorningPrepStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                    morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                    morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">Ongoing</option>
+                  <option value="completed">Completed</option>
+                </select>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
-                    <FileText className="h-5 w-5 text-slate-400" />
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${postClinicStatus === 'completed' ? 'bg-emerald-100' : postClinicStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                    {postClinicStatus === 'completed' ? (
+                      <Check className="h-5 w-5 text-emerald-600" />
+                    ) : postClinicStatus === 'in_progress' ? (
+                      <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
+                    ) : (
+                      <FileText className="h-5 w-5 text-slate-400" />
+                    )}
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">Post-Clinic Documentation</p>
                     <p className="text-sm text-slate-500">Scribe finalizes notes in Athena</p>
                   </div>
                 </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">Pending</span>
+                <select
+                  value={postClinicStatus}
+                  onChange={(e) => setPostClinicStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                    postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                    postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">Ongoing</option>
+                  <option value="completed">Completed</option>
+                </select>
               </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 onClick={handleClinicFinish}
-                disabled={clinicStatus !== 'not_started'}
-                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition"
               >
                 <Check size={16} />
                 Clinic Day Finished
