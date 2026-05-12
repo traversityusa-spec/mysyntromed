@@ -15,6 +15,8 @@ export const SpecialistDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [newClientAssignments, setNewClientAssignments] = useState<AppNotification[]>([]);
+  const [morningPrepStatus, setMorningPrepStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
+  const [postClinicStatus, setPostClinicStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -253,29 +255,53 @@ export const SpecialistDashboard = () => {
               </h2>
             </div>
             <div className="p-4 space-y-3">
-              <div className="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                    <Check size={14} />
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${morningPrepStatus === 'completed' ? 'bg-emerald-100 text-emerald-600' : morningPrepStatus === 'in_progress' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
+                    {morningPrepStatus === 'completed' ? <Check size={14} /> : morningPrepStatus === 'in_progress' ? <RefreshCw size={14} className="animate-spin" /> : <Clock size={14} />}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-900">Morning Prep</p>
                     <p className="text-xs text-slate-500">Charts prepared</p>
                   </div>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Completed</span>
+                <select
+                  value={morningPrepStatus}
+                  onChange={(e) => setMorningPrepStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                    morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                    morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">Ongoing</option>
+                  <option value="completed">Completed</option>
+                </select>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-                    <Clock size={14} />
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${postClinicStatus === 'completed' ? 'bg-emerald-100 text-emerald-600' : postClinicStatus === 'in_progress' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
+                    {postClinicStatus === 'completed' ? <Check size={14} /> : postClinicStatus === 'in_progress' ? <RefreshCw size={14} className="animate-spin" /> : <Clock size={14} />}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-900">Post-Clinic Documentation</p>
                     <p className="text-xs text-slate-500">Finalize notes in EHR</p>
                   </div>
                 </div>
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">Pending</span>
+                <select
+                  value={postClinicStatus}
+                  onChange={(e) => setPostClinicStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                    postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                    postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">Ongoing</option>
+                  <option value="completed">Completed</option>
+                </select>
               </div>
             </div>
           </div>
