@@ -770,6 +770,14 @@ export const requestService = {
     })) as Request[];
   },
 
+  async updateRequestStatus(requestId: string, status: 'pending' | 'in_progress' | 'completed'): Promise<void> {
+    const data: any = { status };
+    if (status === 'completed') {
+      data.completedAt = serverTimestamp();
+    }
+    await updateDoc(doc(db, 'requests', requestId), data);
+  },
+
   async assignSpecialistToRequest(requestId: string, specialistId: string, specialistName: string): Promise<void> {
     const docRef = doc(db, 'requests', requestId);
     await updateDoc(docRef, {

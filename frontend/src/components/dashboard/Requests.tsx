@@ -3,6 +3,8 @@ import { AlertTriangle, Check, Clock, Eye, ListTodo, Plus, RefreshCw, X, Calenda
 import { useRequests } from '@/lib/dashboard';
 import { ErrorBoundary } from '../ErrorBoundary';
 import type { Request } from '@/lib/firestore';
+import { requestService } from '@/lib/firestore';
+import { useAuth } from '@/lib/AuthContext';
 
 const requestTypes = [
   'Chart Prep',
@@ -41,6 +43,7 @@ const statusColors = {
 };
 
 const Requests = () => {
+  const { sessionUser } = useAuth();
   const { requests, loading, createRequest, refreshRequests } = useRequests();
   const [showForm, setShowForm] = useState(false);
   const [selectedType, setSelectedType] = useState<string>('');
@@ -51,6 +54,17 @@ const Requests = () => {
   const [submitted, setSubmitted] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isSpecialist = sessionUser?.role === 'specialist';
+
+  const handleStatusChange = async (requestId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
+    try {
+      await requestService.updateRequestStatus(requestId, newStatus);
+      refreshRequests();
+      setSelectedRequest((prev) => prev ? { ...prev, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : prev.completedAt } : null);
+    } catch (e) {
+      console.error('Error updating request status:', e);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -334,14 +348,36 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}
-                      >
-                        {getStatusIcon(reqStatus as any)}
-                        {reqStatus === 'in_progress'
-                          ? 'In Progress'
-                          : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
-                      </span>
+                      {isSpecialist ? (
+                        <select
+                          value={request.status}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleStatusChange(request.id, e.target.value as 'pending' | 'in_progress' | 'completed');
+                          }}
+                          className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                            request.status === 'completed'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : request.status === 'in_progress'
+                              ? 'border-blue-200 bg-blue-50 text-blue-700'
+                              : 'border-slate-200 bg-slate-50 text-slate-600'
+                          }`}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}
+                        >
+                          {getStatusIcon(reqStatus as any)}
+                          {reqStatus === 'in_progress'
+                            ? 'In Progress'
+                            : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
+                        </span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-600">
                       <div className="flex flex-col gap-1">
@@ -374,10 +410,32 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                 >
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-semibold text-slate-900">{typeof request.type === 'string' ? request.type : 'Request'}</p>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}>
-                      {getStatusIcon(reqStatus as any)}
-                      {reqStatus === 'in_progress' ? 'In Progress' : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
-                    </span>
+                    {isSpecialist ? (
+                      <select
+                        value={request.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleStatusChange(request.id, e.target.value as 'pending' | 'in_progress' | 'completed');
+                        }}
+                        className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                          request.status === 'completed'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : request.status === 'in_progress'
+                            ? 'border-blue-200 bg-blue-50 text-blue-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-600'
+                        }`}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}>
+                        {getStatusIcon(reqStatus as any)}
+                        {reqStatus === 'in_progress' ? 'In Progress' : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-slate-500 mb-3">{typeof request.description === 'string' ? request.description : ''}</p>
                   <div className="flex items-center justify-between text-xs text-slate-400">
@@ -496,26 +554,44 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                     <Clock size={12} />
                     Status
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      selectedRequest.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : selectedRequest.status === 'in_progress'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {selectedRequest.status === 'completed' ? (
-                      <Check size={10} />
-                    ) : selectedRequest.status === 'in_progress' ? (
-                      <RefreshCw size={10} className="animate-spin" />
-                    ) : (
-                      <Clock size={10} />
-                    )}
-                    {selectedRequest.status === 'in_progress'
-                      ? 'In Progress'
-                      : selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
-                  </span>
+                  {isSpecialist ? (
+                    <select
+                      value={selectedRequest.status}
+                      onChange={(e) => handleStatusChange(selectedRequest.id, e.target.value as 'pending' | 'in_progress' | 'completed')}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                        selectedRequest.status === 'completed'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : selectedRequest.status === 'in_progress'
+                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        selectedRequest.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : selectedRequest.status === 'in_progress'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {selectedRequest.status === 'completed' ? (
+                        <Check size={10} />
+                      ) : selectedRequest.status === 'in_progress' ? (
+                        <RefreshCw size={10} className="animate-spin" />
+                      ) : (
+                        <Clock size={10} />
+                      )}
+                      {selectedRequest.status === 'in_progress'
+                        ? 'In Progress'
+                        : selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
+                    </span>
+                  )}
                 </div>
               </div>
 
