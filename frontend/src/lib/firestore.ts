@@ -700,7 +700,7 @@ export const requestService = {
       submittedAt: serverTimestamp(),
       statusHistory: [{
         status: 'pending',
-        timestamp: serverTimestamp(),
+        timestamp: new Date().toISOString(),
         changedByName: request.clientName || 'Client',
       }],
     });
@@ -809,11 +809,14 @@ export const requestService = {
   },
 
   async updateRequestStatus(requestId: string, status: 'pending' | 'in_progress' | 'completed', changedBy?: string, changedByName?: string): Promise<void> {
-    const now = new Date();
-    const entry: StatusEntry = { status, timestamp: now, changedBy, changedByName };
     const data: any = {
       status,
-      statusHistory: arrayUnion(entry),
+      statusHistory: arrayUnion({
+        status,
+        timestamp: new Date().toISOString(),
+        changedBy,
+        changedByName,
+      }),
     };
     if (status === 'completed') {
       data.completedAt = serverTimestamp();
