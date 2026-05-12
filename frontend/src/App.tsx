@@ -197,6 +197,7 @@ function AppRoutes() {
       <Route path="/admin/dashboard" element={<AdminPage><AdminDashboard /></AdminPage>} />
       <Route path="/admin/clients" element={<AdminPage><AdminClients /></AdminPage>} />
       <Route path="/admin/specialists" element={<AdminPage><AdminSpecialists /></AdminPage>} />
+      <Route path="/admin/messages" element={<AdminPage><Messages /></AdminPage>} />
       <Route path="/admin/conversations" element={<AdminPage><AdminConversations /></AdminPage>} />
       <Route path="/admin/analytics" element={<AdminPage><AdminAnalytics /></AdminPage>} />
       <Route path="/admin/settings" element={<AdminPage><Settings /></AdminPage>} />

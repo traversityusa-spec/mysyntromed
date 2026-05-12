@@ -725,9 +725,16 @@ export const requestService = {
         request.clientEmail || '',
         request.type
       );
+      if (request.specialistId) {
+        await notificationService.notifySpecialistOfNewRequest(
+          request.specialistId,
+          request.clientName || 'A client',
+          request.type,
+        );
+      }
       await notificationService.notifyClientRequestReceived(resolvedUserId);
     } catch (e) {
-      console.error('Failed to notify admins of request', e);
+      console.error('Failed to notify about request', e);
     }
 
     try {
@@ -1079,6 +1086,17 @@ export const notificationService = {
       title: 'Specialist Assigned to You',
       message: `${specialistName} has been assigned as your specialist. You can now message them for assistance.`,
       type: 'assignment',
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  async notifySpecialistOfNewRequest(specialistId: string, clientName: string, requestType: string): Promise<void> {
+    await addDoc(collection(db, 'notifications'), {
+      userId: specialistId,
+      title: `New ${requestType} Request`,
+      message: `${clientName} has submitted a ${requestType} request assigned to you.`,
+      type: 'request',
       read: false,
       createdAt: serverTimestamp(),
     });

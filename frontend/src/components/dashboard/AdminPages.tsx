@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc } from 'firebase/firestore';
 import { db, activityService } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
@@ -906,6 +907,13 @@ export const AdminSpecialists = () => {
                           >
                             {specialist.disabled ? <UserCheck size={18} /> : <UserMinus size={18} />}
                           </button>
+                          <Link
+                            to={`/admin/messages`}
+                            className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors"
+                            title="Message Specialist"
+                          >
+                            <MessageSquare size={18} />
+                          </Link>
                           <button
                             onClick={() => setViewingWorkFor(specialist)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -950,6 +958,12 @@ export const AdminSpecialists = () => {
                     <span>{specialist.createdAt?.toLocaleDateString()}</span>
                   </div>
                   <div className="flex gap-2 pt-3 border-t border-slate-100">
+                    <Link
+                      to="/admin/messages"
+                      className="flex-1 p-2 rounded-lg text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 text-center"
+                    >
+                      Message
+                    </Link>
                     <button
                       onClick={() => handleToggleStatus(specialist.uid, !!specialist.disabled)}
                       className={`flex-1 p-2 rounded-lg text-xs font-medium transition-colors ${
@@ -960,9 +974,9 @@ export const AdminSpecialists = () => {
                     </button>
                     <button
                       onClick={() => setViewingWorkFor(specialist)}
-                      className="flex-1 p-2 rounded-lg text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                      className="p-2 rounded-lg text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
                     >
-                      View Work
+                      <ClipboardList size={16} />
                     </button>
                     <button
                       onClick={() => { setDeletingUser({ uid: specialist.uid, name: specialist.displayName || specialist.email || 'User' }); setDeleteModalOpen(true); }}
