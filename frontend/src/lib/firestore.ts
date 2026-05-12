@@ -862,7 +862,7 @@ export const requestService = {
     }
   },
 
-  async assignSpecialistToRequest(requestId: string, specialistId: string, specialistName: string): Promise<void> {
+  async assignSpecialistToRequest(requestId: string, specialistId: string, specialistName: string, clientName?: string): Promise<void> {
     const docRef = doc(db, 'requests', requestId);
     await updateDoc(docRef, {
       specialistId,
@@ -870,6 +870,18 @@ export const requestService = {
       status: 'in_progress',
       assignedAt: serverTimestamp(),
     });
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: specialistId,
+        title: `New Request Assigned`,
+        message: `A new request has been assigned to you.`,
+        type: 'request',
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Failed to notify specialist of assignment:', e);
+    }
   },
 
   async completeAssignmentRequest(userId: string, specialistId: string, specialistName: string): Promise<void> {
