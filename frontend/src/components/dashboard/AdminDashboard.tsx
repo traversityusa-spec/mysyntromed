@@ -1,182 +1,156 @@
 import { useState, useEffect } from 'react';
 import {
-  Activity, ArrowUpRight, BarChart, Check, Copy,
-  KeyRound, Loader2, Plus, Shield, Stethoscope, Trash2, Users, Inbox,
+  Activity, ArrowUpRight, CheckCircle, Clock, Inbox, Shield, Stethoscope, Users, X, Mail, Phone, Building,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { collection, getDocs, query } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile } from '@/lib/firestore';
-import { inviteCodeService, type InviteCode } from '@/lib/security';
+import { userService } from '@/lib/firestore';
 import { DateTimeDisplay } from '@/lib/datetime';
 
-/* ─── Invite Code Manager ─────────────────────────────────────── */
-const InviteManager = ({ adminUid }: { adminUid: string }) => {
-  const [codes, setCodes] = useState<InviteCode[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [newRole, setNewRole] = useState<'admin' | 'specialist'>('specialist');
-  const [newLabel, setNewLabel] = useState('');
-  const [copied, setCopied] = useState<string | null>(null);
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
-  const [generateError, setGenerateError] = useState<string | null>(null);
+/* ─── Client Detail Modal ─────────────────────────────────────── */
+const ClientDetailModal = ({ client, onClose }: { client: UserProfile; onClose: () => void }) => {
+  const { refreshSessionUser } = useAuth();
+  const [activating, setActivating] = useState(false);
+  const [justActivated, setJustActivated] = useState(false);
 
-  const fetchCodes = async () => {
+  const isExpired = client.subscriptionEndDate ? new Date(client.subscriptionEndDate) < new Date() : false;
+  const isExpiringSoon = client.subscriptionEndDate ? (() => {
+    const diff = new Date(client.subscriptionEndDate).getTime() - Date.now();
+    return diff > 0 && diff <= 3 * 24 * 60 * 60 * 1000; // 3 days
+  })() : false;
+
+  const handleReactivate = async () => {
+    setActivating(true);
     try {
-      const list = await inviteCodeService.list();
-      setCodes(list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
-    } catch (e) {
-      console.error('Error loading invite codes:', e);
+      await userService.activateSubscription(client.uid);
+      setJustActivated(true);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (error) {
+      console.error('Error reactivating subscription:', error);
     } finally {
-      setLoading(false);
+      setActivating(false);
     }
   };
 
-  useEffect(() => { fetchCodes(); }, []);
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    setGenerateError(null);
-    try {
-      const code = await inviteCodeService.generate(adminUid, newRole, newLabel.trim() || undefined);
-      setGeneratedCode(code);
-      setNewLabel('');
-      await fetchCodes();
-    } catch (e) {
-      console.error('Error generating code:', e);
-      setGenerateError('Failed to generate invite code. Check Firestore rules and try again.');
-    } finally {
-      setGenerating(false);
-    }
+  const getSubscriptionStatus = () => {
+    if (!client.subscriptionEndDate) return { label: 'No Subscription', color: 'bg-slate-100 text-slate-600', icon: Clock };
+    if (isExpired) return { label: 'Expired', color: 'bg-red-100 text-red-700', icon: Clock };
+    if (isExpiringSoon) return { label: 'Expiring Soon', color: 'bg-amber-100 text-amber-700', icon: Clock };
+    return { label: 'Active', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle };
   };
 
-  const copyToClipboard = async (code: string) => {
-    await navigator.clipboard.writeText(code);
-    setCopied(code);
-    setTimeout(() => setCopied(null), 2000);
+  const status = getSubscriptionStatus();
+  const StatusIcon = status.icon;
+
+  const getDaysRemaining = () => {
+    if (!client.subscriptionEndDate) return null;
+    const now = new Date();
+    const end = new Date(client.subscriptionEndDate);
+    const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return 0;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
 
-  const active = codes.filter(c => !c.used && c.expiresAt > new Date());
-  const used = codes.filter(c => c.used);
-  const expired = codes.filter(c => !c.used && c.expiresAt <= new Date());
-
-  const BadgeColor = {
-    admin: 'bg-purple-50 text-purple-700 border border-purple-200',
-    specialist: 'bg-teal-50 text-teal-700 border border-teal-200',
-  };
-
-  const formatExpiry = (date: Date) => {
-    const diff = date.getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const days = Math.floor(diff / 86400000);
-    return days > 0 ? `${days}d left` : 'Expires today';
-  };
+  const daysRemaining = getDaysRemaining();
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-          <KeyRound size={20} className="text-teal-600" />
-          Invite Code Manager
-        </h2>
-        <span className="text-xs text-slate-500">{active.length} active · {used.length} used</span>
-      </div>
-
-      {/* Generator */}
-      <div className="border-b border-slate-100 bg-slate-50 p-4">
-        <p className="mb-3 text-sm font-medium text-slate-700">Generate New Invite Code</p>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-500">Role</label>
-            <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin' | 'specialist')}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-              <option value="specialist">Specialist</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div className="flex-1 min-w-[160px] space-y-1">
-            <label className="text-xs font-medium text-slate-500">Label (optional)</label>
-            <input type="text" value={newLabel} onChange={e => setNewLabel(e.target.value)}
-              placeholder='e.g. "For Dr. Jane Smith"'
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 placeholder:text-slate-400" />
-          </div>
-          <button onClick={handleGenerate} disabled={generating}
-            className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50 transition">
-            {generating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            Generate Code
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4">
+          <h2 className="text-lg font-semibold text-slate-900">Client Details</h2>
+          <button onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100 transition">
+            <X size={20} className="text-slate-500" />
           </button>
         </div>
-        {generatedCode && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Generated</span>
-            <code className="rounded-md bg-white px-2 py-0.5 font-mono text-xs text-slate-800">{generatedCode}</code>
-            <button
-              onClick={() => copyToClipboard(generatedCode)}
-              className="ml-auto rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition"
-            >
-              {copied === generatedCode ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-        )}
-        {generateError && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {generateError}
-          </div>
-        )}
-      </div>
-
-      {/* Code list */}
-      <div className="divide-y divide-slate-100">
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 size={24} className="animate-spin text-slate-400" />
-          </div>
-        ) : codes.length === 0 ? (
-          <div className="py-8 text-center text-sm text-slate-500">
-            No invite codes yet. Generate one above to onboard a new admin or specialist.
-          </div>
-        ) : (
-          [...active, ...expired, ...used].map(code => (
-            <div key={code.id} className="flex flex-wrap items-center gap-3 p-4 hover:bg-slate-50">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <code className={`rounded-md px-2 py-0.5 text-xs font-mono ${code.used ? 'line-through text-slate-400 bg-slate-100' : 'text-slate-800 bg-slate-100'}`}>
-                    {code.code}
-                  </code>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BadgeColor[code.role]}`}>
-                    {code.role}
-                  </span>
-                  {code.used && (
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">Used</span>
-                  )}
-                  {!code.used && code.expiresAt <= new Date() && (
-                    <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[11px] text-red-600">Expired</span>
-                  )}
-                  {!code.used && code.expiresAt > new Date() && (
-                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] text-emerald-600">
-                      {formatExpiry(code.expiresAt)}
-                    </span>
-                  )}
-                </div>
-                {code.label && (
-                  <p className="mt-0.5 text-xs text-slate-500">{code.label}</p>
-                )}
-                {code.used && code.usedAt && (
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Used {code.usedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </p>
-                )}
-              </div>
-              {!code.used && code.expiresAt > new Date() && (
-                <button onClick={() => copyToClipboard(code.code)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
-                  {copied === code.code ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                  {copied === code.code ? 'Copied!' : 'Copy'}
-                </button>
-              )}
+        <div className="p-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xl font-bold">
+              {client.displayName?.[0]?.toUpperCase() || 'C'}
             </div>
-          ))
-        )}
+            <div>
+              <p className="text-xl font-semibold text-slate-900">{client.displayName || 'Unnamed Client'}</p>
+              <p className="text-sm text-slate-500 capitalize">{client.role}</p>
+            </div>
+          </div>
+
+          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${status.color}`}>
+            <StatusIcon size={14} />
+            {status.label}
+            {daysRemaining !== null && daysRemaining > 0 && (
+              <span>({daysRemaining} days left)</span>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm">
+              <Mail size={16} className="text-slate-400" />
+              <span className="text-slate-700">{client.email || 'No email'}</span>
+            </div>
+            {client.phone && (
+              <div className="flex items-center gap-3 text-sm">
+                <Phone size={16} className="text-slate-400" />
+                <span className="text-slate-700">{client.phone}</span>
+              </div>
+            )}
+            {client.clinicName && (
+              <div className="flex items-center gap-3 text-sm">
+                <Building size={16} className="text-slate-400" />
+                <span className="text-slate-700">{client.clinicName}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-3 text-sm">
+              <Users size={16} className="text-slate-400" />
+              <span className="text-slate-700">Joined {client.createdAt?.toDate ? client.createdAt.toDate().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+            </div>
+            {client.subscriptionStartDate && (
+              <div className="flex items-center gap-3 text-sm">
+                <Clock size={16} className="text-slate-400" />
+                <span className="text-slate-700">Subscription started {client.subscriptionStartDate?.toDate ? new Date(client.subscriptionStartDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+              </div>
+            )}
+            {client.subscriptionEndDate && (
+              <div className="flex items-center gap-3 text-sm">
+                <Clock size={16} className="text-slate-400" />
+                <span className="text-slate-700">Expires {client.subscriptionEndDate?.toDate ? new Date(client.subscriptionEndDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+              </div>
+            )}
+          </div>
+
+          {(isExpired || justActivated) && (
+            <div className={`rounded-lg border p-4 ${justActivated ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+              <div className="flex items-center gap-3">
+                <CheckCircle className={justActivated ? 'text-emerald-600' : 'text-red-600'} size={20} />
+                <p className={`text-sm font-medium ${justActivated ? 'text-emerald-800' : 'text-red-800'}`}>
+                  {justActivated ? 'Subscription has been reactivated for 30 days!' : 'Account suspended. Contact administrator.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isExpired && !justActivated && (
+            <button
+              onClick={handleReactivate}
+              disabled={activating}
+              className="w-full rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+            >
+              {activating ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Reactivating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={16} />
+                  Reactivate Subscription (30 days)
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -187,6 +161,9 @@ export const AdminDashboard = () => {
   const { sessionUser } = useAuth();
   const [metrics, setMetrics] = useState({ clients: 0, specialists: 0, requests: 0, calls: 0 });
   const [metricsLoading, setMetricsLoading] = useState(true);
+  const [clients, setClients] = useState<UserProfile[]>([]);
+  const [recentClient, setRecentClient] = useState<UserProfile | null>(null);
+  const [selectedClient, setSelectedClient] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -205,6 +182,13 @@ export const AdminDashboard = () => {
           requests: reqSnap.size,
           calls: callsSnap.size,
         });
+
+        const clientUsers = users.filter(u => u.role === 'client');
+        const sortedClients = clientUsers.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        setClients(sortedClients);
+        if (sortedClients.length > 0) {
+          setRecentClient(sortedClients[0]);
+        }
       } catch (e) {
         console.error('Admin data fetch error (check Firestore rules):', e);
       } finally {
@@ -223,6 +207,7 @@ export const AdminDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {selectedClient && <ClientDetailModal client={selectedClient} onClose={() => setSelectedClient(null)} />}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -264,8 +249,6 @@ export const AdminDashboard = () => {
         })}
       </div>
 
-      
-
       {/* Recent System Activity */}
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/50">
@@ -280,30 +263,21 @@ export const AdminDashboard = () => {
             <div className="p-12 text-center text-slate-400 animate-pulse">Scanning system logs...</div>
           ) : (
             <div className="divide-y divide-slate-100">
-              <div className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-default">
+              <button onClick={() => recentClient && setSelectedClient(recentClient)} disabled={!recentClient}
+                className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer text-left">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded bg-teal-100 flex items-center justify-center text-teal-600">
                     <Users size={16} />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-900">New Client Onboarded</p>
-                    <p className="text-xs text-slate-500">System verified a new clinic registration</p>
+                    <p className="text-xs text-slate-500">
+                      {recentClient ? `Verified: ${recentClient.displayName || recentClient.email}` : 'System verified a new clinic registration'}
+                    </p>
                   </div>
                 </div>
                 <span className="text-[10px] font-medium text-slate-400">2 minutes ago</span>
-              </div>
-              <div className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-default">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded bg-indigo-100 flex items-center justify-center text-indigo-600">
-                    <KeyRound size={16} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Invite Code Generated</p>
-                    <p className="text-xs text-slate-500">Admin generated a specialist access key</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-medium text-slate-400">14 minutes ago</span>
-              </div>
+              </button>
               <div className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-default">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded bg-emerald-100 flex items-center justify-center text-emerald-600">

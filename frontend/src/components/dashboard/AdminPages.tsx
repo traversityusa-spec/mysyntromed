@@ -1256,19 +1256,36 @@ export const AdminAnalytics = () => {
     );
   }
 
+  const completionRate = stats.totalRequests > 0 
+    ? Math.round((stats.completedRequests / stats.totalRequests) * 100) 
+    : 0;
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy-900">Analytics</h1>
-        <p className="mt-1 text-slate-600">Platform usage and performance metrics</p>
+        <h1 className="text-2xl font-bold text-navy-900">Analytics Dashboard</h1>
+        <p className="mt-1 text-slate-600">Monitor platform health, user activity, and service performance</p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-teal-50 to-blue-50 p-6">
+        <h2 className="text-lg font-semibold text-navy-900 mb-3">How to Read These Metrics</h2>
+        <ul className="space-y-2 text-sm text-slate-600">
+          <li><span className="font-medium text-teal-600">Total Clients/Specialists:</span> Your user base. Balance is key for service quality.</li>
+          <li><span className="font-medium text-teal-600">Pending Requests:</span> Unassigned or in-progress requests. High numbers may indicate need for more specialists.</li>
+          <li><span className="font-medium text-teal-600">Completed Requests:</span> Successfully fulfilled requests. Shows platform productivity.</li>
+          <li><span className="font-medium text-teal-600">Active Users:</span> Users who logged in today. Higher = better engagement.</li>
+          <li><span className="font-medium text-teal-600">Client to Specialist Ratio:</span> Recommended 5:1 or lower for quality care.</li>
+          <li><span className="font-medium text-teal-600">New Users This Week:</span> Platform growth indicator. Healthy platforms grow steadily.</li>
+        </ul>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">Total Clients</p>
               <p className="mt-2 text-3xl font-bold text-navy-900">{stats.totalClients}</p>
+              <p className="mt-1 text-xs text-slate-400">Patients registered on platform</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-teal-600">
               <Users size={24} />
@@ -1276,11 +1293,12 @@ export const AdminAnalytics = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">Total Specialists</p>
               <p className="mt-2 text-3xl font-bold text-navy-900">{stats.totalSpecialists}</p>
+              <p className="mt-1 text-xs text-slate-400">Medical professionals available</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
               <Stethoscope size={24} />
@@ -1288,11 +1306,12 @@ export const AdminAnalytics = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">Pending Requests</p>
-              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.pendingRequests}</p>
+              <p className="mt-2 text-3xl font-bold text-amber-600">{stats.pendingRequests}</p>
+              <p className="mt-1 text-xs text-slate-400">Awaiting assignment or completion</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <Clock size={24} />
@@ -1300,11 +1319,12 @@ export const AdminAnalytics = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500">Completed Requests</p>
-              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.completedRequests}</p>
+              <p className="mt-2 text-3xl font-bold text-emerald-600">{stats.completedRequests}</p>
+              <p className="mt-1 text-xs text-slate-400">{completionRate}% completion rate</p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle size={24} />
@@ -1315,52 +1335,109 @@ export const AdminAnalytics = () => {
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold text-navy-900">Platform Overview</h2>
-          <div className="mt-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Active Users</span>
-              <span className="font-semibold text-emerald-600">{stats.activeUsersToday}</span>
+          <h2 className="text-lg font-semibold text-navy-900">User Activity</h2>
+          <p className="text-sm text-slate-500 mb-4">Track engagement and growth</p>
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-sm text-slate-600">Active Users Today</span>
+                  <p className="text-xs text-slate-400">Users who logged in within 24 hours</p>
+                </div>
+                <span className="font-semibold text-emerald-600">{stats.activeUsersToday}</span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-slate-100">
+                <div 
+                  className="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all" 
+                  style={{ width: `${stats.totalClients > 0 ? Math.min((stats.activeUsersToday / stats.totalClients) * 100, 100) : 0}%` }} 
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1">{stats.totalClients > 0 ? Math.round((stats.activeUsersToday / stats.totalClients) * 100) : 0}% of total clients</p>
             </div>
-            <div className="h-2 w-full rounded-full bg-slate-100">
-              <div 
-                className="h-2 rounded-full bg-emerald-500" 
-                style={{ width: `${Math.min((stats.activeUsersToday / stats.totalClients) * 100, 100)}%` }} 
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">New Users This Week</span>
-              <span className="font-semibold text-blue-600">{stats.newUsersThisWeek}</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-slate-100">
-              <div 
-                className="h-2 rounded-full bg-blue-500" 
-                style={{ width: `${Math.min((stats.newUsersThisWeek / stats.totalClients) * 100, 100)}%` }} 
-              />
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-sm text-slate-600">New Users This Week</span>
+                  <p className="text-xs text-slate-400">Users registered in last 7 days</p>
+                </div>
+                <span className="font-semibold text-blue-600">{stats.newUsersThisWeek}</span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-slate-100">
+                <div 
+                  className="h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all" 
+                  style={{ width: `${stats.totalClients > 0 ? Math.min((stats.newUsersThisWeek / stats.totalClients) * 100, 100) : 0}%` }} 
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1">{stats.totalClients > 0 ? Math.round((stats.newUsersThisWeek / stats.totalClients) * 100) : 0}% of total clients</p>
             </div>
           </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold text-navy-900">Specialist Utilization</h2>
-          <div className="mt-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Client to Specialist Ratio</span>
-              <span className="font-semibold text-navy-900">
-                {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0}:1
+          <h2 className="text-lg font-semibold text-navy-900">Specialist Workload</h2>
+          <p className="text-sm text-slate-500 mb-4">Monitor service capacity and distribution</p>
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-sm text-slate-600">Client to Specialist Ratio</span>
+                  <p className="text-xs text-slate-400">Lower is generally better (5:1 recommended)</p>
+                </div>
+                <span className="font-semibold text-navy-900">
+                  {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0}:1
+                </span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-slate-100">
+                <div 
+                  className={`h-3 rounded-full transition-all ${stats.totalSpecialists > 0 && stats.totalClients / stats.totalSpecialists <= 5 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                  style={{ width: `${Math.min((stats.totalClients / (stats.totalSpecialists * 5)) * 100, 100)}%` }} 
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Average Workload</p>
+                <p className="text-xs text-slate-500">Clients per specialist</p>
+              </div>
+              <span className="text-2xl font-bold text-purple-600">
+                {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0}
               </span>
             </div>
-            <div className="h-2 w-full rounded-full bg-slate-100">
-              <div 
-                className="h-2 rounded-full bg-teal-500" 
-                style={{ width: `${Math.min((stats.totalClients / (stats.totalSpecialists * 5)) * 100, 100)}%` }} 
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Average Load</span>
-              <span className="font-semibold text-purple-600">
-                {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0} clients/specialist
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Total Platform Capacity</p>
+                <p className="text-xs text-slate-500">Max clients at 5:1 ratio</p>
+              </div>
+              <span className="text-2xl font-bold text-teal-600">
+                {stats.totalSpecialists * 5}
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <h2 className="text-lg font-semibold text-navy-900">Platform Health Summary</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className={`p-4 rounded-lg ${stats.activeUsersToday > 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}`}>
+            <p className="font-medium text-emerald-700">Engagement Status</p>
+            <p className="text-sm text-emerald-600 mt-1">
+              {stats.activeUsersToday > 0 ? `${Math.round((stats.activeUsersToday / stats.totalClients) * 100)}% of users are active` : 'No users logged in today'}
+            </p>
+          </div>
+          <div className={`p-4 rounded-lg ${stats.pendingRequests < stats.totalRequests * 0.3 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
+            <p className="font-medium text-amber-700">Request Status</p>
+            <p className="text-sm text-amber-600 mt-1">
+              {completionRate > 70 ? `${completionRate}% completion rate - healthy` : 'Request completion needs attention'}
+            </p>
+          </div>
+          <div className={`p-4 rounded-lg ${stats.totalSpecialists > 0 && stats.totalClients / stats.totalSpecialists <= 5 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
+            <p className="font-medium text-teal-700">Capacity Status</p>
+            <p className="text-sm text-teal-600 mt-1">
+              {stats.totalSpecialists > 0 && stats.totalClients / stats.totalSpecialists <= 5 
+                ? 'Good specialist coverage' 
+                : 'Consider adding more specialists'}
+            </p>
           </div>
         </div>
       </div>

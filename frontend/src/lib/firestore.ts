@@ -66,6 +66,10 @@ export type UserProfile = {
   yearsExperience?: number;
   bio?: string;
   specialistInviteVerified?: boolean;
+  subscriptionStartDate?: Date;
+  subscriptionActive?: boolean;
+  subscriptionEndDate?: Date;
+  subscriptionReminderSent?: boolean;
 };
 
 export type Message = {
@@ -337,8 +341,37 @@ export const userService = {
 
   async markUserAsOld(uid: string): Promise<void> {
     const docRef = doc(db, 'users', uid);
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
     await updateDoc(docRef, {
       isNewUser: false,
+      updatedAt: serverTimestamp(),
+      subscriptionStartDate: startDate,
+      subscriptionActive: true,
+      subscriptionEndDate: endDate,
+      subscriptionReminderSent: false,
+    });
+  },
+
+  async activateSubscription(uid: string): Promise<void> {
+    const docRef = doc(db, 'users', uid);
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
+    await updateDoc(docRef, {
+      subscriptionActive: true,
+      subscriptionStartDate: startDate,
+      subscriptionEndDate: endDate,
+      subscriptionReminderSent: false,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  async deactivateSubscription(uid: string): Promise<void> {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      subscriptionActive: false,
       updatedAt: serverTimestamp(),
     });
   },
@@ -353,6 +386,8 @@ export const userService = {
           ...data,
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
+          subscriptionStartDate: data.subscriptionStartDate?.toDate(),
+          subscriptionEndDate: data.subscriptionEndDate?.toDate(),
         } as UserProfile);
       } else {
         callback(null);
@@ -442,16 +477,18 @@ export const messageService = {
     userId: string,
     callback: (messages: Message[]) => void
   ): Unsubscribe {
+    console.log('[FIRESTORE] Setting up message subscription for user:', userId);
     const q = query(
       collection(db, 'messages'),
       where('participants', 'array-contains', userId)
     );
 
     return onSnapshot(q, async (snapshot) => {
+      console.log('[FIRESTORE] Message snapshot received, docs:', snapshot.docs.length, 'changes:', snapshot.docChanges().length);
       const messages = snapshot.docs.map((doc) => mapMessageDoc(doc.id, doc.data()));
 
       const sorted = messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-      
+
       if (ENCRYPT_MESSAGES) {
         const decrypted = await this.decryptMessages(sorted, userId);
         callback(decrypted);
@@ -486,6 +523,7 @@ export const messageService = {
 
   async sendMessage(message: Omit<Message, 'id' | 'createdAt'>): Promise<string> {
     console.log('sendMessage called:', { senderId: message.senderId, receiverId: message.receiverId, text: message.text });
+    console.log('Current user auth:', auth.currentUser?.uid, 'email:', auth.currentUser?.email);
     const sanitizedText = this.sanitizeText(message.text);
     let finalMessage = { ...message, text: sanitizedText };
     let encrypted = false;
@@ -506,7 +544,12 @@ export const messageService = {
       }
     }
 
-    console.log('Adding message to Firestore...', { finalMessage });
+    console.log('Adding message to Firestore...', {
+      senderId: finalMessage.senderId,
+      receiverId: finalMessage.receiverId,
+      participants: [finalMessage.senderId, finalMessage.receiverId],
+      text: finalMessage.text.substring(0, 50) + '...'
+    });
     const docRef = await addDoc(collection(db, 'messages'), {
       ...finalMessage,
       participants: [finalMessage.senderId, finalMessage.receiverId],

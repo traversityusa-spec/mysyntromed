@@ -46,6 +46,11 @@
   }
 }
 
+@keyframes fadeIn {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
 @layer components {
   .section-padding {
     @apply py-16 md:py-24 px-6 md:px-12 max-w-7xl mx-auto;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Calendar, CheckCircle, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -209,9 +210,9 @@ export const SpecialistDashboard = () => {
             <p className="mt-2 text-sm text-navy-200">
               Keep your clients updated. Quick communication prevents delays.
             </p>
-            <button className="mt-4 w-full rounded-lg bg-teal-500 py-2.5 text-sm font-semibold hover:bg-teal-400 transition">
+            <Link to="/specialist/messages" className="mt-4 block w-full rounded-lg bg-teal-500 py-2.5 text-sm font-semibold hover:bg-teal-400 transition text-center">
               Open Messages
-            </button>
+            </Link>
           </div>
         </div>
       </div>

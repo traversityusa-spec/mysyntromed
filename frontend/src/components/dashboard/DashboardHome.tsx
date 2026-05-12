@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Shield,
   User,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useDashboardData, useUserProfile } from '@/lib/dashboard';
@@ -27,6 +28,85 @@ const quickActions = [
   { label: 'Submit Request', icon: Plus, to: '/portal/requests', color: 'bg-teal-50 text-teal-700' },
   { label: 'Urgent Support', icon: AlertTriangle, to: '/portal/requests', color: 'bg-red-50 text-red-700', urgent: true },
 ];
+
+/* ─── Subscription Countdown ────────────────────────────────── */
+const SubscriptionCountdown = () => {
+  const { sessionUser } = useAuth();
+  const [daysLeft, setDaysLeft] = useState<number>(0);
+  const [hoursLeft, setHoursLeft] = useState<number>(0);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      if (!sessionUser?.subscriptionEndDate) return;
+      
+      const now = new Date();
+      const end = new Date(sessionUser.subscriptionEndDate);
+      const diff = end.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setIsExpired(true);
+        setDaysLeft(0);
+        setHoursLeft(0);
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      setDaysLeft(days);
+      setHoursLeft(hours);
+      setIsExpired(false);
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 60000);
+    return () => clearInterval(interval);
+  }, [sessionUser?.subscriptionEndDate]);
+
+  if (!sessionUser?.subscriptionEndDate || sessionUser.role !== 'client') return null;
+
+  if (isExpired) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+            <AlertCircle className="text-red-600" size={20} />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-800">Subscription Expired</p>
+            <p className="text-xs text-red-600">Please contact your administrator to renew your subscription.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isWarning = daysLeft <= 3;
+
+  return (
+    <div className={`rounded-xl border p-4 mb-6 ${isWarning ? 'border-amber-200 bg-amber-50' : 'border-teal-200 bg-teal-50'}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isWarning ? 'bg-amber-100' : 'bg-teal-100'}`}>
+            <Clock className={isWarning ? 'text-amber-600' : 'text-teal-600'} size={20} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Subscription Active</p>
+            <p className="text-xs text-slate-600">
+              {sessionUser.subscriptionStartDate ? `Started ${new Date(sessionUser.subscriptionStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Subscription active'}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className={`text-2xl font-bold ${isWarning ? 'text-amber-600' : 'text-teal-600'}`}>
+            {daysLeft}<span className="text-sm font-normal ml-1">days</span>
+          </p>
+          <p className="text-xs text-slate-500">{hoursLeft}h remaining today</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ------------------------------------------------------------------ */
 /* Client-only dashboard content                                         */
@@ -109,6 +189,7 @@ const ClientDashboardContent = () => {
 
   return (
     <div className="space-y-6">
+      <SubscriptionCountdown />
       {showWelcome && isNewUser && (
         <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-6">
           <div className="flex items-start gap-4">

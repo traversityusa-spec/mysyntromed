@@ -98,6 +98,7 @@ const Messages = () => {
   const lastMessageIdRef = useRef<string | null>(null);
   const initialSoundLoadRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const conversationNameRef = useRef<string>('');
 
   const chatEnabled = sessionUser?.role !== 'client' || !!sessionUser?.assignedSpecialistId;
   const clientPending = sessionUser?.role === 'client' && !sessionUser?.assignedSpecialistId;
@@ -107,7 +108,9 @@ const Messages = () => {
   );
 
   useEffect(() => {
+    console.log('[MESSAGES] Component mounted, user:', user?.uid);
     if (user?.uid) {
+      console.log('[MESSAGES] Initializing socket for user:', user.uid);
       initSocket(user.uid);
     }
   }, [user?.uid]);
@@ -115,9 +118,14 @@ const Messages = () => {
   useEffect(() => {
     const handleNewMessage = (e: CustomEvent<unknown>) => {
       try {
+        console.log('[MESSAGES] NEW MESSAGE EVENT DETECTED:', e.detail);
         const msg = normalizeRealtimeMessage(e.detail);
-        if (!msg) return;
-        console.log('[MESSAGES] Socket message received:', msg);
+        if (!msg) {
+          console.log('[MESSAGES] Message normalization failed, returning early');
+          return;
+        }
+        console.log('[MESSAGES] Normalized message:', msg, 'selectedConversation:', selectedConversation);
+
         setAllMessages((prev) => {
           const exists = prev.some((m) =>
             m.id === msg.id ||
@@ -128,10 +136,16 @@ const Messages = () => {
               Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
             )
           );
-          if (exists) return prev;
+          if (exists) {
+            console.log('[MESSAGES] Message already exists, skipping');
+            return prev;
+          }
+          console.log('[MESSAGES] Adding message to allMessages');
           return [...prev, msg];
         });
+
         if (selectedConversation && (msg.senderId === selectedConversation || msg.receiverId === selectedConversation)) {
+          console.log('[MESSAGES] Message is for current conversation, adding to messages');
           setMessages((prev) => {
             const exists = prev.some((m) =>
               m.id === msg.id ||
@@ -146,40 +160,22 @@ const Messages = () => {
           });
           notificationSoundService.playIncomingSound();
           scrollToBottom();
+        } else {
+          console.log('[MESSAGES] Message is NOT for current conversation, selectedConversation:', selectedConversation, 'msg.senderId:', msg.senderId, 'msg.receiverId:', msg.receiverId);
         }
       } catch (error) {
         console.error('[MESSAGES] Error handling new message:', error);
       }
     };
+    console.log('[MESSAGES] Setting up socket:newMessage listener');
     window.addEventListener('socket:newMessage', handleNewMessage as EventListener);
-    return () => window.removeEventListener('socket:newMessage', handleNewMessage as EventListener);
+    return () => {
+      console.log('[MESSAGES] Removing socket:newMessage listener');
+      window.removeEventListener('socket:newMessage', handleNewMessage as EventListener);
+    };
   }, [selectedConversation]);
 
-  useEffect(() => {
-    const handleTyping = (e: CustomEvent<{ isTyping: boolean; senderName?: string }>) => {
-      const data = e.detail;
-      console.log('[MESSAGES] Typing event received:', data, 'selectedConversation:', selectedConversation);
-      
-      // Only show typing indicator if it's from the selected conversation
-      // We're typing to them, not them to us - don't show our own typing coming back
-      if (!selectedConversation) return;
-      
-      if (data.isTyping) {
-        setIsTyping(true);
-        setTypingUserName(data.senderName || 'User');
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-          setIsTyping(false);
-          setTypingUserName('');
-        }, 5000);
-      } else {
-        setIsTyping(false);
-        setTypingUserName('');
-      }
-    };
-    window.addEventListener('socket:typing', handleTyping as EventListener);
-    return () => window.removeEventListener('socket:typing', handleTyping as EventListener);
-  }, [selectedConversation]);
+
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -403,17 +399,30 @@ const Messages = () => {
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
-    const unsub = typingService.subscribeToTyping(selectedConversation, user.uid, (isTypingVal) => {
+    const profile = profileMap[selectedConversation];
+    conversationNameRef.current = profile?.displayName || profile?.email || 'User';
+  }, [selectedConversation, profileMap]);
+
+  useEffect(() => {
+    if (!user?.uid || !selectedConversation) return;
+    const unsub = typingService.subscribeToTyping(user.uid, selectedConversation, (isTypingVal) => {
       if (isTypingVal) {
         setIsTyping(true);
+        setTypingUserName(conversationNameRef.current);
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 5000);
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+          setTypingUserName('');
+        }, 5000);
       } else {
         setIsTyping(false);
+        setTypingUserName('');
       }
     });
     return () => unsub();
   }, [user?.uid, selectedConversation]);
+
+
 
   useEffect(() => {
     const ids = conversationIdsKey ? conversationIdsKey.split('|') : [];
@@ -463,21 +472,36 @@ const Messages = () => {
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
+
     console.log('=== SEND MESSAGE DEBUG ===');
     console.log('newMessage:', newMessage.trim());
     console.log('user?.uid:', user?.uid);
     console.log('selectedConversation:', selectedConversation);
-    console.log('sessionUser?.assignedSpecialistId:', sessionUser?.assignedSpecialistId);
     console.log('chatEnabled:', chatEnabled);
     console.log('sending:', sending);
     console.log('=========================');
-    
-    if (!newMessage.trim() || !user?.uid || sending || !selectedConversation) {
-      console.log('Early return: missing required fields');
+
+    if (!newMessage.trim()) {
+      console.log('Early return: empty message');
+      return;
+    }
+    if (!user?.uid) {
+      console.log('Early return: no user');
+      alert('Please log in to send messages');
+      return;
+    }
+    if (sending) {
+      console.log('Early return: already sending');
+      return;
+    }
+    if (!selectedConversation) {
+      console.log('Early return: no selected conversation');
+      alert('Please select a conversation first');
       return;
     }
     if (!chatEnabled) {
       console.log('Chat is not enabled - cannot send');
+      alert('Chat is not enabled. Please wait for specialist assignment.');
       return;
     }
 
@@ -485,16 +509,11 @@ const Messages = () => {
     const receiverId = selectedConversation;
     const senderName = sessionUser?.displayName || user?.email?.split('@')[0] || 'User';
     const senderRole = sessionUser?.role || 'client';
+    const messageText = newMessage.trim();
 
-    console.log('Attempting to send message...', {
-      senderId: user.uid,
-      receiverId,
-      senderName,
-      senderRole
-    });
+    console.log('[MESSAGES] Step 1: Saving message to Firestore...');
 
     try {
-      const messageText = newMessage.trim();
       const messageId = await messageService.sendMessage({
         senderId: user.uid,
         senderName,
@@ -506,6 +525,10 @@ const Messages = () => {
         status: 'sent',
       });
 
+      console.log('[MESSAGES] Step 2: Message saved to Firestore, ID:', messageId);
+
+      // Socket emit (non-blocking, just for real-time)
+      console.log('[MESSAGES] Step 3: Emitting via socket...');
       emitMessage(receiverId, {
         id: messageId,
         senderId: user.uid,
@@ -518,13 +541,15 @@ const Messages = () => {
         status: 'sent',
         createdAt: new Date().toISOString(),
       });
+      console.log('[MESSAGES] Step 4: Socket emit complete');
 
       notificationSoundService.playOutgoingSound();
       typingService.setTyping(user.uid, receiverId, false);
       setNewMessage('');
-      console.log('Message sent successfully!');
+      console.log('[MESSAGES] SUCCESS: Message sent!');
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('[MESSAGES] ERROR sending message:', error);
+      alert('Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
@@ -640,7 +665,13 @@ const Messages = () => {
         <div className="border-b border-slate-100 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-navy-900">Messages</h2>
+              <div>
+                <h2 className="text-xl font-bold text-navy-900">Messages</h2>
+                <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Online
+                </span>
+              </div>
               <div className="flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700">
                 <Lock size={10} />
                 E2E Encrypted
@@ -960,11 +991,11 @@ const Messages = () => {
                     </div>
                     <div className="bg-white text-slate-900 rounded-2xl rounded-bl-none px-4 py-2 shadow-sm flex items-center gap-2 border border-slate-100">
                       <div className="flex gap-1">
-                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce [animation-delay:-0.3s]" />
-                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce [animation-delay:-0.15s]" />
-                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-[fadeIn_1.4s_ease-in-out_infinite]" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-[fadeIn_1.4s_ease-in-out_infinite_0.2s]" />
+                        <div className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-[fadeIn_1.4s_ease-in-out_infinite_0.4s]" />
                       </div>
-                      <span className="text-[11px] font-semibold text-teal-600 italic">
+                      <span className="text-[11px] font-semibold text-teal-600">
                         {typingUserName || currentConversation.name} is typing...
                       </span>
                     </div>

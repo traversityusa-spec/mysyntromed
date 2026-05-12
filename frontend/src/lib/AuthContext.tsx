@@ -31,6 +31,10 @@ export type SessionUser = {
   specialties?: string[];
   yearsExperience?: number;
   bio?: string;
+  subscriptionStartDate?: Date;
+  subscriptionActive?: boolean;
+  subscriptionEndDate?: Date;
+  subscriptionReminderSent?: boolean;
 };
 
 type AuthContextType = {
@@ -80,6 +84,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       specialties: data?.specialties || [],
       yearsExperience: data?.yearsExperience,
       bio: data?.bio,
+      subscriptionStartDate: data?.subscriptionStartDate?.toDate(),
+      subscriptionActive: data?.subscriptionActive ?? true,
+      subscriptionEndDate: data?.subscriptionEndDate?.toDate(),
+      subscriptionReminderSent: data?.subscriptionReminderSent ?? false,
     };
   };
 
@@ -139,6 +147,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       try {
         const profile = await buildSessionUser(nextUser);
+        
+        if (profile.role === 'client' && profile.subscriptionEndDate) {
+          const now = new Date();
+          if (profile.subscriptionEndDate < now) {
+            const { updateDoc, doc } = await import('firebase/firestore');
+            await updateDoc(doc(db, 'users', nextUser.uid), {
+              subscriptionActive: false,
+              updatedAt: serverTimestamp(),
+            });
+            await signOut(auth);
+            setSessionUser(null);
+            setLoading(false);
+            return;
+          }
+        }
+        
         setSessionUser(profile);
       } catch {
         setSessionUser(null);

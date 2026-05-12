@@ -20,9 +20,18 @@ const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: frontendOrigin,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.some(allowed => origin === allowed || origin.includes('.railway.app') || origin.includes('.onrender.com'))) {
+        return callback(null, true);
+      }
+      callback(new Error('Socket CORS policy: Origin not allowed'));
+    },
     credentials: true,
-  }
+    methods: ['GET', 'POST'],
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 app.disable('x-powered-by');
@@ -236,6 +245,84 @@ app.use('/api/contact', contactLimiter, contactRoutes);
 app.use('/api/messages', authLimiter, messageRoutes);
 app.use('/api/requests', authLimiter, requestRoutes);
 
+// Subscription management endpoint
+app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedRequest, res) => {
+  const userId = req.user?.uid;
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'User not authenticated' });
+  }
+  
+  try {
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    
+    if (!userDoc.exists || !userData) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (userData.role !== 'specialist' && userData.role !== 'admin') {
+      return res.status(403).json({ error: 'Only specialists and admins can send reminders' });
+    }
+
+    const clientId = req.body.clientId;
+    if (!clientId) {
+      return res.status(400).json({ error: 'Client ID is required' });
+    }
+
+    const clientDoc = await admin.firestore().collection('users').doc(clientId).get();
+    const clientData = clientDoc.data();
+
+    if (!clientDoc.exists || clientData?.role !== 'client') {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    if (!clientData?.subscriptionEndDate || !clientData?.subscriptionActive) {
+      return res.status(400).json({ error: 'Client does not have an active subscription' });
+    }
+
+    const expiryDate = clientData.subscriptionEndDate.toDate();
+    const now = new Date();
+    const daysLeft = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysLeft > 7) {
+      return res.status(400).json({ error: 'Subscription reminder can only be sent within 7 days of expiry' });
+    }
+
+    const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+    
+    const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
+    const serviceKey = process.env.EMAIL_SERVICE_KEY;
+
+    const emailResponse = await fetch(`${emailServerUrl}/send-subscription-reminder`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        email: clientData.email,
+        displayName: clientData.displayName || 'Valued Client',
+        daysLeft,
+        expiryDate: expiryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        loginUrl,
+      }),
+    });
+
+    if (emailResponse.ok) {
+      await admin.firestore().collection('users').doc(clientId).update({
+        subscriptionReminderSent: true,
+      });
+      return res.json({ success: true, message: 'Subscription reminder sent successfully' });
+    } else {
+      throw new Error('Email server returned error');
+    }
+  } catch (error) {
+    console.error('[SUBSCRIPTION] Error sending reminder:', error);
+    return res.status(500).json({ error: 'Failed to send subscription reminder' });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
@@ -257,8 +344,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sendMessage', (data: { to: string; message: unknown }) => {
-    console.log('[SOCKET] Sending message to:', data.to);
+    console.log('[SOCKET] ========== SEND MESSAGE ==========');
+    console.log('[SOCKET] From socket ID:', socket.id);
+    console.log('[SOCKET] Target user ID:', data.to);
+    console.log('[SOCKET] Message:', JSON.stringify(data.message, null, 2));
+    console.log('[SOCKET] Room exists:', io.sockets.adapter.rooms.has(`user:${data.to}`));
     io.to(`user:${data.to}`).emit('newMessage', data.message);
+    console.log('[SOCKET] Emit complete for user:', data.to);
+    console.log('[SOCKET] =================================');
   });
 
   socket.on('typing', (data: { to: string; isTyping: boolean; senderName?: string; senderId?: string }) => {

@@ -398,3 +398,121 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Send subscription reminder endpoint
+app.post('/send-subscription-reminder', authenticateRequest, async (req, res) => {
+  const { email, displayName, daysLeft, expiryDate, loginUrl } = req.body;
+
+  if (!email || !displayName || daysLeft === undefined || !expiryDate || !loginUrl) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+
+  const sanitizedName = sanitize(displayName);
+  const sanitizedUrl = normalizeBaseUrl(loginUrl);
+  const isUrgent = daysLeft <= 3;
+
+  const rawFrom = (process.env.SMTP_FROM || '').trim();
+  let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
+
+  if (rawFrom) {
+    if (rawFrom.includes('<') && rawFrom.includes('>')) {
+      fromAddress = rawFrom;
+    } else {
+      fromAddress = `MySyntroMed <${rawFrom}>`;
+    }
+  }
+
+  const logoBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4xLWMwMDAgNzkuYTg3MzFiOSwgMjAyMS8wOS8wOS0wMDozNzozOCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjAgKFdpbmRvd3MpIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjEyMzQ1Njc4LTEyMzQtMTIzNC0xMjM0LTEyMzQ1Njc4OTBhYiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDoxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDoxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDoxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz4B//79/Pv6+fj39vX08/Lx8O/u7ezr6uno5+bl5OPi4eDf3t3c29rZ2NfW1dTT0tHQz87NzMvKycjHxsXEw8LBwL++vby7urm4t7a1tLOysbCvrq2sq6qpqKempaSjoqGgn56dnJuamZiXlpWUk5KRkI+OjYyLiomIh4aFhIOCgYB/fn18e3p5eHd2dXRzcnFwb25tbGtqaWhnZmVkY2JhYF9eXVxbWllYV1ZVVFNSUVBPTk1MS0pJSEdGRURDQkFAPz49PDs6OTg3NjU0MzIxMC8uLSwrKikoJyYlJCMiISAfHh0cGxoZGBcWFRQTEhEQDw4NDAsKCQgHBgUEAwIBAAAh+QQAAAAAACwAAAAAAQABAAACAkQBADs=';
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscription Reminder - MySyntroMed</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #1e293b; background: #f8fafc; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin: 20px 0; }
+    .logo-container { text-align: center; margin-bottom: 20px; }
+    .logo { font-size: 28px; font-weight: 700; color: #0d9488; }
+    .tagline { color: #64748b; font-size: 14px; margin-top: 4px; }
+    .header { text-align: center; margin-bottom: 30px; }
+    h1 { color: #0f172a; font-size: 24px; margin-bottom: 20px; text-align: center; }
+    .warning-box { background: ${isUrgent ? '#fef2f2' : '#fffbeb'}; border: 2px solid ${isUrgent ? '#ef4444' : '#f59e0b'}; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center; }
+    .days-left { font-size: 48px; font-weight: 700; color: ${isUrgent ? '#dc2626' : '#d97706'}; margin: 16px 0; line-height: 1; }
+    .days-label { font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 2px; margin-top: 8px; }
+    .expiry-info { background: #f1f5f9; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center; }
+    .expiry-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .expiry-value { font-size: 18px; font-weight: 600; color: #0f172a; margin-top: 4px; }
+    .button { display: inline-block; background: ${isUrgent ? '#dc2626' : '#0d9488'}; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px auto; display: block; width: fit-content; }
+    .button:hover { background: ${isUrgent ? '#b91c1c' : '#0f766e'}; }
+    .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px; }
+    .highlight { color: #0d9488; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo-container">
+        <div class="logo">MySyntroMed</div>
+        <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
+      </div>
+
+      <h1>${isUrgent ? '⚠️ Urgent: Subscription Expiring Soon!' : '📅 Subscription Reminder'}</h1>
+      
+      <p style="text-align: center;">Dear <span class="highlight">${sanitizedName}</span>,</p>
+      
+      <p style="text-align: center;">Your MySyntroMed subscription is ${isUrgent ? '<strong>about to expire</strong>' : 'coming to an end'}. Please take action to ensure uninterrupted access to your account.</p>
+
+      <div class="warning-box">
+        <div class="days-left">${daysLeft} ${daysLeft === 1 ? 'Day' : 'Days'}</div>
+        <div class="days-label">Time Remaining</div>
+      </div>
+
+      <div class="expiry-info">
+        <div class="expiry-label">Subscription Expires On</div>
+        <div class="expiry-value">${sanitize(expiryDate)}</div>
+      </div>
+
+      <p style="text-align: center;">After your subscription expires, your account access will be <strong>suspended</strong>. Please contact your administrator to renew your subscription.</p>
+
+      <a href="${sanitizedUrl}" class="button">Contact Administrator</a>
+
+      <p style="text-align: center; font-size: 14px; color: #64748b; margin-top: 24px;">If you have any questions or need immediate assistance, please contact our support team.</p>
+
+      <div class="footer">
+        <p>© ${new Date().getFullYear()} MySyntroMed. All rights reserved.</p>
+        <p style="margin-top: 12px;">
+          <a href="${sanitizedUrl}" style="color: #0d9488;">Visit Website</a> ·
+          <a href="mailto:support@mysyntromed.com" style="color: #0d9488;">Contact Support</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await sendEmail({
+      from: fromAddress,
+      to: email,
+      subject: isUrgent 
+        ? `⚠️ Urgent: MySyntroMed Subscription Expires in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}!` 
+        : `MySyntroMed Subscription Reminder - ${daysLeft} Days Left`,
+      html: htmlContent,
+    });
+
+    console.log('[EMAIL] Subscription reminder sent to:', email, '- Days left:', daysLeft);
+    res.json({ success: true, previewUrl: result.previewUrl || null });
+  } catch (error) {
+    console.error('[EMAIL] Subscription Reminder Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});

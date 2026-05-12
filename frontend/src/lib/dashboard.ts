@@ -237,10 +237,24 @@ export const useUserProfile = () => {
     await refreshSessionUser();
   };
 
+  const activateSubscription = async () => {
+    if (!user?.uid) return;
+    await userService.activateSubscription(user.uid);
+    await refreshSessionUser();
+  };
+
+  const deactivateSubscription = async () => {
+    if (!user?.uid) return;
+    await userService.deactivateSubscription(user.uid);
+    await refreshSessionUser();
+  };
+
   return {
     profile: sessionUser,
     loading,
     updateProfile,
     markAsOldUser,
+    activateSubscription,
+    deactivateSubscription,
   };
 };
