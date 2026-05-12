@@ -461,7 +461,7 @@ export const AdminClients = () => {
               <p>Fetching clients...</p>
             </div>
           ) : filteredClients.length > 0 ? (
-            <div className="overflow-x-auto hidden sm:block">
+            <><div className="overflow-x-auto hidden sm:block">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
@@ -626,7 +626,7 @@ export const AdminClients = () => {
                   </div>
                 </div>
               ))}
-            </div>
+            </div></>
           ) : (
             <div className="p-12 text-center text-slate-500">
               <Search size={32} className="mx-auto mb-3 text-slate-300" />
@@ -852,7 +852,7 @@ export const AdminSpecialists = () => {
               <p>Fetching specialists...</p>
             </div>
           ) : filteredSpecialists.length > 0 ? (
-            <div className="overflow-x-auto hidden sm:block">
+            <><div className="overflow-x-auto hidden sm:block">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
@@ -973,7 +973,7 @@ export const AdminSpecialists = () => {
                   </div>
                 </div>
               ))}
-            </div>
+            </div></>
           ) : (
             <div className="p-12 text-center text-slate-500">
               <Search size={32} className="mx-auto mb-3 text-slate-300" />

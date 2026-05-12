@@ -278,7 +278,7 @@ const Requests = () => {
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
           </div>
         ) : requests && requests.length > 0 ? (
-          <div className="hidden sm:block">
+          <><div className="hidden sm:block">
             <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
@@ -394,6 +394,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
               );
             })}
           </div>
+          </>
         ) : (
           <div className="flex flex-col items-center py-12 text-slate-500">
             <ListTodo size={48} className="mb-4 text-slate-300" />
