@@ -12,6 +12,7 @@ import {
   updateDoc,
   setDoc,
   serverTimestamp,
+  arrayUnion,
   type DocumentData,
   type QuerySnapshot,
   type Unsubscribe,
@@ -116,6 +117,13 @@ export type ConversationKey = {
   createdBy: string;
 };
 
+export type StatusEntry = {
+  status: 'pending' | 'in_progress' | 'completed';
+  timestamp: Date;
+  changedBy?: string;
+  changedByName?: string;
+};
+
 export type Request = {
   id: string;
   userId: string;
@@ -132,6 +140,7 @@ export type Request = {
   clientEmail?: string;
   seen?: boolean;
   assignmentRequestId?: string;
+  statusHistory?: StatusEntry[];
 };
 
 export type ActivityItem = {
@@ -653,13 +662,21 @@ export const requestService = {
       );
       const snapshot = await getDocs(q);
       return snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-          completedAt: doc.data().completedAt?.toDate(),
-          seen: doc.data().seen || false,
-        }))
+        .map((doc) => {
+          const data = doc.data();
+          const history = (data.statusHistory || []).map((e: any) => ({
+            ...e,
+            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          }));
+          return {
+            id: doc.id,
+            ...data,
+            statusHistory: history,
+            submittedAt: data.submittedAt?.toDate() || new Date(),
+            completedAt: data.completedAt?.toDate(),
+            seen: data.seen || false,
+          };
+        })
         .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
     } catch (error) {
       console.error('Error fetching requests:', error);
@@ -681,6 +698,11 @@ export const requestService = {
       status: 'pending',
       seen: false,
       submittedAt: serverTimestamp(),
+      statusHistory: [{
+        status: 'pending',
+        timestamp: serverTimestamp(),
+        changedByName: request.clientName || 'Client',
+      }],
     });
 
     try {
@@ -742,14 +764,22 @@ export const requestService = {
       );
       const snapshot = await getDocs(q);
       return snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-          completedAt: doc.data().completedAt?.toDate(),
-          assignedAt: doc.data().assignedAt?.toDate?.(),
-          seen: doc.data().seen || false,
-        }))
+        .map((doc) => {
+          const data = doc.data();
+          const history = (data.statusHistory || []).map((e: any) => ({
+            ...e,
+            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          }));
+          return {
+            id: doc.id,
+            ...data,
+            statusHistory: history,
+            submittedAt: data.submittedAt?.toDate() || new Date(),
+            completedAt: data.completedAt?.toDate(),
+            assignedAt: data.assignedAt?.toDate?.(),
+            seen: data.seen || false,
+          };
+        })
         .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
     } catch (error) {
       console.error('Error fetching requests for specialist:', error);
@@ -760,22 +790,63 @@ export const requestService = {
   async getAllRequests(): Promise<Request[]> {
     const q = query(collection(db, 'requests'), orderBy('submittedAt', 'desc'), limit(100));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-      completedAt: doc.data().completedAt?.toDate(),
-      assignedAt: doc.data().assignedAt?.toDate?.(),
-      seen: doc.data().seen || false,
-    })) as Request[];
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+      const history = (data.statusHistory || []).map((e: any) => ({
+        ...e,
+        timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+      }));
+      return {
+        id: doc.id,
+        ...data,
+        statusHistory: history,
+        submittedAt: data.submittedAt?.toDate() || new Date(),
+        completedAt: data.completedAt?.toDate(),
+        assignedAt: data.assignedAt?.toDate?.(),
+        seen: data.seen || false,
+      };
+    }) as Request[];
   },
 
-  async updateRequestStatus(requestId: string, status: 'pending' | 'in_progress' | 'completed'): Promise<void> {
-    const data: any = { status };
+  async updateRequestStatus(requestId: string, status: 'pending' | 'in_progress' | 'completed', changedBy?: string, changedByName?: string): Promise<void> {
+    const now = new Date();
+    const entry: StatusEntry = { status, timestamp: now, changedBy, changedByName };
+    const data: any = {
+      status,
+      statusHistory: arrayUnion(entry),
+    };
     if (status === 'completed') {
       data.completedAt = serverTimestamp();
     }
     await updateDoc(doc(db, 'requests', requestId), data);
+
+    try {
+      const requestSnap = await getDoc(doc(db, 'requests', requestId));
+      const request = requestSnap.data();
+      if (request) {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          fetch(`${API_BASE_URL}/api/requests/notify-status-change`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              requestId,
+              requestType: request.type,
+              status,
+              changedByName: changedByName || 'System',
+              clientName: request.clientName,
+              clientEmail: request.clientEmail,
+              specialistName: request.specialistName,
+              specialistId: request.specialistId,
+              userId: request.userId,
+              loginUrl: window.location.origin,
+            }),
+          }).catch((e) => console.error('Failed to send status email:', e));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to notify status change:', e);
+    }
   },
 
   async assignSpecialistToRequest(requestId: string, specialistId: string, specialistName: string): Promise<void> {
@@ -822,14 +893,22 @@ export const requestService = {
 
     return onSnapshot(q, (snapshot) => {
       const requests = snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-          completedAt: doc.data().completedAt?.toDate(),
-          assignedAt: doc.data().assignedAt?.toDate?.(),
-          seen: doc.data().seen || false,
-        })) as Request[];
+        .map((doc) => {
+          const data = doc.data();
+          const history = (data.statusHistory || []).map((e: any) => ({
+            ...e,
+            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          }));
+          return {
+            id: doc.id,
+            ...data,
+            statusHistory: history,
+            submittedAt: data.submittedAt?.toDate() || new Date(),
+            completedAt: data.completedAt?.toDate(),
+            assignedAt: data.assignedAt?.toDate?.(),
+            seen: data.seen || false,
+          };
+        }) as Request[];
       callback(requests);
     });
   },
@@ -842,14 +921,22 @@ export const requestService = {
 
     return onSnapshot(q, (snapshot) => {
       const requests = snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-          completedAt: doc.data().completedAt?.toDate(),
-          assignedAt: doc.data().assignedAt?.toDate?.(),
-          seen: doc.data().seen || false,
-        }))
+        .map((doc) => {
+          const data = doc.data();
+          const history = (data.statusHistory || []).map((e: any) => ({
+            ...e,
+            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          }));
+          return {
+            id: doc.id,
+            ...data,
+            statusHistory: history,
+            submittedAt: data.submittedAt?.toDate() || new Date(),
+            completedAt: data.completedAt?.toDate(),
+            assignedAt: data.assignedAt?.toDate?.(),
+            seen: data.seen || false,
+          };
+        })
         .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
       callback(requests);
     });
@@ -863,14 +950,22 @@ export const requestService = {
 
     return onSnapshot(q, (snapshot) => {
       const requests = snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-          completedAt: doc.data().completedAt?.toDate(),
-          assignedAt: doc.data().assignedAt?.toDate?.(),
-          seen: doc.data().seen || false,
-        }))
+        .map((doc) => {
+          const data = doc.data();
+          const history = (data.statusHistory || []).map((e: any) => ({
+            ...e,
+            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          }));
+          return {
+            id: doc.id,
+            ...data,
+            statusHistory: history,
+            submittedAt: data.submittedAt?.toDate() || new Date(),
+            completedAt: data.completedAt?.toDate(),
+            assignedAt: data.assignedAt?.toDate?.(),
+            seen: data.seen || false,
+          };
+        })
         .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
       callback(requests);
     });

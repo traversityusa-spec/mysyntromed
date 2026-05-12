@@ -58,7 +58,7 @@ const Requests = () => {
 
   const handleStatusChange = async (requestId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
     try {
-      await requestService.updateRequestStatus(requestId, newStatus);
+      await requestService.updateRequestStatus(requestId, newStatus, sessionUser?.uid, sessionUser?.displayName || sessionUser?.email || 'Specialist');
       refreshRequests();
       setSelectedRequest((prev) => prev ? { ...prev, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : prev.completedAt } : null);
     } catch (e) {
@@ -594,6 +594,34 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                   )}
                 </div>
               </div>
+
+              {selectedRequest.statusHistory && selectedRequest.statusHistory.length > 1 && (
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-2 flex items-center gap-1 text-xs font-medium text-slate-500">
+                    <Clock size={12} />
+                    Status History
+                  </div>
+                  <div className="space-y-2">
+                    {selectedRequest.statusHistory.map((entry, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            entry.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            entry.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
+                            {entry.status === 'in_progress' ? 'In Progress' : entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                          </span>
+                          {entry.changedByName && <span className="text-slate-500">by {entry.changedByName}</span>}
+                        </div>
+                        <span className="text-slate-400">
+                          {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-lg border border-slate-200 p-4">
                 <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
