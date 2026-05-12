@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, MessageSquare } from 'lucide-react';
+import { X, MessageSquare, ClipboardList, Bell } from 'lucide-react';
 
 type ToastType = 'message' | 'request' | 'system';
 
@@ -54,8 +54,8 @@ export const ToastContainer = () => {
           key={toast.id}
           className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-lg animate-in slide-in-from-right duration-300"
         >
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100">
-            <MessageSquare size={16} className="text-teal-600" />
+          <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${toast.type === 'request' ? 'bg-amber-100' : toast.type === 'system' ? 'bg-blue-100' : 'bg-teal-100'}`}>
+            {toast.type === 'request' ? <ClipboardList size={16} className="text-amber-600" /> : toast.type === 'system' ? <Bell size={16} className="text-blue-600" /> : <MessageSquare size={16} className="text-teal-600" />}
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-slate-900">{toast.title}</p>

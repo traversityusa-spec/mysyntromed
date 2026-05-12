@@ -6,6 +6,7 @@ import {
   ChartBar,
   Check,
   ChevronLeft,
+  ClipboardList,
   Home,
   List,
   LogOut,
@@ -170,11 +171,18 @@ const markAllRead = () => {
     notificationService.markAllRead(user.uid).catch(() => {});
   };
 
-  const handleNotificationClick = (notificationId: string, read: boolean) => {
+  const handleNotificationClick = (notificationId: string, read: boolean, type?: string) => {
     if (!read) {
       notificationService.markNotificationRead(notificationId).catch(() => {});
     }
     setShowNotifications(false);
+    if (type === 'message') {
+      navigate(`${basePath}/messages`);
+    } else if (type === 'request' || type === 'assignment') {
+      navigate(`${basePath}/requests`);
+    } else {
+      navigate(`${basePath}/dashboard`);
+    }
   };
 
   const handleLogout = async () => {
@@ -312,14 +320,14 @@ const markAllRead = () => {
                         notifications.map((notification) => (
                           <div
                             key={notification.id}
-                            onClick={() => handleNotificationClick(notification.id, notification.read)}
+                            onClick={() => handleNotificationClick(notification.id, notification.read, notification.type)}
                             className={`cursor-pointer border-b border-slate-100 p-4 hover:bg-slate-50 ${
                               !notification.read ? 'bg-teal-50' : ''
                             }`}
                           >
                             <div className="flex items-start gap-3">
-                              <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-100">
-                                <Bell size={14} className="text-teal-600" />
+                              <div className={`mt-1 flex h-8 w-8 items-center justify-center rounded-full ${notification.type === 'request' ? 'bg-amber-100' : notification.type === 'system' ? 'bg-blue-100' : 'bg-teal-100'}`}>
+                                {notification.type === 'request' ? <ClipboardList size={14} className="text-amber-600" /> : notification.type === 'system' ? <Bell size={14} className="text-blue-600" /> : <Bell size={14} className="text-teal-600" />}
                               </div>
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-slate-900">{notification.title}</p>
