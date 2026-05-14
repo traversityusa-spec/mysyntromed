@@ -1,4 +1,4 @@
-const LOGO_FILENAME = 'MySyntroMed-Logo-L2-Aqua.png';
+const PUBLIC_LOGO_URL = 'https://raw.githubusercontent.com/Tomladsolutions/MySyntroMed/main/frontend/public/MySyntroMed-Logo-L2-Aqua.png';
 
 const getLogoUrl = (baseUrl?: string): string => {
   const envUrl = process.env.LOGO_URL;
@@ -7,8 +7,8 @@ const getLogoUrl = (baseUrl?: string): string => {
   const emailServerUrl = process.env.EMAIL_SERVER_URL;
   if (emailServerUrl) return `${emailServerUrl.replace(/\/+$/, '')}/logo.png`;
 
-  if (baseUrl) return `${baseUrl.replace(/\/+$/, '')}/${LOGO_FILENAME}`;
-  return `https://mysyntromed.com/${LOGO_FILENAME}`;
+  if (baseUrl) return `${baseUrl.replace(/\/+$/, '')}/MySyntroMed-Logo-L2-Aqua.png`;
+  return PUBLIC_LOGO_URL;
 };
 
 export const getLogoHTML = (baseUrl?: string): string =>

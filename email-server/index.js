@@ -108,7 +108,8 @@ const sanitize = (str) => {
 
 const normalizeBaseUrl = (url) => sanitize(url).replace(/\/+$/, '');
 
-const logoUrl = () => process.env.LOGO_URL || `http://localhost:${process.env.PORT || 3002}/logo.png`;
+const PUBLIC_LOGO_URL = 'https://raw.githubusercontent.com/Tomladsolutions/MySyntroMed/main/frontend/public/MySyntroMed-Logo-L2-Aqua.png';
+const logoUrl = () => process.env.LOGO_URL || PUBLIC_LOGO_URL;
 
 const dashboardPathForRole = (role, section = 'dashboard') => {
   if (role === 'admin') return `/admin/${section}`;
