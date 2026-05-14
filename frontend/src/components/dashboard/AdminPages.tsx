@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc } from 'firebase/firestore';
+import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { db, activityService } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
 import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList } from 'lucide-react';
@@ -1374,25 +1374,32 @@ export const AdminAnalytics = () => {
         const idToken = await authUser?.getIdToken();
         if (!idToken) return;
 
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
-          headers: { 'Authorization': `Bearer ${idToken}` }
-        });
-        const data = await response.json();
+        const [usersRes, allRequests, allMessages] = await Promise.all([
+          fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          }),
+          getDocs(collection(db, 'requests')),
+          getDocs(collection(db, 'messages')),
+        ]);
+
+        const data = await usersRes.json();
 
         if (data.users) {
           const clients = data.users.filter((u: any) => u.role === 'client');
           const specialists = data.users.filter((u: any) => u.role === 'specialist');
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           const weekAgo = new Date();
           weekAgo.setDate(weekAgo.getDate() - 7);
 
           setStats({
             totalClients: clients.length,
             totalSpecialists: specialists.length,
-            totalMessages: 0,
-            totalRequests: 0,
-            pendingRequests: 0,
-            completedRequests: 0,
-            activeUsersToday: clients.filter((c: any) => !c.disabled).length,
+            totalMessages: allMessages.size,
+            totalRequests: allRequests.size,
+            pendingRequests: allRequests.docs.filter(d => d.data().status === 'pending' || d.data().status === 'in_progress').length,
+            completedRequests: allRequests.docs.filter(d => d.data().status === 'completed').length,
+            activeUsersToday: clients.filter((c: any) => c.lastLoginAt && new Date(c.lastLoginAt) >= today).length,
             newUsersThisWeek: clients.filter((c: any) => c.createdAt && new Date(c.createdAt) > weekAgo).length,
           });
         }
