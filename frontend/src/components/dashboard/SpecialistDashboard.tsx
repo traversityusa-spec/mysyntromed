@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus } from 'lucide-react';
+import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus, X } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -9,7 +9,7 @@ import type { Request, UserProfile, AppNotification } from '@/lib/firestore';
 import { DateTimeDisplay } from '@/lib/datetime';
 
 export const SpecialistDashboard = () => {
-  const { sessionUser } = useAuth();
+  const { sessionUser, showWelcomeBack, welcomeBackData, clearWelcomeBack } = useAuth();
   const [requests, setRequests] = useState<Request[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +97,35 @@ export const SpecialistDashboard = () => {
                 {!notif.read && <span className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      {showWelcomeBack && (
+        <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100">
+                <RefreshCw className="h-5 w-5 text-teal-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-teal-900">
+                  {welcomeBackData.isReturning
+                    ? `Welcome back, ${welcomeBackData.displayName}!`
+                    : `Welcome, ${welcomeBackData.displayName}!`}
+                </p>
+                <p className="text-sm text-teal-700">
+                  {welcomeBackData.isReturning
+                    ? 'Great to see you again. Here\'s your specialist overview.'
+                    : 'Your specialist dashboard is ready.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={clearWelcomeBack}
+              className="rounded-lg p-1.5 text-teal-600 hover:bg-teal-200/50 transition"
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
       )}

@@ -252,6 +252,7 @@ export const AdminClients = () => {
   const [specialists, setSpecialists] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -261,7 +262,7 @@ export const AdminClients = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const idToken = await authUser?.getIdToken();
+      const idToken = await authUser?.getIdToken(true);
       if (!idToken) return;
 
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
@@ -269,6 +270,12 @@ export const AdminClients = () => {
           'Authorization': `Bearer ${idToken}`
         }
       });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+        setFetchError(err.error || `Server error (${response.status})`);
+        return;
+      }
+      setFetchError(null);
       const data = await response.json();
       if (data.users) {
         const mapUser = (u: any) => ({
@@ -288,8 +295,9 @@ export const AdminClients = () => {
         setClients(allUsers.filter((u: any) => u.role === 'client').sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
         setSpecialists(allUsers.filter((u: any) => u.role === 'specialist').sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error fetching admin data:', e);
+      setFetchError(e.message || 'Failed to connect to server');
     } finally {
       setLoading(false);
     }
@@ -420,6 +428,12 @@ export const AdminClients = () => {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
           <CheckCircle size={16} className="text-emerald-600" />
           {successMessage}
+        </div>
+      )}
+      {fetchError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center gap-2">
+          <AlertCircle size={16} className="text-red-600" />
+          {fetchError} — Make sure the backend is running on port 3001
         </div>
       )}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -680,6 +694,7 @@ export const AdminSpecialists = () => {
   const [specialists, setSpecialists] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -698,7 +713,7 @@ export const AdminSpecialists = () => {
 
   const fetchSpecialists = useCallback(async () => {
     try {
-      const idToken = await authUser?.getIdToken();
+      const idToken = await authUser?.getIdToken(true);
       if (!idToken) return;
 
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/admin/users`, {
@@ -706,6 +721,12 @@ export const AdminSpecialists = () => {
           'Authorization': `Bearer ${idToken}`
         }
       });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+        setFetchError(err.error || `Server error (${response.status})`);
+        return;
+      }
+      setFetchError(null);
       const data = await response.json();
       if (data.users) {
         const list = data.users
@@ -721,8 +742,9 @@ export const AdminSpecialists = () => {
           } as UserProfile));
         setSpecialists(list.sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error loading specialists:', e);
+      setFetchError(e.message || 'Failed to connect to server');
     } finally {
       setLoading(false);
     }
@@ -810,6 +832,12 @@ export const AdminSpecialists = () => {
         <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 flex items-center gap-2">
           <CheckCircle size={16} className="text-indigo-600" />
           {successMessage}
+        </div>
+      )}
+      {fetchError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center gap-2">
+          <AlertCircle size={16} className="text-red-600" />
+          {fetchError} — Make sure the backend is running on port 3001
         </div>
       )}
 

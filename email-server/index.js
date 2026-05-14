@@ -166,7 +166,9 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <div class="logo">MySyntroMed</div>
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+    </div>
     <p style="color: #64748b;">Virtual Medical Assistant & Healthcare Support</p>
     
     <h1>Welcome to MySyntroMed, ${sanitizedName}!</h1>
@@ -260,7 +262,9 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <div class="logo">MySyntroMed</div>
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+    </div>
     <p style="color: #64748b;">Virtual Medical Assistant & Healthcare Support</p>
     
     <h2>Hello ${sanitizedReceiver},</h2>
@@ -290,6 +294,40 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
     res.json({ success: true, previewUrl: result.previewUrl || null });
   } catch (error) {
     console.error('[EMAIL] Notification Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Generic send-email endpoint for backend services
+app.post('/send-email', authenticateRequest, async (req, res) => {
+  const { from, to, subject, html } = req.body;
+
+  if (!to || !subject || !html) {
+    return res.status(400).json({ error: 'Missing required fields: to, subject, html' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const recipients = Array.isArray(to) ? to : [to];
+  for (const addr of recipients) {
+    if (!emailRegex.test(addr)) {
+      return res.status(400).json({ error: `Invalid email address: ${addr}` });
+    }
+  }
+
+  const rawFrom = from || process.env.SMTP_FROM || 'MySyntroMed <noreply@mysyntromed.com>';
+
+  try {
+    const result = await sendEmail({
+      from: rawFrom,
+      to: recipients.join(', '),
+      subject,
+      html,
+    });
+
+    console.log(`[EMAIL] Sent via generic endpoint to: ${recipients.join(', ')}`);
+    res.json({ success: true, previewUrl: result.previewUrl || null });
+  } catch (error) {
+    console.error('[EMAIL] Generic send error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -350,7 +388,9 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <div class="logo">MySyntroMed</div>
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+    </div>
     <h1>Your Verification Code</h1>
     <p>Use the following code to verify your email address:</p>
     <div class="code-box">
@@ -411,7 +451,6 @@ app.post('/send-subscription-reminder', authenticateRequest, async (req, res) =>
     }
   }
 
-  const logoBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4xLWMwMDAgNzkuYTg3MzFiOSwgMjAyMS8wOS8wOS0wMDozNzozOCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjAgKFdpbmRvd3MpIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjEyMzQ1Njc4LTEyMzQtMTIzNC0xMjM0LTEyMzQ1Njc4OTBhYiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDoxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDoxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDoxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz4B//79/Pv6+fj39vX08/Lx8O/u7ezr6uno5+bl5OPi4eDf3t3c29rZ2NfW1dTT0tHQz87NzMvKycjHxsXEw8LBwL++vby7urm4t7a1tLOysbCvrq2sq6qpqKempaSjoqGgn56dnJuamZiXlpWUk5KRkI+OjYyLiomIh4aFhIOCgYB/fn18e3p5eHd2dXRzcnFwb25tbGtqaWhnZmVkY2JhYF9eXVxbWllYV1ZVVFNSUVBPTk1MS0pJSEdGRURDQkFAPz49PDs6OTg3NjU0MzIxMC8uLSwrKikoJyYlJCMiISAfHh0cGxoZGBcWFRQTEhEQDw4NDAsKCQgHBgUEAwIBAAAh+QQAAAAAACwAAAAAAQABAAACAkQBADs=';
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -444,10 +483,10 @@ app.post('/send-subscription-reminder', authenticateRequest, async (req, res) =>
 <body>
   <div class="container">
     <div class="card">
-      <div class="logo-container">
-        <div class="logo">MySyntroMed</div>
-        <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
       </div>
+      <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
 
       <h1>${isUrgent ? '⚠️ Urgent: Subscription Expiring Soon!' : '📅 Subscription Reminder'}</h1>
       

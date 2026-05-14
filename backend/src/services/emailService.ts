@@ -1,14 +1,5 @@
-import nodemailer from 'nodemailer';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+import { sendEmailViaServer } from './emailClient.js';
+import { getLogoHTML } from './emailLogo.js';
 
 interface WelcomeEmailParams {
   email: string;
@@ -71,10 +62,10 @@ export const sendWelcomeEmail = async ({
 <body>
   <div class="container">
     <div class="card">
-      <div class="header">
-        <div class="logo">MySyntroMed</div>
-        <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
+      <div style="text-align: center; margin-bottom: 20px;">
+        ${getLogoHTML(baseLoginUrl)}
       </div>
+      <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
 
       <h1>Welcome Aboard, ${displayName}!</h1>
       
@@ -160,29 +151,12 @@ If you have any questions or need assistance getting started, don't hesitate to 
 This email was sent because an admin created your account.
 `;
 
-  const mailOptions = {
+  return sendEmailViaServer({
     from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
     to: email,
     subject: `Welcome to MySyntroMed - Your Account is Ready${role === 'specialist' ? ', Specialist!' : '!'}`,
-    text: textContent,
     html: htmlContent,
-  };
-
-  try {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL SENT] Welcome email sent to ${email}`);
-      return { success: true };
-    } else {
-      console.log(`[EMAIL SIMULATION] Would send to: ${email}`);
-      console.log(`[EMAIL SIMULATION] Subject: Welcome to MySyntroMed - Your Account is Ready!`);
-      console.log(`[EMAIL SIMULATION] SMTP not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env to send real emails.`);
-      return { success: true };
-    }
-  } catch (error: any) {
-    console.error(`[EMAIL ERROR] Failed to send welcome email to ${email}:`, error.message);
-    return { success: false, error: error.message };
-  }
+  });
 };
 
 interface SubscriptionExpiryEmailParams {
@@ -240,9 +214,8 @@ export const sendSubscriptionExpiryEmail = async ({
   <div class="container">
     <div class="card">
       <div class="header">
-        <div class="logo-container">
-          <img src="https://mysyntromed.com/logo.png" alt="MySyntroMed Logo" style="width: 150px; height: auto; margin-bottom: 10px;" onerror="this.style.display='none'">
-          <div class="logo">MySyntroMed</div>
+        <div style="text-align: center; margin-bottom: 20px;">
+          ${getLogoHTML(baseLoginUrl)}
         </div>
         <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
       </div>
@@ -302,31 +275,14 @@ Visit: ${baseLoginUrl}
 © ${new Date().getFullYear()} MySyntroMed. All rights reserved.
 `;
 
-  const mailOptions = {
+  return sendEmailViaServer({
     from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
     to: email,
     subject: isUrgent 
       ? `URGENT: MySyntroMed Subscription Expires in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}!` 
       : `MySyntroMed Subscription Reminder - ${daysLeft} Days Left`,
-    text: textContent,
     html: htmlContent,
-  };
-
-  try {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL SENT] Subscription expiry reminder sent to ${email}`);
-      return { success: true };
-    } else {
-      console.log(`[EMAIL SIMULATION] Would send subscription reminder to: ${email}`);
-      console.log(`[EMAIL SIMULATION] Subject: ${isUrgent ? 'URGENT: Subscription Expires in ' + daysLeft + ' Day' : 'Subscription Reminder - ' + daysLeft + ' Days Left'}`);
-      console.log(`[EMAIL SIMULATION] SMTP not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env to send real emails.`);
-      return { success: true };
-    }
-  } catch (error: any) {
-    console.error(`[EMAIL ERROR] Failed to send subscription expiry email to ${email}:`, error.message);
-    return { success: false, error: error.message };
-  }
+  });
 };
 
 export const sendSubscriptionExpiredEmail = async ({
@@ -363,10 +319,10 @@ export const sendSubscriptionExpiredEmail = async ({
 <body>
   <div class="container">
     <div class="card">
-      <div class="header">
-        <div class="logo">MySyntroMed</div>
-        <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
+      <div style="text-align: center; margin-bottom: 20px;">
+        ${getLogoHTML(baseLoginUrl)}
       </div>
+      <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
 
       <h1>Subscription Expired</h1>
       
@@ -410,26 +366,10 @@ Questions? Contact support@mysyntromed.com
 © ${new Date().getFullYear()} MySyntroMed. All rights reserved.
 `;
 
-  const mailOptions = {
+  return sendEmailViaServer({
     from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
     to: email,
     subject: `MySyntroMed Subscription Expired - Action Required`,
-    text: textContent,
     html: htmlContent,
-  };
-
-  try {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL SENT] Subscription expired notification sent to ${email}`);
-      return { success: true };
-    } else {
-      console.log(`[EMAIL SIMULATION] Would send subscription expired notification to: ${email}`);
-      console.log(`[EMAIL SIMULATION] Subject: MySyntroMed Subscription Expired - Action Required`);
-      return { success: true };
-    }
-  } catch (error: any) {
-    console.error(`[EMAIL ERROR] Failed to send subscription expired email to ${email}:`, error.message);
-    return { success: false, error: error.message };
-  }
+  });
 };

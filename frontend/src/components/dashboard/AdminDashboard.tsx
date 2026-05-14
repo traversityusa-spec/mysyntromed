@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Activity, ArrowUpRight, CheckCircle, Clock, Inbox, Shield, Stethoscope, Users, X, Mail, Phone, Building,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
@@ -158,7 +159,7 @@ const ClientDetailModal = ({ client, onClose }: { client: UserProfile; onClose: 
 
 /* ─── Admin Dashboard ─────────────────────────────────────────── */
 export const AdminDashboard = () => {
-  const { sessionUser } = useAuth();
+  const { sessionUser, showWelcomeBack, welcomeBackData, clearWelcomeBack } = useAuth();
   const [metrics, setMetrics] = useState({ clients: 0, specialists: 0, requests: 0, calls: 0 });
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [clients, setClients] = useState<UserProfile[]>([]);
@@ -175,7 +176,16 @@ export const AdminDashboard = () => {
           getDocs(query(collection(db, 'calls'))),
         ]);
 
-        const users = usersSnap.docs.map(d => d.data() as UserProfile);
+        const users = usersSnap.docs.map(d => {
+          const data = d.data();
+          return {
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+            updatedAt: data.updatedAt?.toDate?.() || new Date(),
+            subscriptionStartDate: data.subscriptionStartDate?.toDate?.(),
+            subscriptionEndDate: data.subscriptionEndDate?.toDate?.(),
+          } as UserProfile;
+        });
         setMetrics({
           clients: users.filter(u => u.role === 'client').length,
           specialists: users.filter(u => u.role === 'specialist').length,
@@ -184,7 +194,7 @@ export const AdminDashboard = () => {
         });
 
         const clientUsers = users.filter(u => u.role === 'client');
-        const sortedClients = clientUsers.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const sortedClients = [...clientUsers].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         setClients(sortedClients);
         if (sortedClients.length > 0) {
           setRecentClient(sortedClients[0]);
@@ -208,6 +218,35 @@ export const AdminDashboard = () => {
   return (
     <div className="space-y-6">
       {selectedClient && <ClientDetailModal client={selectedClient} onClose={() => setSelectedClient(null)} />}
+      {showWelcomeBack && (
+        <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100">
+                <RefreshCw className="h-5 w-5 text-teal-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-teal-900">
+                  {welcomeBackData.isReturning
+                    ? `Welcome back, ${welcomeBackData.displayName}!`
+                    : `Welcome, ${welcomeBackData.displayName}!`}
+                </p>
+                <p className="text-sm text-teal-700">
+                  {welcomeBackData.isReturning
+                    ? 'Great to see you again. Here\'s your admin overview.'
+                    : 'Your admin dashboard is ready.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={clearWelcomeBack}
+              className="rounded-lg p-1.5 text-teal-600 hover:bg-teal-200/50 transition"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

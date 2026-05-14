@@ -58,7 +58,7 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
 };
 
 const Settings = () => {
-  const { user, changePassword, refreshSessionUser } = useAuth();
+  const { user, changePassword, refreshSessionUser, updateSessionField } = useAuth();
   const { profile, loading, updateProfile } = useUserProfile();
   
   const [profileForm, setProfileForm] = useState({
@@ -147,25 +147,27 @@ const Settings = () => {
     const file = e.target.files?.[0];
     if (!file || !user?.uid) return;
 
-    setSaving(true);
-    setSaved(false);
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image must be under 2MB.');
+      return;
+    }
+
+    const localUrl = URL.createObjectURL(file);
+    setProfileForm((prev) => ({ ...prev, photoURL: localUrl }));
+    updateSessionField('photoURL', localUrl);
+
     try {
-      if (file.size > 2 * 1024 * 1024) {
-        throw new Error('Image must be under 2MB.');
-      }
       const fileRef = ref(storage, `profile_photos/${user.uid}/${Date.now()}-${file.name}`);
       await uploadBytes(fileRef, file);
       const url = await getDownloadURL(fileRef);
       setProfileForm((prev) => ({ ...prev, photoURL: url }));
+      updateSessionField('photoURL', url);
       await updateProfile({ photoURL: url });
       await refreshSessionUser();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image. Please ensure Firebase Storage is enabled in your Firebase console.');
     } finally {
-      setSaving(false);
+      URL.revokeObjectURL(localUrl);
     }
   };
 

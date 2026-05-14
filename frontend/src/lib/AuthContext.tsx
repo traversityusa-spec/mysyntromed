@@ -14,7 +14,7 @@ import {
   type MultiFactorResolver,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { inviteCodeService } from './security';
 import { presenceService } from './presence';
@@ -44,6 +44,11 @@ export type SessionUser = {
   };
 };
 
+export type WelcomeBackData = {
+  displayName: string;
+  isReturning: boolean;
+};
+
 type AuthContextType = {
   user: User | null;
   sessionUser: SessionUser | null;
@@ -60,6 +65,10 @@ type AuthContextType = {
   verifyTotpEnrollment: (secret: TotpSecret, totpCode: string, displayName: string) => Promise<void>;
   unenrollTotp: () => Promise<void>;
   isTotpEnrolled: () => boolean;
+  showWelcomeBack: boolean;
+  welcomeBackData: WelcomeBackData;
+  clearWelcomeBack: () => void;
+  updateSessionField: <K extends keyof SessionUser>(field: K, value: SessionUser[K]) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,6 +78,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
+  const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+  const [welcomeBackData, setWelcomeBackData] = useState<WelcomeBackData>({ displayName: '', isReturning: false });
 
   const buildSessionUser = async (firebaseUser: User): Promise<SessionUser> => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -199,7 +210,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const profile = await buildSessionUser(cred.user);
     setSessionUser(profile);
+    setWelcomeBackData({ displayName: profile.displayName, isReturning: false });
+    setShowWelcomeBack(true);
     return profile;
+  };
+
+  const setWelcomeBackFromUser = async (uid: string, displayName: string) => {
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+      const lastLoginAt = userData?.lastLoginAt?.toDate?.() || userData?.lastLoginAt;
+      const isReturning = !!lastLoginAt;
+      setWelcomeBackData({ displayName, isReturning });
+      setShowWelcomeBack(true);
+      await updateDoc(userDocRef, {
+        lastLoginAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Failed to update lastLoginAt:', e);
+    }
   };
 
   const loginWithEmail = async (email: string, password: string): Promise<SessionUser> => {
@@ -207,6 +238,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const profile = await buildSessionUser(cred.user);
       setSessionUser(profile);
+      setWelcomeBackFromUser(cred.user.uid, profile.displayName);
       return profile;
     } catch (error: any) {
       if (error.code === 'auth/multi-factor-auth-required') {
@@ -227,6 +259,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const profile = await buildSessionUser(cred.user);
     setSessionUser(profile);
     setMfaResolver(null);
+    setWelcomeBackFromUser(cred.user.uid, profile.displayName);
     return profile;
   };
 
@@ -272,7 +305,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return mfa.enrolledFactors.some(f => f.factorId === TotpMultiFactorGenerator.FACTOR_ID);
   };
 
+  const clearWelcomeBack = () => {
+    setShowWelcomeBack(false);
+  };
+
+  const updateSessionField = <K extends keyof SessionUser>(field: K, value: SessionUser[K]) => {
+    setSessionUser(prev => prev ? { ...prev, [field]: value } : prev);
+  };
+
   const logout = async () => {
+    setShowWelcomeBack(false);
     await signOut(auth);
   };
 
@@ -305,8 +347,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       verifyTotpEnrollment,
       unenrollTotp,
       isTotpEnrolled,
+      showWelcomeBack,
+      welcomeBackData,
+      clearWelcomeBack,
+      updateSessionField,
     }),
-    [loading, sessionUser, user, mfaResolver]
+    [loading, sessionUser, user, mfaResolver, showWelcomeBack, welcomeBackData]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

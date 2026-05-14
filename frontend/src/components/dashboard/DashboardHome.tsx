@@ -16,6 +16,7 @@ import {
   Shield,
   User,
   AlertCircle,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useDashboardData, useUserProfile } from '@/lib/dashboard';
@@ -114,7 +115,7 @@ const SubscriptionCountdown = () => {
 /* Client-only dashboard content                                         */
 /* ------------------------------------------------------------------ */
 const ClientDashboardContent = () => {
-  const { user, sessionUser } = useAuth();
+  const { user, sessionUser, showWelcomeBack, welcomeBackData, clearWelcomeBack } = useAuth();
   const { stats, activity, activityFilter, setActivityFilter, loading } = useDashboardData();
   const { profile, markAsOldUser } = useUserProfile();
   const [morningPrepStatus, setMorningPrepStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
@@ -193,6 +194,35 @@ const ClientDashboardContent = () => {
   return (
     <div className="space-y-6">
       <SubscriptionCountdown />
+      {showWelcomeBack && (
+        <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100">
+                <RefreshCw className="h-5 w-5 text-teal-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-teal-900">
+                  {welcomeBackData.isReturning
+                    ? `Welcome back, ${welcomeBackData.displayName}!`
+                    : `Welcome, ${welcomeBackData.displayName}!`}
+                </p>
+                <p className="text-sm text-teal-700">
+                  {welcomeBackData.isReturning
+                    ? 'Great to see you again. Here\'s your practice overview.'
+                    : 'Your dashboard is ready. Let\'s get started!'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={clearWelcomeBack}
+              className="rounded-lg p-1.5 text-teal-600 hover:bg-teal-200/50 transition"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
       {showWelcome && isNewUser && (
         <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-6">
           <div className="flex items-start gap-4">

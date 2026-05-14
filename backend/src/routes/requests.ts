@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { sendNewRequestEmailToAdmin } from '../services/requestEmailService.js';
+import { sendNewRequestEmailToAdmin, sendNewRequestEmailToSpecialist } from '../services/requestEmailService.js';
 import { sendStatusChangeEmail } from '../services/statusEmailService.js';
 
 const router = Router();
@@ -12,42 +12,77 @@ router.post('/notify-admin', async (req, res) => {
   }
 
   try {
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@mysyntromed.com';
+    const admin = (await import('../firebaseAdmin.js')).default;
     const baseUrl = loginUrl || 'https://mysyntromed.com';
-    
-    const result = await sendNewRequestEmailToAdmin({
-      adminEmail,
-      clientName: clientName || '',
-      clientEmail: clientEmail || '',
-      requestType: requestType || 'Support',
-      description: description || '',
-      priority: priority || 'normal',
-      loginUrl: baseUrl,
+
+    // Send email to ALL admin users
+    const adminSnap = await admin.firestore().collection('users').where('role', '==', 'admin').get();
+    const emailPromises: Promise<any>[] = [];
+
+    adminSnap.docs.forEach((doc: any) => {
+      const adminData = doc.data();
+      const adminEmail = adminData?.email;
+      if (!adminEmail) return;
+      const prefs = adminData?.notificationPreferences;
+      if (prefs && prefs.emailRequests === false) return;
+
+      emailPromises.push(
+        sendNewRequestEmailToAdmin({
+          adminEmail,
+          clientName: clientName || '',
+          clientEmail: clientEmail || '',
+          requestType: requestType || 'Support',
+          description: description || '',
+          priority: priority || 'normal',
+          loginUrl: baseUrl,
+        })
+      );
     });
 
-    if (!result.success) {
-      console.warn(`[REQUEST EMAIL] Failed to send: ${result.error}`);
+    // To also support ADMIN_EMAIL env var fallback
+    const envAdminEmail = process.env.ADMIN_EMAIL;
+    if (envAdminEmail && !adminSnap.docs.some((d: any) => d.data()?.email === envAdminEmail)) {
+      emailPromises.push(
+        sendNewRequestEmailToAdmin({
+          adminEmail: envAdminEmail,
+          clientName: clientName || '',
+          clientEmail: clientEmail || '',
+          requestType: requestType || 'Support',
+          description: description || '',
+          priority: priority || 'normal',
+          loginUrl: baseUrl,
+        })
+      );
     }
 
+    // Send proper new-request email to assigned specialist
     if (specialistId) {
-      const admin = (await import('../firebaseAdmin.js')).default;
       const userSnap = await admin.firestore().collection('users').doc(specialistId).get();
-      const specialistEmail = userSnap.exists ? userSnap.data()?.email : null;
       const specialistData = userSnap.data();
+      const specialistEmail = specialistData?.email;
       const prefs = specialistData?.notificationPreferences;
       if (specialistEmail && (!prefs || prefs.emailRequests !== false)) {
-        await sendStatusChangeEmail({
-          recipientEmail: specialistEmail,
-          recipientName: specialistName || 'Specialist',
-          role: 'specialist',
-          requestType: requestType || 'Request',
-          oldStatus: '',
-          newStatus: 'pending',
-          changedByName: clientName || 'Client',
-          loginUrl: baseUrl,
-        });
+        emailPromises.push(
+          sendNewRequestEmailToSpecialist({
+            specialistEmail,
+            specialistName: specialistName || specialistData?.displayName || 'Specialist',
+            clientName: clientName || '',
+            clientEmail: clientEmail || '',
+            requestType: requestType || 'Support',
+            description: description || '',
+            priority: priority || 'normal',
+            loginUrl: baseUrl,
+          })
+        );
       }
     }
+
+    const results = await Promise.allSettled(emailPromises);
+    results.forEach((r) => {
+      if (r.status === 'rejected') {
+        console.warn(`[REQUEST EMAIL] Email send failed:`, r.reason);
+      }
+    });
 
     res.json({ success: true });
   } catch (error: any) {

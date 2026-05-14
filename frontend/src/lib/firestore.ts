@@ -23,7 +23,7 @@ import { ref, set, onValue, onDisconnect } from 'firebase/database';
 import { encryption } from './encryption';
 export { db };
 
-const ENCRYPT_MESSAGES = true;
+const ENCRYPT_MESSAGES = false;
 const CONVERSATION_KEYS_COLLECTION = 'conversation_keys';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';

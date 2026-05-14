@@ -1,14 +1,5 @@
-import nodemailer from 'nodemailer';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+import { sendEmailViaServer } from './emailClient.js';
+import { getLogoHTML } from './emailLogo.js';
 
 interface ContactFormData {
   fullName: string;
@@ -60,6 +51,10 @@ export const sendContactFormEmail = async (data: ContactFormData): Promise<{ suc
       <div class="header">
         <h1>📬 New Contact Form Submission</h1>
         <p>Someone is interested in MySyntroMed services</p>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+        ${getLogoHTML()}
       </div>
 
       <div class="field">
@@ -183,20 +178,50 @@ This is an automated message. Please do not reply directly to this email.
   };
 
   try {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL SENT] Contact form notification sent to ${companyEmail}`);
-      
-      await transporter.sendMail(autoReplyOptions);
-      console.log(`[EMAIL SENT] Auto-reply sent to ${email}`);
-      
-      return { success: true };
-    } else {
-      console.log(`[EMAIL SIMULATION] Would send contact notification to: ${companyEmail}`);
-      console.log(`[EMAIL SIMULATION] Would send auto-reply to: ${email}`);
-      console.log(`[EMAIL SIMULATION] SMTP not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env to send real emails.`);
-      return { success: true };
-    }
+    const results = await Promise.allSettled([
+      sendEmailViaServer({
+        from: process.env.SMTP_FROM || `"MySyntroMed Website" <noreply@mysyntromed.com>`,
+        to: companyEmail,
+        subject: `New Inquiry from ${fullName} - ${practiceName}`,
+        html: htmlContent,
+      }),
+      sendEmailViaServer({
+        from: process.env.SMTP_FROM || `"MySyntroMed" <noreply@mysyntromed.com>`,
+        to: email,
+        subject: `Thank you for contacting MySyntroMed, ${fullName}!`,
+        html: `<div style="font-family: 'Segoe UI', sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            ${getLogoHTML()}
+          </div>
+          <p style="margin-bottom: 16px;">Dear ${fullName},</p>
+          <p style="margin-bottom: 16px;">Thank you for reaching out to MySyntroMed!</p>
+          <p style="margin-bottom: 16px;">We have received your inquiry and our team will review your message. We typically respond within 24 hours during business days.</p>
+          <p style="margin-bottom: 16px;"><strong>Here's a summary of your inquiry:</strong></p>
+          <ul style="margin-bottom: 16px;">
+            <li>Service(s) of Interest: ${serviceInterest || 'Not specified'}</li>
+            <li>Practice: ${practiceName}</li>
+          </ul>
+          <p style="margin-bottom: 16px;"><strong>What to expect next:</strong></p>
+          <ol style="margin-bottom: 16px;">
+            <li>Our team will review your inquiry and prepare a personalized response</li>
+            <li>You will receive a follow-up email with more information</li>
+            <li>If you'd like a consultation, we'll schedule a time that works for you</li>
+          </ol>
+          <p style="margin-bottom: 16px;">In the meantime, feel free to learn more about our services at <a href="https://mysyntromed.com" style="color: #0d9488;">mysyntromed.com</a></p>
+          <p style="margin-bottom: 16px;">Best regards,<br>The MySyntroMed Team</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+          <p style="font-size: 12px; color: #64748b;">This is an automated message. Please do not reply directly to this email.</p>
+        </div>`,
+      }),
+    ]);
+
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(`[EMAIL] Contact email ${i} failed:`, r.reason);
+      }
+    });
+
+    return { success: true };
   } catch (error: any) {
     console.error(`[EMAIL ERROR] Failed to send contact form email:`, error.message);
     return { success: false, error: error.message };

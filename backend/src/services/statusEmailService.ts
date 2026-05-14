@@ -1,14 +1,5 @@
-import nodemailer from 'nodemailer';
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+import { sendEmailViaServer } from './emailClient.js';
+import { getLogoHTML } from './emailLogo.js';
 
 interface StatusChangeEmailParams {
   recipientEmail: string;
@@ -68,8 +59,8 @@ export const sendStatusChangeEmail = async ({
 <body>
   <div class="container">
     <div class="card">
-      <div class="header">
-        <div class="logo">MySyntroMed</div>
+      <div style="text-align: center; margin-bottom: 20px;">
+        ${getLogoHTML(baseLoginUrl)}
       </div>
 
       <h1>Request Status Updated</h1>
@@ -108,25 +99,10 @@ View in Dashboard: ${dashboardUrl}
 © ${new Date().getFullYear()} MySyntroMed
 `;
 
-  const mailOptions = {
+  return sendEmailViaServer({
     from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
     to: recipientEmail,
     subject: `[MySyntroMed] Request Status Update - ${requestType} is now ${statusLabel}`,
-    text: textContent,
     html: htmlContent,
-  };
-
-  try {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL] Status change notification sent to ${recipientEmail}`);
-      return { success: true };
-    } else {
-      console.log(`[EMAIL SIMULATION] Would send status change to: ${recipientEmail}`);
-      return { success: true };
-    }
-  } catch (error: any) {
-    console.error(`[EMAIL ERROR] Failed to send status change:`, error.message);
-    return { success: false, error: error.message };
-  }
+  });
 };
