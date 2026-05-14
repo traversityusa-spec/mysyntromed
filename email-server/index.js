@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import nodemailer from 'nodemailer';
 
 async function sendEmail({ from, to, subject, html }) {
@@ -52,6 +53,13 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10kb' }));
 
+// Serve logo for email clients
+app.use('/logo.png', (req, res) => {
+  res.sendFile(path.resolve('logo.png'), {
+    headers: { 'Cache-Control': 'public, max-age=31536000' },
+  });
+});
+
 // Security: Global rate limiting
 const requestCounts = new Map();
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
@@ -99,6 +107,8 @@ const sanitize = (str) => {
 };
 
 const normalizeBaseUrl = (url) => sanitize(url).replace(/\/+$/, '');
+
+const logoUrl = () => process.env.LOGO_URL || `http://localhost:${process.env.PORT || 3002}/logo.png`;
 
 const dashboardPathForRole = (role, section = 'dashboard') => {
   if (role === 'admin') return `/admin/${section}`;
@@ -167,7 +177,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 <body>
   <div class="container">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+      <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
     </div>
     <p style="color: #64748b;">Virtual Medical Assistant & Healthcare Support</p>
     
@@ -263,7 +273,7 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 <body>
   <div class="container">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+      <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
     </div>
     <p style="color: #64748b;">Virtual Medical Assistant & Healthcare Support</p>
     
@@ -389,7 +399,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 <body>
   <div class="container">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+      <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
     </div>
     <h1>Your Verification Code</h1>
     <p>Use the following code to verify your email address:</p>
@@ -484,7 +494,7 @@ app.post('/send-subscription-reminder', authenticateRequest, async (req, res) =>
   <div class="container">
     <div class="card">
       <div style="text-align: center; margin-bottom: 20px;">
-        <img src="${process.env.LOGO_URL || sanitizedUrl + "/MySyntroMed-Logo-L2-Aqua.png"}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+        <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
       </div>
       <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
 
