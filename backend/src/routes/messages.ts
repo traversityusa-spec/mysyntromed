@@ -49,6 +49,11 @@ router.post('/notify-offline', requireAuth, async (req: AuthedRequest, res) => {
       return res.json({ sent: false, reason: 'Receiver has no email' });
     }
 
+    const prefs = receiverData?.notificationPreferences;
+    if (prefs && prefs.emailMessages === false) {
+      return res.json({ sent: false, reason: 'Receiver has email notifications disabled' });
+    }
+
     // Call internal email service
     const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
     const serviceKey = process.env.EMAIL_SERVICE_KEY;

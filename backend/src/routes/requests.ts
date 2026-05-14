@@ -33,7 +33,9 @@ router.post('/notify-admin', async (req, res) => {
       const admin = (await import('../firebaseAdmin.js')).default;
       const userSnap = await admin.firestore().collection('users').doc(specialistId).get();
       const specialistEmail = userSnap.exists ? userSnap.data()?.email : null;
-      if (specialistEmail) {
+      const specialistData = userSnap.data();
+      const prefs = specialistData?.notificationPreferences;
+      if (specialistEmail && (!prefs || prefs.emailRequests !== false)) {
         await sendStatusChangeEmail({
           recipientEmail: specialistEmail,
           recipientName: specialistName || 'Specialist',
@@ -59,25 +61,32 @@ router.post('/notify-status-change', async (req, res) => {
 
   try {
     const baseUrl = loginUrl || 'https://mysyntromed.com';
+    const admin = (await import('../firebaseAdmin.js')).default;
 
-    if (clientEmail) {
-      await sendStatusChangeEmail({
-        recipientEmail: clientEmail,
-        recipientName: clientName || 'Client',
-        role: 'client',
-        requestType: requestType || 'Request',
-        oldStatus: '',
-        newStatus: status,
-        changedByName: changedByName || 'System',
-        loginUrl: baseUrl,
-      });
+    if (clientEmail && userId) {
+      const userSnap = await admin.firestore().collection('users').doc(userId).get();
+      const userData = userSnap.data();
+      const prefs = userData?.notificationPreferences;
+      if (!prefs || prefs.emailRequests !== false) {
+        await sendStatusChangeEmail({
+          recipientEmail: clientEmail,
+          recipientName: clientName || 'Client',
+          role: 'client',
+          requestType: requestType || 'Request',
+          oldStatus: '',
+          newStatus: status,
+          changedByName: changedByName || 'System',
+          loginUrl: baseUrl,
+        });
+      }
     }
 
     if (specialistId) {
-      const admin = (await import('../firebaseAdmin.js')).default;
       const userSnap = await admin.firestore().collection('users').doc(specialistId).get();
       const specialistEmail = userSnap.exists ? userSnap.data()?.email : null;
-      if (specialistEmail) {
+      const specialistData = userSnap.data();
+      const prefs = specialistData?.notificationPreferences;
+      if (specialistEmail && (!prefs || prefs.emailRequests !== false)) {
         await sendStatusChangeEmail({
           recipientEmail: specialistEmail,
           recipientName: specialistName || 'Specialist',

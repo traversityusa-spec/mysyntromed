@@ -37,7 +37,6 @@ const ensureListeners = (userId: string) => {
   });
 
   socket.on('newMessage', (message: unknown) => {
-    console.log('[SOCKET] New message via socket');
     window.dispatchEvent(new CustomEvent('socket:newMessage', { detail: message }));
   });
 
@@ -69,10 +68,6 @@ export const initSocket = (userId: string): Socket => {
 
   ensureListeners(userId);
 
-  if (socket.connected && currentUserId === userId) {
-    console.log('[SOCKET] Already authenticated for:', userId);
-  }
-
   return socket;
 };
 
@@ -81,7 +76,6 @@ export const getSocket = (): Socket | null => socket;
 export const isConnected = (): boolean => socket?.connected ?? false;
 
 export const emitMessage = (to: string, message: unknown): void => {
-  console.log('[SOCKET] emitMessage called - to:', to, 'socket exists:', !!socket, 'connected:', socket?.connected);
   if (!socket) {
     console.warn('[SOCKET] emitMessage: socket is null, reconnecting...');
     return;
@@ -90,9 +84,7 @@ export const emitMessage = (to: string, message: unknown): void => {
     console.warn('[SOCKET] emitMessage: socket not connected, will rely on Firestore');
     return;
   }
-  console.log('[SOCKET] EMITTING MESSAGE to user:', to);
   socket.emit('sendMessage', { to, message });
-  console.log('[SOCKET] Message emit called successfully');
 };
 
 export const emitTyping = (to: string, isTyping: boolean, senderName?: string): void => {

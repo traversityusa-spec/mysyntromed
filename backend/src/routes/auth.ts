@@ -379,7 +379,7 @@ router.get('/admin/users', requireAuth, requireRole('admin'), async (_req, res) 
       profiles.set(doc.id, doc.data());
     });
 
-    const users = listUsersResult.users.map((u: any) => {
+    const users = listUsersResult.users.map((u: { uid: string; email: string; displayName: string; disabled: boolean; customClaims?: { role?: string }; metadata: { creationTime: string } }) => {
       const profile = profiles.get(u.uid) || {};
       return {
         uid: u.uid,

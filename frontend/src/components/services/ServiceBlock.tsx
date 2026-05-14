@@ -17,7 +17,7 @@ interface ServiceBlockProps {
 }
 
 export const ServiceBlock: React.FC<ServiceBlockProps> = ({ icon, image, title, description, ideal, reverse }) => {
-  const IconComponent = (Icons as any)[icon];
+  const IconComponent = (Icons as unknown as Record<string, React.ElementType>)[icon];
 
   return (
     <section className="section-padding overflow-hidden">

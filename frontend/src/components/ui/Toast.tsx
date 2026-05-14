@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, MessageSquare, ClipboardList, Bell } from 'lucide-react';
 
-type ToastType = 'message' | 'request' | 'system';
+type ToastType = 'message' | 'request' | 'system' | 'assignment';
 
 type Toast = {
   id: string;

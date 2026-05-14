@@ -1,13 +1,7 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
-
-// Simple dotenv loading - Railway sets env vars directly
-try {
-  require('dotenv').config();
-} catch (e) {
-  // dotenv not available, that's fine for Railway
-}
 
 async function sendEmail({ from, to, subject, html }) {
   if (process.env.RESEND_API_KEY) {
@@ -44,19 +38,7 @@ async function sendEmail({ from, to, subject, html }) {
     return { previewUrl: nodemailer.getTestMessageUrl(info) };
   }
 
-  console.log('[EMAIL] Using Ethereal (preview mode)');
-  const testAccount = await nodemailer.createTestAccount();
-  const transport = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
-  });
-  const info = await transport.sendMail({ from, to, subject, html });
-  return { previewUrl: nodemailer.getTestMessageUrl(info) };
+  throw new Error('No email provider configured. Set RESEND_API_KEY in .env or configure SMTP credentials.');
 }
 
 const app = express();
@@ -314,13 +296,15 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
 
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
+  const provider = process.env.RESEND_API_KEY ? 'Resend API' : process.env.EMAIL_USER ? 'Gmail SMTP' : 'Not configured';
   console.log(`Email server running on port ${PORT}`);
-  console.log(`SMTP: ${process.env.EMAIL_USER ? 'Gmail configured' : 'Not configured (Ethereal mode)'}`);
+  console.log(`Provider: ${provider}`);
 });
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'email-server', smtpConfigured: !!process.env.EMAIL_USER });
+  const provider = process.env.RESEND_API_KEY ? 'resend' : process.env.EMAIL_USER ? 'gmail-smtp' : null;
+  res.json({ ok: true, service: 'email-server', provider, configured: !!provider });
 });
 
 // Send OTP code endpoint

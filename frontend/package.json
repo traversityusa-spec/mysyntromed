@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "mysyntromed-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "lint:eslint": "eslint src/",
+    "format": "prettier --write src/"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -32,10 +34,19 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@sentry/react": "^10.53.1",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "prettier": "^3.8.3",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.59.3",
     "vite": "^6.2.0"
   }
 }

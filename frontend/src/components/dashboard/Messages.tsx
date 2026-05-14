@@ -108,9 +108,7 @@ const Messages = () => {
   );
 
   useEffect(() => {
-    console.log('[MESSAGES] Component mounted, user:', user?.uid);
     if (user?.uid) {
-      console.log('[MESSAGES] Initializing socket for user:', user.uid);
       initSocket(user.uid);
     }
   }, [user?.uid]);
@@ -118,13 +116,8 @@ const Messages = () => {
   useEffect(() => {
     const handleNewMessage = (e: CustomEvent<unknown>) => {
       try {
-        console.log('[MESSAGES] NEW MESSAGE EVENT DETECTED:', e.detail);
         const msg = normalizeRealtimeMessage(e.detail);
-        if (!msg) {
-          console.log('[MESSAGES] Message normalization failed, returning early');
-          return;
-        }
-        console.log('[MESSAGES] Normalized message:', msg, 'selectedConversation:', selectedConversation);
+        if (!msg) return;
 
         setAllMessages((prev) => {
           const exists = prev.some((m) =>
@@ -136,16 +129,11 @@ const Messages = () => {
               Math.abs(toMessageDate(m.createdAt).getTime() - msg.createdAt.getTime()) < 5000
             )
           );
-          if (exists) {
-            console.log('[MESSAGES] Message already exists, skipping');
-            return prev;
-          }
-          console.log('[MESSAGES] Adding message to allMessages');
+          if (exists) return prev;
           return [...prev, msg];
         });
 
         if (selectedConversation && (msg.senderId === selectedConversation || msg.receiverId === selectedConversation)) {
-          console.log('[MESSAGES] Message is for current conversation, adding to messages');
           setMessages((prev) => {
             const exists = prev.some((m) =>
               m.id === msg.id ||
@@ -160,17 +148,13 @@ const Messages = () => {
           });
           notificationSoundService.playIncomingSound();
           scrollToBottom();
-        } else {
-          console.log('[MESSAGES] Message is NOT for current conversation, selectedConversation:', selectedConversation, 'msg.senderId:', msg.senderId, 'msg.receiverId:', msg.receiverId);
         }
       } catch (error) {
         console.error('[MESSAGES] Error handling new message:', error);
       }
     };
-    console.log('[MESSAGES] Setting up socket:newMessage listener');
     window.addEventListener('socket:newMessage', handleNewMessage as EventListener);
     return () => {
-      console.log('[MESSAGES] Removing socket:newMessage listener');
       window.removeEventListener('socket:newMessage', handleNewMessage as EventListener);
     };
   }, [selectedConversation]);
@@ -180,9 +164,7 @@ const Messages = () => {
   useEffect(() => {
     if (!user?.uid) return;
     setLoading(true);
-    console.log('[MESSAGES] Subscribing to messages for user:', user.uid);
     const unsubscribe = messageService.subscribeToUserMessages(user.uid, (msgs) => {
-      console.log('[MESSAGES] Received messages:', msgs.length);
       setAllMessages(msgs);
       setLoading(false);
     });
@@ -473,34 +455,21 @@ const Messages = () => {
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
 
-    console.log('=== SEND MESSAGE DEBUG ===');
-    console.log('newMessage:', newMessage.trim());
-    console.log('user?.uid:', user?.uid);
-    console.log('selectedConversation:', selectedConversation);
-    console.log('chatEnabled:', chatEnabled);
-    console.log('sending:', sending);
-    console.log('=========================');
-
     if (!newMessage.trim()) {
-      console.log('Early return: empty message');
       return;
     }
     if (!user?.uid) {
-      console.log('Early return: no user');
       alert('Please log in to send messages');
       return;
     }
     if (sending) {
-      console.log('Early return: already sending');
       return;
     }
     if (!selectedConversation) {
-      console.log('Early return: no selected conversation');
       alert('Please select a conversation first');
       return;
     }
     if (!chatEnabled) {
-      console.log('Chat is not enabled - cannot send');
       alert('Chat is not enabled. Please wait for specialist assignment.');
       return;
     }
@@ -510,8 +479,6 @@ const Messages = () => {
     const senderName = sessionUser?.displayName || user?.email?.split('@')[0] || 'User';
     const senderRole = sessionUser?.role || 'client';
     const messageText = newMessage.trim();
-
-    console.log('[MESSAGES] Step 1: Saving message to Firestore...');
 
     try {
       const messageId = await messageService.sendMessage({
@@ -525,10 +492,6 @@ const Messages = () => {
         status: 'sent',
       });
 
-      console.log('[MESSAGES] Step 2: Message saved to Firestore, ID:', messageId);
-
-      // Socket emit (non-blocking, just for real-time)
-      console.log('[MESSAGES] Step 3: Emitting via socket...');
       emitMessage(receiverId, {
         id: messageId,
         senderId: user.uid,
@@ -541,12 +504,10 @@ const Messages = () => {
         status: 'sent',
         createdAt: new Date().toISOString(),
       });
-      console.log('[MESSAGES] Step 4: Socket emit complete');
 
       notificationSoundService.playOutgoingSound();
       typingService.setTyping(user.uid, receiverId, false);
       setNewMessage('');
-      console.log('[MESSAGES] SUCCESS: Message sent!');
     } catch (error) {
       console.error('[MESSAGES] ERROR sending message:', error);
       alert('Failed to send message. Please try again.');

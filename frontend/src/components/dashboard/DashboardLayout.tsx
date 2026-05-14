@@ -40,7 +40,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
     return [
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
-      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Requests', icon: Workflow, to: `${portal}/requests` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
     ];
@@ -51,7 +50,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Clients', icon: Users, to: `${portal}/clients` },
       { label: 'Specialists', icon: Stethoscope, to: `${portal}/specialists` },
-      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
       { label: 'Conversations', icon: MessageSquare, to: `${portal}/conversations`, badge: pendingAssignments },
       { label: 'Analytics', icon: ChartBar, to: `${portal}/analytics` },
@@ -62,7 +60,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
   return [
     { label: 'Dashboard', icon: Home, to: '/portal/dashboard' },
     { label: 'Messages', icon: MessageSquare, to: '/portal/messages' },
-    { label: 'Calls', icon: Phone, to: '/portal/calls' },
     { label: 'Requests', icon: Workflow, to: '/portal/requests' },
     { label: 'Specialist', icon: User, to: '/portal/specialist' },
     { label: 'Activity', icon: ChartBar, to: '/portal/activity' },
@@ -142,7 +139,7 @@ const role = sessionUser?.role || 'client';
       const newNotifs = items.filter(n => !n.read);
       if (newNotifs.length > 0) {
         const latest = newNotifs[0];
-        showToast(latest.type as any, latest.title, latest.message);
+        showToast(latest.type, latest.title, latest.message);
       }
     });
 
@@ -168,7 +165,9 @@ const role = sessionUser?.role || 'client';
   const unreadCount = notifications.filter(n => !n.read).length;
 
 const markAllRead = () => {
-    notificationService.markAllRead(user.uid).catch(() => {});
+    if (user?.uid) {
+      notificationService.markAllRead(user.uid).catch(() => {});
+    }
   };
 
   const handleNotificationClick = (notificationId: string, read: boolean, type?: string) => {
@@ -179,7 +178,11 @@ const markAllRead = () => {
     if (type === 'message') {
       navigate(`${basePath}/messages`);
     } else if (type === 'request' || type === 'assignment') {
-      navigate(`${basePath}/requests`);
+      if (role === 'admin') {
+        navigate(`${basePath}/dashboard`);
+      } else {
+        navigate(`${basePath}/requests`);
+      }
     } else {
       navigate(`${basePath}/dashboard`);
     }

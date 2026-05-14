@@ -24,7 +24,6 @@ export const useDashboardData = () => {
     openRequests: 0,
     inProgressRequests: 0,
     unreadMessages: 0,
-    nextCall: null,
     completedToday: 0,
   });
   const [requests, setRequests] = useState<Request[]>([]);

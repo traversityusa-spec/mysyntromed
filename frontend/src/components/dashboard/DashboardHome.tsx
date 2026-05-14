@@ -145,7 +145,7 @@ const ClientDashboardContent = () => {
   };
 
   const handleClinicFinish = async () => {
-    setClinicStatus('in_progress');
+    setPostClinicStatus('in_progress');
     if (user?.uid) {
       try {
         await activityService.addActivity({
@@ -160,7 +160,7 @@ const ClientDashboardContent = () => {
         console.error('Error logging clinic finish:', error);
       }
     }
-    setTimeout(() => setClinicStatus('completed'), 2000);
+    setTimeout(() => setPostClinicStatus('completed'), 2000);
   };
 
   const formatTime = (date: Date) => {

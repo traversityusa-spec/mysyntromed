@@ -6,12 +6,17 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import * as Sentry from '@sentry/node';
 import admin from './firebaseAdmin.js';
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/requireAuth.js';
 import authRoutes from './routes/auth.js';
 import contactRoutes from './routes/contact.js';
 import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
+}
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -80,6 +85,27 @@ app.use(cors({
 
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+app.use((req, _res, next) => {
+  if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
+    for (const key of Object.keys(req.body)) {
+      if (typeof req.body[key] === 'string') {
+        req.body[key] = sanitizeInput(req.body[key]);
+      }
+    }
+  }
+  next();
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' },
+});
+
+app.use('/api/', generalLimiter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -327,8 +353,9 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('[ERROR]', err.message);
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[ERROR]', err.message, err.stack);
+  Sentry.captureException(err);
   res.status(500).json({ error: 'Internal server error' });
 });
 

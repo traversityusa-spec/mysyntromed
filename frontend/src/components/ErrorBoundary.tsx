@@ -25,11 +25,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public render() {
-    // @ts-ignore
-    const props = this.props as any;
+    const p = this as Component<Props, State>;
+    const { fallback, children } = p.props;
     if (this.state.hasError) {
-      if (props.fallback) {
-        return props.fallback;
+      if (fallback) {
+        return fallback;
       }
       return (
         <div className="p-6 bg-red-50 text-red-900 rounded-lg border border-red-200">
@@ -43,6 +43,6 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return props.children;
+    return children;
   }
 }

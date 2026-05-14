@@ -24,6 +24,12 @@ jobs:
     - name: Install dependencies
       run: cd backend && npm ci
     
+    - name: Lint backend
+      run: cd backend && npx tsc --noEmit
+
+    - name: Run backend tests
+      run: cd backend && npm test
+
     - name: Build backend
       run: cd backend && npm run build
     

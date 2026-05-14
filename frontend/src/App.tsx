@@ -16,6 +16,9 @@ import Settings from "@/components/dashboard/Settings";
 import { AdminClients, AdminSpecialists, AdminConversations, AdminAnalytics } from "@/components/dashboard/AdminPages";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { initSentry } from "@/lib/sentry";
+
+initSentry();
 
 import Home from "@/pages/Home";
 import About from "@/pages/About";
@@ -53,7 +56,7 @@ const AuthRoute = ({ children }: { children: ReactNode }) => {
 };
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
-  const { user, sessionUser, loading } = useAuth();
+  const { sessionUser, loading } = useAuth();
 
   const isReady = !loading && !!sessionUser;
 
@@ -73,14 +76,14 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
 };
 
 const AdminRoute = ({ children }: { children: ReactNode }) => {
-  const { user, sessionUser, loading } = useAuth();
+  const { sessionUser, loading } = useAuth();
 
   const isReady = !loading && !!sessionUser;
 
   if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="h-10 w-10 animate-spin rounded-front border-2 border-teal-500 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
       </div>
     );
   }
@@ -94,7 +97,7 @@ const AdminRoute = ({ children }: { children: ReactNode }) => {
 };
 
 const SpecialistRoute = ({ children }: { children: ReactNode }) => {
-  const { user, sessionUser, loading } = useAuth();
+  const { sessionUser, loading } = useAuth();
 
   const isReady = !loading && !!sessionUser;
 
@@ -156,15 +159,10 @@ const SpecialistPage = ({ children }: { children: ReactNode }) => (
 
 function AppRoutes() {
   const location = useLocation();
-  const { devLoginAs } = useAuth();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
-
-  useEffect(() => {
-    (window as unknown as { devLoginAs?: typeof devLoginAs }).devLoginAs = devLoginAs;
-  }, [devLoginAs]);
 
   return (
     <Routes location={location}>

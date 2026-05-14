@@ -1,22 +1,28 @@
 {
   "rules": {
-    ".read": true,
-    ".write": "auth != null",
+    ".read": false,
+    ".write": false,
     "typing": {
       "$uid": {
-        ".read": true,
+        ".read": "auth != null",
         ".write": "auth != null"
       }
     },
     "sounds": {
       "$uid": {
-        ".read": true,
+        ".read": "auth != null",
         ".write": "auth != null"
       }
     },
     "presence": {
       "$uid": {
-        ".read": true,
+        ".read": "auth != null",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "status": {
+      "$uid": {
+        ".read": "auth != null",
         ".write": "$uid === auth.uid"
       }
     }

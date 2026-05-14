@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
     "lib": [
@@ -20,6 +19,7 @@
         "./src/*"
       ]
     },
+    "strict": true,
     "allowImportingTsExtensions": true,
     "noEmit": true
   }

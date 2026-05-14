@@ -104,18 +104,18 @@ const ClientDetailModal = ({ client, onClose }: { client: UserProfile; onClose: 
             )}
             <div className="flex items-center gap-3 text-sm">
               <Users size={16} className="text-slate-400" />
-              <span className="text-slate-700">Joined {client.createdAt?.toDate ? client.createdAt.toDate().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+              <span className="text-slate-700">Joined {new Date(client.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
             </div>
             {client.subscriptionStartDate && (
               <div className="flex items-center gap-3 text-sm">
                 <Clock size={16} className="text-slate-400" />
-                <span className="text-slate-700">Subscription started {client.subscriptionStartDate?.toDate ? new Date(client.subscriptionStartDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+                <span className="text-slate-700">Subscription started {client.subscriptionStartDate ? new Date(client.subscriptionStartDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
               </div>
             )}
             {client.subscriptionEndDate && (
               <div className="flex items-center gap-3 text-sm">
                 <Clock size={16} className="text-slate-400" />
-                <span className="text-slate-700">Expires {client.subscriptionEndDate?.toDate ? new Date(client.subscriptionEndDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
+                <span className="text-slate-700">Expires {client.subscriptionEndDate ? new Date(client.subscriptionEndDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown'}</span>
               </div>
             )}
           </div>

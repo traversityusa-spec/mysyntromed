@@ -1,4 +1,4 @@
-import { type FormEvent, useState, type ChangeEvent } from 'react';
+import { type FormEvent, useState, type ChangeEvent, useEffect } from 'react';
 import {
   Bell,
   Check,
@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useUserProfile } from '@/lib/dashboard';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
+import { userService } from '@/lib/firestore';
 import { passwordValidation } from '@/lib/security';
 
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
@@ -71,11 +72,36 @@ const Settings = () => {
   });
 
   const [notifications, setNotifications] = useState({
-    emailRequests: true,
-    emailMessages: true,
-    pushRequests: true,
-    pushMessages: false,
+    emailRequests: profile?.notificationPreferences?.emailRequests ?? true,
+    emailMessages: profile?.notificationPreferences?.emailMessages ?? true,
   });
+  const [notifSaving, setNotifSaving] = useState(false);
+
+  useEffect(() => {
+    if (profile?.notificationPreferences) {
+      setNotifications(prev => ({
+        ...prev,
+        emailRequests: profile.notificationPreferences?.emailRequests ?? prev.emailRequests,
+        emailMessages: profile.notificationPreferences?.emailMessages ?? prev.emailMessages,
+      }));
+    }
+  }, [profile?.notificationPreferences?.emailRequests, profile?.notificationPreferences?.emailMessages]);
+
+  const handleNotificationChange = async (key: 'emailRequests' | 'emailMessages', value: boolean) => {
+    const updated = { ...notifications, [key]: value };
+    setNotifications(updated);
+    setNotifSaving(true);
+    try {
+      if (user?.uid) {
+        await userService.saveNotificationPreferences(user.uid, updated);
+      }
+    } catch (e) {
+      console.error('Failed to save notification preferences:', e);
+      setNotifications(prev => ({ ...prev, [key]: !value }));
+    } finally {
+      setNotifSaving(false);
+    }
+  };
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -342,6 +368,7 @@ const Settings = () => {
           <h2 className="flex items-center gap-2 text-lg font-semibold text-navy-900">
             <Bell size={20} className="text-teal-600" />
             Email Notifications
+            {notifSaving && <span className="ml-2 text-xs text-slate-400">Saving...</span>}
           </h2>
         </div>
         <div className="divide-y divide-slate-100 p-6">
@@ -350,20 +377,20 @@ const Settings = () => {
                <p className="font-medium text-slate-900">Request Updates</p>
                <p className="text-sm text-slate-500">Get notified when request status changes</p>
              </div>
-             <Toggle
-               checked={notifications.emailRequests}
-               onChange={(checked) => setNotifications({ ...notifications, emailRequests: checked })}
-             />
-           </div>
-           <div className="flex items-center justify-between py-3">
-             <div>
-               <p className="font-medium text-slate-900">New Messages</p>
-               <p className="text-sm text-slate-500">Get notified of new messages from specialist</p>
-             </div>
-             <Toggle
-               checked={notifications.emailMessages}
-               onChange={(checked) => setNotifications({ ...notifications, emailMessages: checked })}
-             />
+              <Toggle
+                checked={notifications.emailRequests}
+                onChange={(checked) => handleNotificationChange('emailRequests', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <div>
+                <p className="font-medium text-slate-900">New Messages</p>
+                <p className="text-sm text-slate-500">Get notified of new messages from specialist</p>
+              </div>
+              <Toggle
+                checked={notifications.emailMessages}
+                onChange={(checked) => handleNotificationChange('emailMessages', checked)}
+              />
            </div>
         </div>
       </div>

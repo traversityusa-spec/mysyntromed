@@ -22,6 +22,7 @@ import { presenceService } from './presence';
 export type SessionUser = {
   uid: string;
   displayName: string;
+  email?: string;
   role: 'client' | 'admin' | 'specialist';
   isNewUser: boolean;
   createdAt: Date;
@@ -31,10 +32,16 @@ export type SessionUser = {
   specialties?: string[];
   yearsExperience?: number;
   bio?: string;
+  clinicName?: string;
+  phone?: string;
   subscriptionStartDate?: Date;
   subscriptionActive?: boolean;
   subscriptionEndDate?: Date;
   subscriptionReminderSent?: boolean;
+  notificationPreferences?: {
+    emailRequests: boolean;
+    emailMessages: boolean;
+  };
 };
 
 type AuthContextType = {

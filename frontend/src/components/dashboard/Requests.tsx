@@ -234,10 +234,9 @@ const Requests = () => {
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">Preferred Completion Time</label>
                   <input
-                    type="text"
+                    type="datetime-local"
                     value={preferredTime}
                     onChange={(e) => setPreferredTime(e.target.value)}
-                    placeholder="e.g., Today by 5 PM"
                     className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
                   />
                 </div>
@@ -372,7 +371,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}
                         >
-                          {getStatusIcon(reqStatus as any)}
+                          {getStatusIcon(reqStatus)}
                           {reqStatus === 'in_progress'
                             ? 'In Progress'
                             : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
@@ -432,7 +431,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                       </select>
                     ) : (
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}>
-                        {getStatusIcon(reqStatus as any)}
+                        {getStatusIcon(reqStatus)}
                         {reqStatus === 'in_progress' ? 'In Progress' : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
                       </span>
                     )}

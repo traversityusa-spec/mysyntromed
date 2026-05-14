@@ -19,11 +19,11 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { rtdb } from './firebase';
-import { ref, set, onValue, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
+import { ref, set, onValue, onDisconnect } from 'firebase/database';
 import { encryption } from './encryption';
 export { db };
 
-const ENCRYPT_MESSAGES = false;
+const ENCRYPT_MESSAGES = true;
 const CONVERSATION_KEYS_COLLECTION = 'conversation_keys';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -58,6 +58,7 @@ export type UserProfile = {
   createdAt: Date;
   updatedAt: Date;
   isNewUser?: boolean;
+  disabled?: boolean;
   clinicName?: string;
   phone?: string;
   photoURL?: string;
@@ -71,6 +72,10 @@ export type UserProfile = {
   subscriptionActive?: boolean;
   subscriptionEndDate?: Date;
   subscriptionReminderSent?: boolean;
+  notificationPreferences?: {
+    emailRequests: boolean;
+    emailMessages: boolean;
+  };
 };
 
 export type Message = {
@@ -448,6 +453,13 @@ export const userService = {
       callback(clients);
     });
   },
+  async saveNotificationPreferences(uid: string, prefs: { emailRequests: boolean; emailMessages: boolean }): Promise<void> {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      notificationPreferences: prefs,
+      updatedAt: serverTimestamp(),
+    });
+  },
 };
 
 export const messageService = {
@@ -487,14 +499,12 @@ export const messageService = {
     userId: string,
     callback: (messages: Message[]) => void
   ): Unsubscribe {
-    console.log('[FIRESTORE] Setting up message subscription for user:', userId);
     const q = query(
       collection(db, 'messages'),
       where('participants', 'array-contains', userId)
     );
 
     return onSnapshot(q, async (snapshot) => {
-      console.log('[FIRESTORE] Message snapshot received, docs:', snapshot.docs.length, 'changes:', snapshot.docChanges().length);
       const messages = snapshot.docs.map((doc) => mapMessageDoc(doc.id, doc.data()));
 
       const sorted = messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -532,41 +542,28 @@ export const messageService = {
   },
 
   async sendMessage(message: Omit<Message, 'id' | 'createdAt'>): Promise<string> {
-    console.log('sendMessage called:', { senderId: message.senderId, receiverId: message.receiverId, text: message.text });
-    console.log('Current user auth:', auth.currentUser?.uid, 'email:', auth.currentUser?.email);
     const sanitizedText = this.sanitizeText(message.text);
     let finalMessage = { ...message, text: sanitizedText };
     let encrypted = false;
 
     if (ENCRYPT_MESSAGES) {
       try {
-        console.log('Getting/creating encryption key...');
         const key = await conversationKeyService.getOrCreateKey(message.senderId, message.receiverId);
-        console.log('Got key, importing...');
         const cryptoKey = await encryption.importKey(key);
-        console.log('Encrypting message...');
         const { encrypted: encryptedText, iv } = await encryption.encryptMessage(message.text, cryptoKey);
         finalMessage = { ...message, text: encryptedText, iv, encrypted: true };
         encrypted = true;
-        console.log('Message encrypted successfully');
       } catch (err) {
         console.error('Encryption failed, sending plain text:', err);
       }
     }
 
-    console.log('Adding message to Firestore...', {
-      senderId: finalMessage.senderId,
-      receiverId: finalMessage.receiverId,
-      participants: [finalMessage.senderId, finalMessage.receiverId],
-      text: finalMessage.text.substring(0, 50) + '...'
-    });
     const docRef = await addDoc(collection(db, 'messages'), {
       ...finalMessage,
       participants: [finalMessage.senderId, finalMessage.receiverId],
       status: finalMessage.status || 'sent',
       createdAt: serverTimestamp(),
     });
-    console.log('Message saved to Firestore with ID:', docRef.id);
 
     notificationSoundService.broadcastSound(finalMessage.receiverId, 'incoming');
 
