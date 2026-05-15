@@ -55,27 +55,27 @@ router.post('/notify-admin', async (req, res) => {
       );
     }
 
-    // Send proper new-request email to assigned specialist
-    if (specialistId) {
-      const userSnap = await admin.firestore().collection('users').doc(specialistId).get();
-      const specialistData = userSnap.data();
-      const specialistEmail = specialistData?.email;
-      const prefs = specialistData?.notificationPreferences;
-      if (specialistEmail && (!prefs || prefs.emailRequests !== false)) {
-        emailPromises.push(
-          sendNewRequestEmailToSpecialist({
-            specialistEmail,
-            specialistName: specialistName || specialistData?.displayName || 'Specialist',
-            clientName: clientName || '',
-            clientEmail: clientEmail || '',
-            requestType: requestType || 'Support',
-            description: description || '',
-            priority: priority || 'normal',
-            loginUrl: baseUrl,
-          })
-        );
-      }
+  // Send proper new-request email to assigned specialist
+  if (specialistId) {
+    const userSnap = await admin.firestore().collection('users').doc(specialistId).get();
+    const specialistData = userSnap.data();
+    const specialistEmail = specialistData?.email;
+    const prefs = specialistData?.notificationPreferences;
+    if (specialistEmail && (!prefs || prefs.emailRequests !== false)) {
+      emailPromises.push(
+        sendNewRequestEmailToSpecialist({
+          specialistEmail,
+          specialistName: specialistName || specialistData?.displayName || 'Specialist',
+          clientName: clientName || '',
+          clientEmail: clientEmail || '',
+          requestType: requestType || 'Support',
+          description: description || '',
+          priority: priority || 'normal',
+          loginUrl: baseUrl,
+        })
+      );
     }
+  }
 
     const results = await Promise.allSettled(emailPromises);
     results.forEach((r) => {
