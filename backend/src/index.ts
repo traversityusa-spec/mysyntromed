@@ -21,7 +21,7 @@ if (process.env.SENTRY_DSN) {
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
-const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://mysyntromed.com';
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -63,11 +63,7 @@ app.use(helmet({
 }));
 
 // Support multiple origins for CORS
-const allowedOrigins = [
-  frontendOrigin,
-  'http://localhost:3000',
-  'http://localhost:5173',
-].filter(Boolean);
+const allowedOrigins = [frontendOrigin].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -174,7 +170,7 @@ app.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
 
     console.log(`[OTP] Generated OTP for ${normalizedEmail}`);
 
-    const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+    const loginUrl = process.env.FRONTEND_ORIGIN || frontendOrigin;
     const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
     const serviceKey = process.env.EMAIL_SERVICE_KEY;
 
@@ -317,7 +313,7 @@ app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedReque
       return res.status(400).json({ error: 'Subscription reminder can only be sent within 7 days of expiry' });
     }
 
-    const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+    const loginUrl = process.env.FRONTEND_ORIGIN || frontendOrigin;
     
     const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
     const serviceKey = process.env.EMAIL_SERVICE_KEY;

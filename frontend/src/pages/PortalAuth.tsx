@@ -5,7 +5,7 @@ const PortalAuth = () => {
   return (
     <EmailLogin 
       portal="client"
-      title="MySyntroMed Patient Portal"
+      title="MySyntroMed Client Portal"
       subtitle="Secure access for approved patients and representatives."
     />
   );
