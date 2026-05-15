@@ -21,7 +21,7 @@ if (process.env.SENTRY_DSN) {
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
-const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://mysyntromed.com';
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -63,7 +63,11 @@ app.use(helmet({
 }));
 
 // Support multiple origins for CORS
-const allowedOrigins = [frontendOrigin].filter(Boolean);
+const allowedOrigins = [
+  frontendOrigin,
+  'http://localhost:3000',
+  'http://localhost:5173',
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {

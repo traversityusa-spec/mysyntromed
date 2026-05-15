@@ -169,7 +169,7 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
     });
 
     // 3. Send Welcome Email (non-blocking - don't await)
-    const loginUrl = process.env.FRONTEND_ORIGIN || 'https://mysyntromed.com';
+    const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
     sendWelcomeEmail(email, displayName, role as 'client' | 'specialist', loginUrl, password)
       .then(result => {
         if (!result.success) {
