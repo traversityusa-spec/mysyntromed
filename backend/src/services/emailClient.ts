@@ -47,3 +47,31 @@ export const sendEmailViaServer = async ({
   console.log(`[EMAIL CLIENT] EMAIL_SERVICE_KEY not set. Would send to: ${to}`);
   return { success: true };
 };
+
+export const notifyAdminsViaEmail = async (
+  admin: any,
+  subject: string,
+  html: string
+): Promise<void> => {
+  try {
+    const adminSnap = await admin.firestore().collection('users').where('role', '==', 'admin').get();
+    const promises: Promise<any>[] = [];
+    adminSnap.docs.forEach((doc: any) => {
+      const data = doc.data();
+      const email = data?.email;
+      if (!email) return;
+      const prefs = data?.notificationPreferences;
+      if (prefs && prefs.emailRequests === false) return;
+      promises.push(
+        sendEmailViaServer({
+          to: email,
+          subject,
+          html,
+        })
+      );
+    });
+    await Promise.allSettled(promises);
+  } catch (e) {
+    console.error('[NOTIFY ADMINS] Failed:', e);
+  }
+};

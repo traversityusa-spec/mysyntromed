@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { sendNewRequestEmailToAdmin, sendNewRequestEmailToSpecialist } from '../services/requestEmailService.js';
 import { sendStatusChangeEmail } from '../services/statusEmailService.js';
+import { notifyAdminsViaEmail } from '../services/emailClient.js';
 
 const router = Router();
 
@@ -134,6 +135,19 @@ router.post('/notify-status-change', async (req, res) => {
         });
       }
     }
+
+    // Also notify all admins about the status change
+    const statusLabel = status === 'in_progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1);
+    notifyAdminsViaEmail(
+      admin,
+      `[MySyntroMed] Request Updated: ${requestType} is now ${statusLabel}`,
+      `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0f172a;">Request Status Updated</h2>
+        <p style="color: #475569;"><strong>${changedByName || 'Someone'}</strong> changed the status of <strong>${requestType || 'a request'}</strong> to <strong>${statusLabel}</strong>.</p>
+        <p style="color: #64748b;">Client: ${clientName || 'N/A'} | Specialist: ${specialistName || 'N/A'}</p>
+        <a href="${baseUrl}/admin/dashboard" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View in Dashboard</a>
+      </div>`
+    );
 
     res.json({ success: true });
   } catch (error: any) {
