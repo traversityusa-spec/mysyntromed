@@ -13,6 +13,7 @@ import authRoutes from './routes/auth.js';
 import contactRoutes from './routes/contact.js';
 import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
+import notifyRoutes from './routes/notify.js';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
@@ -270,6 +271,7 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/contact', contactLimiter, contactRoutes);
 app.use('/api/messages', authLimiter, messageRoutes);
 app.use('/api/requests', authLimiter, requestRoutes);
+app.use('/api/notify', authLimiter, notifyRoutes);
 
 // Subscription management endpoint
 app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedRequest, res) => {

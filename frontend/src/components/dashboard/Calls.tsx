@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, ChevronRight } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import { API_BASE_URL } from '@/lib/firestore';
 
 type ScheduledCall = {
   id: string;
@@ -20,7 +22,20 @@ const mockPastCalls: ScheduledCall[] = [
   { id: '4', specialist: 'Dr. Sarah Chen', date: 'May 1, 2026', time: '3:00 PM', meetLink: 'https://meet.google.com/def-ghij-klm', status: 'completed' },
 ];
 
+const notifyAdminOfCall = async (type: 'scheduled' | 'instant', specialistName?: string, date?: string, time?: string) => {
+  try {
+    const token = await import('firebase/auth').then(m => m.getAuth().currentUser?.getIdToken());
+    if (!token) return;
+    fetch(`${API_BASE_URL}/api/notify/call`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ type, specialistName, date, time, loginUrl: window.location.origin }),
+    }).catch(() => {});
+  } catch {}
+};
+
 const Calls = () => {
+  const { sessionUser } = useAuth();
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
@@ -29,21 +44,25 @@ const Calls = () => {
 
   const handleSchedule = () => {
     if (!scheduleDate || !scheduleTime) return;
+    const formattedDate = new Date(scheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const formattedTime = new Date(`2000-01-01T${scheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const newCall: ScheduledCall = {
       id: Date.now().toString(),
-      specialist: 'Dr. Sarah Chen',
-      date: new Date(scheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-      time: new Date(`2000-01-01T${scheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      specialist: sessionUser?.assignedSpecialistName || 'Dr. Sarah Chen',
+      date: formattedDate,
+      time: formattedTime,
       meetLink: 'https://meet.google.com/new-meeting-link',
       status: 'upcoming',
     };
     setUpcomingCalls(prev => [...prev, newCall]);
+    notifyAdminOfCall('scheduled', newCall.specialist, formattedDate, formattedTime);
     setShowSchedule(false);
     setScheduleDate('');
     setScheduleTime('');
   };
 
   const handleStartInstantCall = () => {
+    notifyAdminOfCall('instant', sessionUser?.assignedSpecialistName || 'Specialist');
     window.open('https://meet.google.com/new', '_blank');
   };
 
