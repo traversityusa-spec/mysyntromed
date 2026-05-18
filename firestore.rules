@@ -50,14 +50,6 @@ service cloud.firestore {
       return role in ['client', 'specialist', 'admin'];
     }
 
-    function isValidString(str, minLen, maxLen) {
-      return str.size() >= minLen && str.size() <= maxLen;
-    }
-    
-    function isEmailVerified() {
-      return request.auth.token.email_verified == true;
-    }
-
     match /users/{userId} {
       allow read: if signedIn() && (
         isOwner(userId) ||
