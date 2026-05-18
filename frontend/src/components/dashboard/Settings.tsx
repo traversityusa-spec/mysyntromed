@@ -78,6 +78,19 @@ const Settings = () => {
   const [notifSaving, setNotifSaving] = useState(false);
 
   useEffect(() => {
+    if (!profile) return;
+    setProfileForm({
+      displayName: profile.displayName || '',
+      clinicName: profile.clinicName || '',
+      phone: profile.phone || '',
+      photoURL: profile.photoURL || '',
+      specialties: (profile.specialties || []).join(', '),
+      yearsExperience: profile.yearsExperience ? String(profile.yearsExperience) : '',
+      bio: profile.bio || '',
+    });
+  }, [profile]);
+
+  useEffect(() => {
     if (profile?.notificationPreferences) {
       setNotifications(prev => ({
         ...prev,
@@ -318,8 +331,7 @@ const Settings = () => {
             </div>
           </div>
 
-          {profile?.role === 'specialist' && (
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-slate-700">Specialties (comma separated)</label>
                 <input
@@ -352,7 +364,6 @@ const Settings = () => {
                 />
               </div>
             </div>
-          )}
           <div className="mt-5 flex justify-end">
             <button
               type="submit"

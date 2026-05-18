@@ -108,7 +108,7 @@ const sanitize = (str) => {
 
 const normalizeBaseUrl = (url) => sanitize(url).replace(/\/+$/, '');
 
-const PUBLIC_LOGO_URL = 'https://raw.githubusercontent.com/Tomladsolutions/MySyntroMed/main/frontend/public/MySyntroMed-Logo-L2-Aqua.png';
+const PUBLIC_LOGO_URL = 'https://mysyntromed.com/MySyntroMed-Logo-L2-Aqua.png';
 const logoUrl = () => process.env.LOGO_URL || PUBLIC_LOGO_URL;
 
 const dashboardPathForRole = (role, section = 'dashboard') => {
@@ -170,7 +170,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
     .credential-label { color: #64748b; }
     .credential-value { font-weight: 600; font-family: monospace; background: white; padding: 2px 8px; border-radius: 4px; }
     .temp-code { font-size: 28px; font-weight: 700; font-family: monospace; color: #0d9488; letter-spacing: 4px; text-align: center; padding: 12px; background: #f0fdfa; border-radius: 8px; }
-    .button { display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+    .button { display: inline-block; background: #0d9488; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px 0; }
     .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 0 8px 8px 0; }
     .footer { text-align: center; margin-top: 30px; color: #64748b; font-size: 12px; }
   </style>
@@ -178,7 +178,7 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
 <body>
   <div class="container">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+      <img src="${logoUrl(loginUrl)}" alt="MySyntroMed" style="height: 80px; width: auto;" />
     </div>
     <p style="color: #64748b;">Virtual Medical Assistant & Healthcare Support</p>
     
@@ -267,14 +267,14 @@ app.post('/send-unread-message', authenticateRequest, async (req, res) => {
     .logo { font-size: 24px; font-weight: 700; color: #0d9488; margin-bottom: 8px; }
     h1 { color: #0f172a; margin-bottom: 20px; }
     .message-box { background: #f1f5f9; border-left: 4px solid #0d9488; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0; font-style: italic; color: #475569; }
-    .button { display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+    .button { display: inline-block; background: #0d9488; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px 0; }
     .footer { text-align: center; margin-top: 30px; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+      <img src="${logoUrl(loginUrl)}" alt="MySyntroMed" style="height: 80px; width: auto;" />
     </div>
     <p style="color: #64748b;">Virtual Medical Assistant & Healthcare Support</p>
     
@@ -400,7 +400,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
 <body>
   <div class="container">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+      <img src="${logoUrl(loginUrl)}" alt="MySyntroMed" style="height: 80px; width: auto;" />
     </div>
     <h1>Your Verification Code</h1>
     <p>Use the following code to verify your email address:</p>
@@ -410,7 +410,7 @@ app.post('/send-otp', authenticateRequest, async (req, res) => {
     <div class="warning">
       <strong>Security Notice:</strong> This code expires in 10 minutes. Do not share it with anyone.
     </div>
-    <a href="${sanitizedUrl}" class="button" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600;">Go to Login</a>
+    <a href="${sanitizedUrl}" class="button" style="display: inline-block; background: #0d9488; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600;">Go to Login</a>
     <div class="footer">
       <p>© ${new Date().getFullYear()} MySyntroMed. All rights reserved.</p>
     </div>
@@ -485,7 +485,7 @@ app.post('/send-subscription-reminder', authenticateRequest, async (req, res) =>
     .expiry-info { background: #f1f5f9; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center; }
     .expiry-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
     .expiry-value { font-size: 18px; font-weight: 600; color: #0f172a; margin-top: 4px; }
-    .button { display: inline-block; background: ${isUrgent ? '#dc2626' : '#0d9488'}; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px auto; display: block; width: fit-content; }
+    .button { display: inline-block; background: ${isUrgent ? '#dc2626' : '#0d9488'}; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px auto; display: block; width: fit-content; }
     .button:hover { background: ${isUrgent ? '#b91c1c' : '#0f766e'}; }
     .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px; }
     .highlight { color: #0d9488; font-weight: 600; }
@@ -495,7 +495,7 @@ app.post('/send-subscription-reminder', authenticateRequest, async (req, res) =>
   <div class="container">
     <div class="card">
       <div style="text-align: center; margin-bottom: 20px;">
-        <img src="${logoUrl()}" alt="MySyntroMed" style="height: 45px; width: auto;" />
+        <img src="${logoUrl(loginUrl)}" alt="MySyntroMed" style="height: 80px; width: auto;" />
       </div>
       <div class="tagline">Virtual Medical Assistant & Healthcare Support</div>
 
@@ -547,6 +547,141 @@ app.post('/send-subscription-reminder', authenticateRequest, async (req, res) =>
     res.json({ success: true, previewUrl: result.previewUrl || null });
   } catch (error) {
     console.error('[EMAIL] Subscription Reminder Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send New Request Confirmation
+app.post('/send-new-request', authenticateRequest, async (req, res) => {
+  const { email, displayName, requestType, loginUrl } = req.body;
+
+  if (!email || !displayName || !loginUrl) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+
+  const sanitizedName = sanitize(displayName);
+  const sanitizedUrl = normalizeBaseUrl(loginUrl);
+  const typeLabel = requestType || 'consultation';
+
+  const rawFrom = (process.env.SMTP_FROM || '').trim();
+  let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
+  if (rawFrom) {
+    fromAddress = rawFrom.includes('<') ? rawFrom : `MySyntroMed <${rawFrom}>`;
+  }
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; line-height: 1.6; color: #1e293b; background: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { color: #0f172a; margin-bottom: 20px; }
+    .button { display: inline-block; background: #0d9488; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+    .footer { text-align: center; margin-top: 30px; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="${logoUrl(loginUrl)}" alt="MySyntroMed" style="height: 80px; width: auto;" />
+    </div>
+    <h1>Request Received!</h1>
+    <p>Hello ${sanitizedName},</p>
+    <p>We have successfully received your ${sanitize(typeLabel)} request. Our team is reviewing it and will update you shortly.</p>
+    <a href="${sanitizedUrl}/portal" class="button">View Dashboard</a>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} MySyntroMed. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await sendEmail({
+      from: fromAddress,
+      to: email,
+      subject: 'We have received your request - MySyntroMed',
+      html: htmlContent,
+    });
+    console.log('[EMAIL] New request email sent to:', email);
+    res.json({ success: true, previewUrl: result.previewUrl || null });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send Request Status Update
+app.post('/send-status-update', authenticateRequest, async (req, res) => {
+  const { email, displayName, requestType, newStatus, loginUrl } = req.body;
+
+  if (!email || !displayName || !newStatus || !loginUrl) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+
+  const sanitizedName = sanitize(displayName);
+  const sanitizedStatus = sanitize(newStatus).toUpperCase();
+  const sanitizedUrl = normalizeBaseUrl(loginUrl);
+  const typeLabel = requestType || 'request';
+
+  const rawFrom = (process.env.SMTP_FROM || '').trim();
+  let fromAddress = 'MySyntroMed <noreply@mysyntromed.com>';
+  if (rawFrom) {
+    fromAddress = rawFrom.includes('<') ? rawFrom : `MySyntroMed <${rawFrom}>`;
+  }
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; line-height: 1.6; color: #1e293b; background: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { color: #0f172a; margin-bottom: 20px; }
+    .status-box { background: #f0fdfa; border: 2px solid #14b8a6; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center; font-size: 20px; font-weight: bold; color: #0d9488; }
+    .button { display: inline-block; background: #0d9488; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+    .footer { text-align: center; margin-top: 30px; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="${logoUrl(loginUrl)}" alt="MySyntroMed" style="height: 80px; width: auto;" />
+    </div>
+    <h1>Request Status Updated</h1>
+    <p>Hello ${sanitizedName},</p>
+    <p>There is an update regarding your ${sanitize(typeLabel)}. The status has been changed to:</p>
+    <div class="status-box">${sanitizedStatus}</div>
+    <a href="${sanitizedUrl}/portal" class="button">View Dashboard</a>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} MySyntroMed. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await sendEmail({
+      from: fromAddress,
+      to: email,
+      subject: 'Request Status Update - MySyntroMed',
+      html: htmlContent,
+    });
+    console.log('[EMAIL] Status update email sent to:', email);
+    res.json({ success: true, previewUrl: result.previewUrl || null });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

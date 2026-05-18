@@ -5,19 +5,20 @@
     "typing": {
       "$uid": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "$uid === auth.uid"
       }
     },
     "sounds": {
       "$uid": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "$uid === auth.uid"
       }
     },
     "presence": {
       "$uid": {
         ".read": "auth != null",
-        ".write": "$uid === auth.uid"
+        ".write": "$uid === auth.uid",
+        ".indexOn": ["status", "lastSeen"]
       }
     },
     "status": {

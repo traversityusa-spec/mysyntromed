@@ -197,8 +197,12 @@ const Specialist = () => {
       )}
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex flex-col gap-6 md:flex-row md:items-start">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-teal-100 text-teal-700 md:h-32 md:w-32">
-            <span className="text-4xl font-bold md:text-5xl">{mockSpecialist.name.charAt(0)}</span>
+          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-teal-100 text-teal-700 md:h-32 md:w-32">
+            {specialistProfile?.photoURL ? (
+              <img src={specialistProfile.photoURL} alt={assignedName} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-4xl font-bold md:text-5xl">{assignedName.charAt(0)}</span>
+            )}
           </div>
 
           <div className="flex-1">

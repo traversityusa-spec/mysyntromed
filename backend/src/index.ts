@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { Options } from 'express-rate-limit';
 import crypto from 'crypto';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -14,6 +14,7 @@ import contactRoutes from './routes/contact.js';
 import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
 import notifyRoutes from './routes/notify.js';
+import workflowRoutes from './routes/workflow.js';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
@@ -272,6 +273,7 @@ app.use('/api/contact', contactLimiter, contactRoutes);
 app.use('/api/messages', authLimiter, messageRoutes);
 app.use('/api/requests', authLimiter, requestRoutes);
 app.use('/api/notify', authLimiter, notifyRoutes);
+app.use('/api/workflow', authLimiter, workflowRoutes);
 
 // Subscription management endpoint
 app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedRequest, res) => {

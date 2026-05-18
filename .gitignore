@@ -1,14 +1,59 @@
+# Runtime logs
+*.log
+
+# Dependencies
 node_modules/
 build/
 dist/
 coverage/
-.DS_Store
-*.log
-.env*
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
 !.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+firebase-emulator-debug.log
+
+# Security - CRITICAL: Never commit these!
+# Service account keys
 serviceAccountKey.json
 server/serviceAccountKey.json
+*-firebase-adminsdk-*.json
 *.pem
 *.p12
-serviceAccountKey*.json
-*-firebase-adminsdk-*.json
+*.key
+*.cert
+
+# Email server keys
+email-server-config.json
+
+# Database backups
+*.sql
+*.dump
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Test artifacts
+test-results/
+playwright-report/

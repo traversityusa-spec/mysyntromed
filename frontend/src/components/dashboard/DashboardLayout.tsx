@@ -41,6 +41,7 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
       { label: 'Requests', icon: Workflow, to: `${portal}/requests` },
+      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
     ];
   }

@@ -15,12 +15,16 @@ import {
   RefreshCw,
   Shield,
   User,
+  Users,
   AlertCircle,
   X,
 } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import { useDashboardData, useUserProfile } from '@/lib/dashboard';
-import { activityService } from '@/lib/firestore';
+import { workflowService, API_BASE_URL } from '@/lib/firestore';
+import type { WorkflowStatus } from '@/lib/firestore';
 import SpecialistDashboard from './SpecialistDashboard';
 import AdminDashboard from './AdminDashboard';
 import { DateTimeDisplay } from '@/lib/datetime';
@@ -118,9 +122,33 @@ const ClientDashboardContent = () => {
   const { user, sessionUser, showWelcomeBack, welcomeBackData, clearWelcomeBack } = useAuth();
   const { stats, activity, activityFilter, setActivityFilter, loading } = useDashboardData();
   const { profile, markAsOldUser } = useUserProfile();
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [specialistPhotoURL, setSpecialistPhotoURL] = useState<string | null>(null);
+  const [workflow, setWorkflow] = useState<WorkflowStatus | null>(null);
   const [morningPrepStatus, setMorningPrepStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
   const [postClinicStatus, setPostClinicStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
-  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (!sessionUser?.assignedSpecialistId) {
+      setSpecialistPhotoURL(null);
+      setWorkflow(null);
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, 'users', sessionUser.assignedSpecialistId)).then(snap => {
+      if (!cancelled && snap.exists()) {
+        setSpecialistPhotoURL(snap.data().photoURL || null);
+      }
+    });
+    const unsub = workflowService.subscribe(sessionUser.assignedSpecialistId, (wf) => {
+      setWorkflow(wf);
+      if (wf) {
+        setMorningPrepStatus(wf.morningPrepStatus);
+        setPostClinicStatus(wf.postClinicStatus);
+      }
+    });
+    return () => { cancelled = true; unsub(); };
+  }, [sessionUser?.assignedSpecialistId]);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -147,21 +175,12 @@ const ClientDashboardContent = () => {
 
   const handleClinicFinish = async () => {
     setPostClinicStatus('in_progress');
-    if (user?.uid) {
-      try {
-        await activityService.addActivity({
-          title: 'Clinic Day Finished',
-          type: 'Workflow',
-          userId: user.uid,
-          specialistId: sessionUser?.assignedSpecialistId || '',
-          specialistName: sessionUser?.assignedSpecialistName || 'Unassigned',
-          status: 'completed',
-        });
-      } catch (error) {
-        console.error('Error logging clinic finish:', error);
-      }
+    if (!sessionUser?.assignedSpecialistId) return;
+    try {
+      await workflowService.clinicDayFinished(sessionUser.assignedSpecialistId);
+    } catch (error) {
+      console.error('Error marking clinic day finished:', error);
     }
-    setTimeout(() => setPostClinicStatus('completed'), 2000);
   };
 
   const formatTime = (date: Date) => {
@@ -286,8 +305,8 @@ const ClientDashboardContent = () => {
                 </span>
               )}
             </div>
-            <DateTimeDisplay />
           </div>
+          <DateTimeDisplay />
         </div>
       </div>
 
@@ -318,8 +337,12 @@ const ClientDashboardContent = () => {
         <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-teal-50 to-blue-50 p-5">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xl font-bold text-white shadow-sm">
-                {sessionUser.assignedSpecialistName?.charAt(0) || 'S'}
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xl font-bold text-white shadow-sm">
+                {specialistPhotoURL ? (
+                  <img src={specialistPhotoURL} alt={sessionUser.assignedSpecialistName || 'Specialist'} className="h-full w-full object-cover" onError={() => setSpecialistPhotoURL(null)} />
+                ) : (
+                  sessionUser.assignedSpecialistName?.charAt(0) || 'S'
+                )}
               </div>
               <div>
                 <p className="text-lg font-bold text-navy-900">{sessionUser.assignedSpecialistName || 'Your Specialist'}</p>
@@ -350,7 +373,7 @@ const ClientDashboardContent = () => {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          {/* Today With Your Specialist */}
+          {/* Today With Your Specialist — read-only for client */}
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="mb-4 text-lg font-semibold text-navy-900">Today With Your Specialist</h2>
             <div className="space-y-3">
@@ -370,19 +393,14 @@ const ClientDashboardContent = () => {
                     <p className="text-sm text-slate-500">Specialist prepares charts and patient details</p>
                   </div>
                 </div>
-                <select
-                  value={morningPrepStatus}
-                  onChange={(e) => setMorningPrepStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
-                    morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                    morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">Ongoing</option>
-                  <option value="completed">Completed</option>
-                </select>
+                <span className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                  morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                  morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                  'border-slate-200 bg-slate-50 text-slate-600'
+                }`}>
+                  {morningPrepStatus === 'completed' ? 'Completed' :
+                   morningPrepStatus === 'in_progress' ? 'Ongoing' : 'Not Started'}
+                </span>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
@@ -401,23 +419,19 @@ const ClientDashboardContent = () => {
                     <p className="text-sm text-slate-500">Scribe finalizes notes in Athena</p>
                   </div>
                 </div>
-                <select
-                  value={postClinicStatus}
-                  onChange={(e) => setPostClinicStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
-                    postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                    postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">Ongoing</option>
-                  <option value="completed">Completed</option>
-                </select>
+                <span className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                  postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                  postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                  'border-slate-200 bg-slate-50 text-slate-600'
+                }`}>
+                  {postClinicStatus === 'completed' ? 'Completed' :
+                   postClinicStatus === 'in_progress' ? 'Ongoing' : 'Not Started'}
+                </span>
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
+            {morningPrepStatus === 'completed' && !workflow?.clinicDayFinished && (
+            <div className="mt-4">
               <button
                 onClick={handleClinicFinish}
                 className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition"
@@ -425,6 +439,10 @@ const ClientDashboardContent = () => {
                 <Check size={16} />
                 Clinic Day Finished
               </button>
+            </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 to="/portal/messages"
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -483,8 +501,12 @@ const ClientDashboardContent = () => {
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="mb-4 text-lg font-semibold text-navy-900">Your Specialist</h2>
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-100 text-teal-700">
-                <User size={28} />
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-teal-100 text-teal-700">
+                {specialistPhotoURL ? (
+                  <img src={specialistPhotoURL} alt={sessionUser?.assignedSpecialistName || 'Specialist'} className="h-full w-full object-cover" onError={() => setSpecialistPhotoURL(null)} />
+                ) : (
+                  <User size={28} />
+                )}
               </div>
               <h3 className="mt-3 font-semibold text-slate-900">
                 {sessionUser?.assignedSpecialistName || 'Pending Assignment'}

@@ -492,8 +492,14 @@ export const AdminClients = () => {
                     <tr key={client.uid} className={`hover:bg-slate-50/50 transition ${client.disabled ? 'bg-slate-50/80 opacity-75' : ''}`}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={`h-9 w-9 rounded-full ${client.disabled ? 'bg-slate-200 text-slate-400' : 'bg-teal-100 text-teal-700'} flex items-center justify-center font-bold uppercase text-xs`}>
-                             {client.displayName?.charAt(0) || 'C'}
+                          <div className="h-9 w-9 overflow-hidden rounded-full">
+                            {client.photoURL ? (
+                              <img src={client.photoURL} alt={client.displayName || 'Client'} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className={`flex h-full w-full items-center justify-center font-bold uppercase text-xs ${client.disabled ? 'bg-slate-200 text-slate-400' : 'bg-teal-100 text-teal-700'}`}>
+                                {client.displayName?.charAt(0) || 'C'}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <p className={`font-semibold ${client.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{client.displayName || 'Unnamed'}</p>
@@ -587,8 +593,14 @@ export const AdminClients = () => {
                 <div key={client.uid} className={`rounded-xl border border-slate-200 bg-white p-4 ${client.disabled ? 'opacity-75' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`h-9 w-9 rounded-full ${client.disabled ? 'bg-slate-200 text-slate-400' : 'bg-teal-100 text-teal-700'} flex items-center justify-center font-bold uppercase text-xs`}>
-                        {client.displayName?.charAt(0) || 'C'}
+                      <div className="h-9 w-9 overflow-hidden rounded-full">
+                        {client.photoURL ? (
+                          <img src={client.photoURL} alt={client.displayName || 'Client'} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className={`flex h-full w-full items-center justify-center font-bold uppercase text-xs ${client.disabled ? 'bg-slate-200 text-slate-400' : 'bg-teal-100 text-teal-700'}`}>
+                            {client.displayName?.charAt(0) || 'C'}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <p className={`font-semibold ${client.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{client.displayName || 'Unnamed'}</p>
@@ -896,8 +908,14 @@ export const AdminSpecialists = () => {
                     <tr key={specialist.uid} className={`hover:bg-indigo-50/30 transition ${specialist.disabled ? 'bg-slate-50/80 opacity-75' : ''}`}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={`h-9 w-9 rounded-full ${specialist.disabled ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-700'} flex items-center justify-center font-bold uppercase text-xs`}>
-                            {specialist.displayName?.charAt(0) || 'S'}
+                          <div className="h-9 w-9 overflow-hidden rounded-full">
+                            {specialist.photoURL ? (
+                              <img src={specialist.photoURL} alt={specialist.displayName || 'Specialist'} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className={`flex h-full w-full items-center justify-center font-bold uppercase text-xs ${specialist.disabled ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-700'}`}>
+                                {specialist.displayName?.charAt(0) || 'S'}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <p className={`font-semibold ${specialist.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{specialist.displayName || 'Unnamed'}</p>
@@ -969,8 +987,14 @@ export const AdminSpecialists = () => {
                 <div key={specialist.uid} className={`rounded-xl border border-slate-200 bg-white p-4 ${specialist.disabled ? 'opacity-75' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`h-9 w-9 rounded-full ${specialist.disabled ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-700'} flex items-center justify-center font-bold uppercase text-xs`}>
-                        {specialist.displayName?.charAt(0) || 'S'}
+                      <div className="h-9 w-9 overflow-hidden rounded-full">
+                        {specialist.photoURL ? (
+                          <img src={specialist.photoURL} alt={specialist.displayName || 'Specialist'} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className={`flex h-full w-full items-center justify-center font-bold uppercase text-xs ${specialist.disabled ? 'bg-slate-200 text-slate-400' : 'bg-indigo-100 text-indigo-700'}`}>
+                            {specialist.displayName?.charAt(0) || 'S'}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <p className={`font-semibold ${specialist.disabled ? 'text-slate-500' : 'text-navy-900'}`}>{specialist.displayName || 'Unnamed'}</p>
@@ -1114,7 +1138,7 @@ export const AdminSpecialists = () => {
 
 export const AdminConversations = () => {
   const { user: authUser } = useAuth();
-  const [conversations, setConversations] = useState<{clientId: string; clientName: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}[]>([]);
+  const [conversations, setConversations] = useState<{clientId: string; clientName: string; clientPhotoURL?: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<{clientId: string; specialistId: string} | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1170,7 +1194,7 @@ export const AdminConversations = () => {
   }, []);
 
   useEffect(() => {
-    const convMap = new Map<string, {clientId: string; clientName: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}>();
+    const convMap = new Map<string, {clientId: string; clientName: string; clientPhotoURL?: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}>();
     
     allMessages.forEach((msg) => {
       const senderRole = msg.senderRole;
@@ -1202,7 +1226,8 @@ export const AdminConversations = () => {
       const isUnread = msg.receiverId !== clientId && !msg.read;
       
       if (!existing) {
-        convMap.set(key, { clientId, clientName, specialistId, specialistName, lastMessage: msg.text, lastTime: msg.createdAt, unreadCount: isUnread ? 1 : 0 });
+        const c = clients.find(x => x.uid === clientId);
+        convMap.set(key, { clientId, clientName, clientPhotoURL: c?.photoURL, specialistId, specialistName, lastMessage: msg.text, lastTime: msg.createdAt, unreadCount: isUnread ? 1 : 0 });
       } else if (msg.createdAt.getTime() > existing.lastTime.getTime()) {
         existing.lastMessage = msg.text;
         existing.lastTime = msg.createdAt;
@@ -1257,7 +1282,7 @@ export const AdminConversations = () => {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 gap-4">
+    <div className="flex h-full min-h-0 gap-4">
       <div className={`flex flex-col rounded-2xl border border-slate-200 bg-white ${
         mobileView === 'chat' ? 'hidden lg:flex lg:w-96' : 'w-full lg:w-96'
       }`}>
@@ -1307,8 +1332,17 @@ export const AdminConversations = () => {
                 <button onClick={() => setMobileView('list')} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" title="Back to conversations">
                   <X size={20} />
                 </button>
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold">
-                  {conversations.find(c => c.clientId === selectedConversation.clientId)?.clientName.charAt(0).toUpperCase()}
+                <div className="h-10 w-10 overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600">
+                  {(() => {
+                    const conv = conversations.find(c => c.clientId === selectedConversation.clientId);
+                    return conv?.clientPhotoURL ? (
+                      <img src={conv.clientPhotoURL} alt={conv.clientName || ''} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-white font-bold">
+                        {conv?.clientName.charAt(0).toUpperCase() || '?'}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <p className="font-semibold text-slate-900">

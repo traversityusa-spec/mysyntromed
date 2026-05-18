@@ -170,6 +170,13 @@ export type AppNotification = {
   createdAt: Date;
 };
 
+export type WorkflowStatus = {
+  morningPrepStatus: 'not_started' | 'in_progress' | 'completed';
+  postClinicStatus: 'not_started' | 'in_progress' | 'completed';
+  clinicDayFinished: boolean;
+  updatedAt: Date;
+};
+
 export type SpecialistRating = {
   id: string;
   specialistId: string;
@@ -1208,6 +1215,55 @@ export const notificationService = {
     return onSnapshot(q, (snap) => {
       callback(snap.size);
     });
+  },
+};
+
+export const workflowService = {
+  subscribe(specialistId: string, callback: (wf: WorkflowStatus | null) => void): Unsubscribe {
+    const ref = doc(db, 'workflows', specialistId);
+    return onSnapshot(ref, (snap) => {
+      if (!snap.exists()) { callback(null); return; }
+      const d = snap.data();
+      callback({
+        morningPrepStatus: d.morningPrepStatus || 'not_started',
+        postClinicStatus: d.postClinicStatus || 'not_started',
+        clinicDayFinished: d.clinicDayFinished || false,
+        updatedAt: d.updatedAt?.toDate() || new Date(),
+      });
+    });
+  },
+
+  async updateMorningPrep(specialistId: string, status: 'not_started' | 'in_progress' | 'completed'): Promise<void> {
+    try {
+      await setDoc(doc(db, 'workflows', specialistId), {
+        morningPrepStatus: status,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.error('[WORKFLOW] Failed to update morning prep:', e);
+    }
+  },
+
+  async updatePostClinic(specialistId: string, status: 'not_started' | 'in_progress' | 'completed'): Promise<void> {
+    try {
+      await setDoc(doc(db, 'workflows', specialistId), {
+        postClinicStatus: status,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.error('[WORKFLOW] Failed to update post clinic:', e);
+    }
+  },
+
+  async clinicDayFinished(specialistId: string): Promise<void> {
+    try {
+      await setDoc(doc(db, 'workflows', specialistId), {
+        clinicDayFinished: true,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.error('[WORKFLOW] Failed to set clinic day finished:', e);
+    }
   },
 };
 

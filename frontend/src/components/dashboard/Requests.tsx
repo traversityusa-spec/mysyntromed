@@ -7,21 +7,15 @@ import { requestService } from '@/lib/firestore';
 import { useAuth } from '@/lib/AuthContext';
 
 const requestTypes = [
-  'Chart Prep',
-  'Patient Follow-Up',
-  'Appointment Scheduling',
-  'Insurance Verification',
-  'Administrative Task',
-  'Other',
+  'Prep Patients',
+  'Check Patients In',
+  'Check Patients Out',
 ];
 
 const suggestedTasks: Record<string, string[]> = {
-  'Chart Prep': ['Prepare charts for tomorrow', 'Update patient information', 'Review medication lists'],
-  'Patient Follow-Up': ['Call patients for follow-up', 'Send reminder messages', 'Schedule follow-up appointments'],
-  'Appointment Scheduling': ['Schedule new appointments', 'Reschedule existing appointments', 'Confirm patient appointments'],
-  'Insurance Verification': ['Verify insurance coverage', 'Check eligibility', 'Submit prior authorization'],
-  'Administrative Task': ['Update patient records', 'Process paperwork', 'Coordinate with billing'],
-  Other: [],
+  'Prep Patients': ['Prepare patient charts', 'Review medical histories', 'Organize encounter forms'],
+  'Check Patients In': ['Verify patient arrival', 'Update demographics', 'Collect copayments'],
+  'Check Patients Out': ['Schedule follow-up appointments', 'Process referrals', 'Provide discharge instructions'],
 };
 
 const priorityColors = {
@@ -119,18 +113,20 @@ const Requests = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-navy-900">Requests</h1>
-          <p className="mt-1 text-slate-600">Submit and track your support requests</p>
+          <p className="mt-1 text-slate-600">{isSpecialist ? 'Track your support requests' : 'Submit and track your support requests'}</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700"
-        >
-          <Plus size={18} />
-          Create New Request
-        </button>
+        {!isSpecialist && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700"
+          >
+            <Plus size={18} />
+            Create New Request
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {!isSpecialist && showForm && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-navy-900">Create New Request</h2>
@@ -456,14 +452,18 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
           <div className="flex flex-col items-center py-12 text-slate-500">
             <ListTodo size={48} className="mb-4 text-slate-300" />
             <p className="text-lg font-medium">No requests yet</p>
-            <p className="mt-1 text-sm">Create your first request to get started</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
-            >
-              <Plus size={16} />
-              Create Request
-            </button>
+            <p className="mt-1 text-sm">
+              {isSpecialist ? 'No requests have been assigned to you yet.' : 'Create your first request to get started'}
+            </p>
+            {!isSpecialist && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+              >
+                <Plus size={16} />
+                Create Request
+              </button>
+            )}
           </div>
         )}
       </div>

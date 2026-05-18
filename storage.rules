@@ -5,12 +5,21 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return request.auth.uid == userId;
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    function isAdmin() {
-      return signedIn();
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    function isValidImageContentType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isValidFileSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
     }
 
     match /profile_photos/{userId}/{fileName} {
@@ -18,9 +27,7 @@ service firebase.storage {
       allow write: if signedIn() && (
         isOwner(userId) ||
         isAdmin()
-      ) && request.resource.size < 5 * 1024 * 1024 && (
-        request.resource.contentType.matches('image/.*')
-      );
+      ) && isValidFileSize(5) && isValidImageContentType();
     }
 
     match /message_attachments/{userId}/{fileName} {
@@ -28,14 +35,14 @@ service firebase.storage {
       allow write: if signedIn() && (
         isOwner(userId) ||
         isAdmin()
-      ) && request.resource.size < 10 * 1024 * 1024 && (
+      ) && isValidFileSize(10) && (
         request.resource.contentType.matches('image/.*') ||
         request.resource.contentType.matches('application/pdf')
       );
     }
 
     match /{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if false;
       allow write: if false;
     }
   }

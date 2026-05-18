@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, Bell, UserPlus, X } from 'lucide-react';
+import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, FileText, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, X } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { notificationService } from '@/lib/firestore';
-import type { Request, UserProfile, AppNotification } from '@/lib/firestore';
+import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { workflowService, API_BASE_URL } from '@/lib/firestore';
+import type { Request, UserProfile, WorkflowStatus } from '@/lib/firestore';
 import { DateTimeDisplay } from '@/lib/datetime';
 
 export const SpecialistDashboard = () => {
@@ -13,93 +13,83 @@ export const SpecialistDashboard = () => {
   const [requests, setRequests] = useState<Request[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [newClientAssignments, setNewClientAssignments] = useState<AppNotification[]>([]);
-  const [morningPrepStatus, setMorningPrepStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
-  const [postClinicStatus, setPostClinicStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
+  const [workflow, setWorkflow] = useState<WorkflowStatus | null>(null);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      setLoading(true);
-      try {
-        if (!sessionUser?.uid) {
-          setRequests([]);
-          setClients([]);
-          setLoading(false);
-          return;
-        }
-        const [reqSnap, clientsSnap] = await Promise.all([
-          getDocs(query(collection(db, 'requests'), where('specialistId', '==', sessionUser.uid))),
-          getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid))),
-        ]);
+    if (!sessionUser?.uid) { setRequests([]); setClients([]); setLoading(false); return; }
+    setLoading(true);
 
-        setRequests(
-          reqSnap.docs.map(d => ({ id: d.id, ...d.data(), submittedAt: d.data().submittedAt?.toDate() } as Request))
-            .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime())
-        );
-        
-        setClients(
-          clientsSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile))
-        );
-      } catch (e) {
-        console.error('Error fetching specialist data', e);
-      } finally {
+    const unsubReqs = onSnapshot(
+      query(collection(db, 'requests'), where('specialistId', '==', sessionUser.uid)),
+      (snap) => {
+        setRequests(snap.docs.map(d => ({ id: d.id, ...d.data(), submittedAt: d.data().submittedAt?.toDate() } as Request)));
         setLoading(false);
-      }
-    };
-    fetchDashboardData();
+      },
+      (err) => { console.error('[REQUESTS] Subscription error:', err); setLoading(false); }
+    );
+
+    getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid)))
+      .then(snap => setClients(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile))))
+      .catch(err => console.error('[CLIENTS] getDocs error:', err));
+
+    const unsubClients = onSnapshot(
+      query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid)),
+      (snap) => {
+        if (!snap.metadata.hasPendingWrites) setClients(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+      },
+      (err) => { console.error('[CLIENTS] Subscription error:', err); }
+    );
+
+    return () => { unsubReqs(); unsubClients(); };
   }, [sessionUser?.uid]);
 
   useEffect(() => {
     if (!sessionUser?.uid) return;
-    const unsub = notificationService.subscribeToNotifications(sessionUser.uid, (items) => {
-      setNotifications(items);
-      const assignmentNotifs = items.filter(n => n.type === 'assignment');
-      setNewClientAssignments(assignmentNotifs);
-    });
-    return () => unsub();
+    const unsubWf = workflowService.subscribe(sessionUser.uid, setWorkflow);
+    return () => { unsubWf(); };
   }, [sessionUser?.uid]);
 
-  const handleNotificationClick = async (notificationId: string, read: boolean) => {
-    if (!read) {
-      await notificationService.markNotificationRead(notificationId);
+  const handleWorkflowChange = async (field: 'morningPrepStatus' | 'postClinicStatus', value: 'not_started' | 'in_progress' | 'completed') => {
+    if (!sessionUser?.uid) return;
+    try {
+      if (field === 'morningPrepStatus') {
+        await workflowService.updateMorningPrep(sessionUser.uid, value);
+      } else {
+        await workflowService.updatePostClinic(sessionUser.uid, value);
+      }
+    } catch (e) {
+      console.error('[WORKFLOW] Failed to update:', e);
+      return;
+    }
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) { console.warn('[WORKFLOW] No auth token'); return; }
+      const res = await fetch(`${API_BASE_URL}/api/workflow/notify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          specialistId: sessionUser.uid,
+          specialistName: sessionUser.displayName || 'Your Specialist',
+          step: field === 'morningPrepStatus' ? 'Morning Prep' : 'Post-Clinic Documentation',
+          status: value,
+          loginUrl: window.location.origin,
+        }),
+      });
+      if (!res.ok) console.error('[WORKFLOW] Backend error:', await res.text());
+    } catch (e) {
+      console.error('[WORKFLOW] Failed to send notification:', e);
     }
   };
 
   const stats = [
+    { label: 'Total Requests', value: requests.length || 0, icon: ClipboardList, color: 'bg-purple-50 text-purple-600' },
     { label: 'Active Clients', value: clients.length || 0, icon: Users, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Pending Requests', value: requests.filter(r => r.status === 'pending').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
-    { label: 'Completed Tasks', value: requests.filter(r => r.status === 'completed').length, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Pending', value: requests.filter(r => r.status === 'pending').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
+    { label: 'Completed', value: requests.filter(r => r.status === 'completed').length, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
   ];
 
   return (
     <div className="space-y-6">
-      {newClientAssignments.length > 0 && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100">
-              <UserPlus size={20} className="text-indigo-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-indigo-900">New Client Assignments</h2>
-              <p className="text-sm text-indigo-700">You have {newClientAssignments.length} new client assignment(s)</p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {newClientAssignments.slice(0, 3).map((notif) => (
-              <div 
-                key={notif.id} 
-                onClick={() => handleNotificationClick(notif.id, notif.read)}
-                className={`cursor-pointer flex items-center gap-2 rounded-lg bg-white/80 p-3 border border-indigo-100 ${!notif.read ? 'bg-indigo-100' : ''}`}
-              >
-                <Bell size={14} className="text-indigo-500" />
-                <p className="text-sm text-indigo-800">{notif.message}</p>
-                {!notif.read && <span className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       {showWelcomeBack && (
         <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-4">
           <div className="flex items-center justify-between">
@@ -194,9 +184,95 @@ export const SpecialistDashboard = () => {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
+          {/* Today With Your Clients */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h2 className="mb-4 text-lg font-semibold text-navy-900">Today With Your Clients</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${workflow?.morningPrepStatus === 'completed' ? 'bg-emerald-100' : workflow?.morningPrepStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                    {workflow?.morningPrepStatus === 'completed' ? (
+                      <Check className="h-5 w-5 text-emerald-600" />
+                    ) : workflow?.morningPrepStatus === 'in_progress' ? (
+                      <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
+                    ) : (
+                      <Clock className="h-5 w-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Morning Prep</p>
+                    <p className="text-sm text-slate-500">Prepare charts and patient details</p>
+                  </div>
+                </div>
+                <select
+                  value={workflow?.morningPrepStatus || 'not_started'}
+                  onChange={(e) => handleWorkflowChange('morningPrepStatus', e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                    workflow?.morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                    workflow?.morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">Ongoing</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${workflow?.postClinicStatus === 'completed' ? 'bg-emerald-100' : workflow?.postClinicStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                    {workflow?.postClinicStatus === 'completed' ? (
+                      <Check className="h-5 w-5 text-emerald-600" />
+                    ) : workflow?.postClinicStatus === 'in_progress' ? (
+                      <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
+                    ) : (
+                      <FileText className="h-5 w-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Post-Clinic Documentation</p>
+                    <p className="text-sm text-slate-500">Finalize notes in EHR</p>
+                  </div>
+                </div>
+                <select
+                  value={workflow?.postClinicStatus || 'not_started'}
+                  onChange={(e) => handleWorkflowChange('postClinicStatus', e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                  disabled={!workflow?.clinicDayFinished}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                    !workflow?.clinicDayFinished ? 'cursor-not-allowed opacity-50' :
+                    workflow?.postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                    workflow?.postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">Ongoing</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+            </div>
+
+            {workflow?.clinicDayFinished && (
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link
+                to="/specialist/messages"
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <MessageSquare size={16} />
+                Message Clients
+              </Link>
+            </div>
+            )}
+          </div>
+
+          {/* Incoming Requests */}
           <div className="rounded-xl border border-slate-200 bg-white">
             <div className="flex items-center justify-between border-b border-slate-200 p-4">
-              <h2 className="text-lg font-semibold text-navy-900">Incoming Requests</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-navy-900">Incoming Requests</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Track your support requests</p>
+              </div>
               <button className="text-sm font-medium text-teal-600 hover:text-teal-700">View All</button>
             </div>
             <div className="p-4">
@@ -257,8 +333,12 @@ export const SpecialistDashboard = () => {
             <div className="divide-y divide-slate-100">
               {clients.map((client) => (
                 <div key={client.uid} className="flex items-center gap-3 p-4">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white">
-                    {client.displayName?.charAt(0) || 'C'}
+                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white">
+                    {client.photoURL ? (
+                      <img src={client.photoURL} alt={client.displayName || 'Client'} className="h-full w-full object-cover" />
+                    ) : (
+                      client.displayName?.charAt(0) || 'C'
+                    )}
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-slate-900">{client.displayName || client.email || 'Client'}</p>
@@ -275,65 +355,6 @@ export const SpecialistDashboard = () => {
             </div>
           </div>
           )}
-
-          <div className="rounded-xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-100 p-4">
-              <h2 className="text-lg font-semibold text-navy-900 flex items-center gap-2">
-                <ClipboardList size={18} className="text-teal-500" />
-                Daily Activity
-              </h2>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${morningPrepStatus === 'completed' ? 'bg-emerald-100 text-emerald-600' : morningPrepStatus === 'in_progress' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
-                    {morningPrepStatus === 'completed' ? <Check size={14} /> : morningPrepStatus === 'in_progress' ? <RefreshCw size={14} className="animate-spin" /> : <Clock size={14} />}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Morning Prep</p>
-                    <p className="text-xs text-slate-500">Charts prepared</p>
-                  </div>
-                </div>
-                <select
-                  value={morningPrepStatus}
-                  onChange={(e) => setMorningPrepStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
-                  className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
-                    morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                    morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">Ongoing</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${postClinicStatus === 'completed' ? 'bg-emerald-100 text-emerald-600' : postClinicStatus === 'in_progress' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
-                    {postClinicStatus === 'completed' ? <Check size={14} /> : postClinicStatus === 'in_progress' ? <RefreshCw size={14} className="animate-spin" /> : <Clock size={14} />}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Post-Clinic Documentation</p>
-                    <p className="text-xs text-slate-500">Finalize notes in EHR</p>
-                  </div>
-                </div>
-                <select
-                  value={postClinicStatus}
-                  onChange={(e) => setPostClinicStatus(e.target.value as 'not_started' | 'in_progress' | 'completed')}
-                  className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
-                    postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                    postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">Ongoing</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-            </div>
-          </div>
 
           <Link to="/specialist/calls" className="block rounded-xl border border-slate-200 bg-gradient-to-r from-purple-50 to-blue-50 p-4 hover:shadow-sm transition">
             <div className="flex items-center justify-between">
