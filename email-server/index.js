@@ -4,6 +4,13 @@ import cors from 'cors';
 import path from 'path';
 import nodemailer from 'nodemailer';
 
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+});
+
 async function sendEmail({ from, to, subject, html }) {
   if (process.env.RESEND_API_KEY) {
     console.log('[EMAIL] Using Resend API (HTTP)');
@@ -349,11 +356,6 @@ app.get('/', (_req, res) => {
 });
 
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => {
-  const provider = process.env.RESEND_API_KEY ? 'Resend API' : process.env.EMAIL_USER ? 'Gmail SMTP' : 'Not configured';
-  console.log(`Email server running on port ${PORT}`);
-  console.log(`Provider: ${provider}`);
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -689,4 +691,10 @@ app.post('/send-status-update', authenticateRequest, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.listen(PORT, () => {
+  const provider = process.env.RESEND_API_KEY ? 'Resend API' : process.env.EMAIL_USER ? 'Gmail SMTP' : 'Not configured';
+  console.log(`Email server running on port ${PORT}`);
+  console.log(`Provider: ${provider}`);
 });
