@@ -283,7 +283,7 @@ const Messages = () => {
         ...conv,
         name: profile?.displayName || profile?.email || conv.name,
         role: profile?.role || conv.role,
-        photoURL: profile?.photoURL,
+        photoURL: profile?.photoURL || conv.photoURL,
         online: presenceMap[conv.id] || false,
       };
     })
