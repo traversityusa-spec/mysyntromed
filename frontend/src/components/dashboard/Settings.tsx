@@ -58,7 +58,7 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
 };
 
 const Settings = () => {
-  const { user, changePassword, refreshSessionUser, updateSessionField } = useAuth();
+  const { user, sessionUser, changePassword, refreshSessionUser, updateSessionField } = useAuth();
   const { profile, loading, updateProfile } = useUserProfile();
   
   const [profileForm, setProfileForm] = useState({
@@ -331,7 +331,8 @@ const Settings = () => {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          {sessionUser?.role !== 'admin' && (
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-slate-700">Specialties (comma separated)</label>
                 <input
@@ -364,6 +365,7 @@ const Settings = () => {
                 />
               </div>
             </div>
+          )}
           <div className="mt-5 flex justify-end">
             <button
               type="submit"

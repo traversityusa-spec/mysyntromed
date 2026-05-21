@@ -29,7 +29,7 @@ const io = new Server(httpServer, {
   cors: {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.some(allowed => origin === allowed || origin.includes('.railway.app') || origin.includes('.onrender.com'))) {
+      if (allowedOrigins.some(allowed => origin === allowed || origin.includes('.railway.app') || origin.includes('.onrender.com') || origin.endsWith('.mysyntromed.com'))) {
         return callback(null, true);
       }
       callback(new Error('Socket CORS policy: Origin not allowed'));
@@ -72,8 +72,14 @@ app.use(helmet({
 }));
 
 // Support multiple origins for CORS
+const PRODUCTION_ORIGINS = [
+  'https://mysyntromed.com',
+  'https://www.mysyntromed.com',
+];
+
 const allowedOrigins = [
   frontendOrigin,
+  ...PRODUCTION_ORIGINS,
   'http://localhost:3000',
   'http://localhost:5173',
 ].filter(Boolean);

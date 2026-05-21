@@ -4,6 +4,7 @@ import { CheckCircle2, Send, Loader2, MapPin, Clock, Shield, AlertCircle } from 
 import { Button } from '@/components/ui/Button';
 import { Phone, Mail } from 'lucide-react';
 import { CONTACT_INFO } from '@/lib/constants';
+import { API_BASE_URL } from '@/lib/firestore';
 
 export const ContactForm = () => {
   const [submitted, setSubmitted] = useState(false);
@@ -31,7 +32,7 @@ export const ContactForm = () => {
     setError(null);
 
     try {
-      const response = await fetch('/api/contact.php', {
+      const response = await fetch(`${API_BASE_URL}/api/contact`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
