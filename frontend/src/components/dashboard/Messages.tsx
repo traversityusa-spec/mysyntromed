@@ -265,16 +265,17 @@ const Messages = () => {
       });
     }
 
+    const profileUnsubs: (() => void)[] = [];
     const ids = Array.from(conversationMap.keys());
-    const missingProfiles = ids.filter((id) => !profileMap[id]);
-    if (missingProfiles.length > 0) {
-      missingProfiles.forEach(async (id) => {
-        const profile = await userService.getProfile(id);
+    ids.forEach((id) => {
+      if (profileMap[id]) return;
+      const unsub = userService.subscribeToProfile(id, (profile) => {
         if (profile) {
           setProfileMap((prev) => ({ ...prev, [id]: profile }));
         }
       });
-    }
+      profileUnsubs.push(unsub);
+    });
 
     const nextConversations = Array.from(conversationMap.values())
       .map((conv) => {
@@ -310,6 +311,9 @@ const Messages = () => {
     if (!selectedConversation && nextConversations.length > 0) {
       setSelectedConversation(nextConversations[0].id);
     }
+    return () => {
+      profileUnsubs.forEach((fn) => fn());
+    };
   }, [
     allMessages,
     assignedClients,
