@@ -343,6 +343,11 @@ app.post('/send-email', authenticateRequest, async (req, res) => {
   }
 });
 
+// Root route for platform health checks
+app.get('/', (_req, res) => {
+  res.json({ ok: true, service: 'email-server' });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   const provider = process.env.RESEND_API_KEY ? 'Resend API' : process.env.EMAIL_USER ? 'Gmail SMTP' : 'Not configured';
