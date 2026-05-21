@@ -99,6 +99,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       assignedSpecialistId: data?.assignedSpecialistId,
       assignedSpecialistName: data?.assignedSpecialistName,
       photoURL: data?.photoURL,
+      clinicName: data?.clinicName,
+      phone: data?.phone,
       specialties: data?.specialties || [],
       yearsExperience: data?.yearsExperience,
       bio: data?.bio,
