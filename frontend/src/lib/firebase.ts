@@ -6,12 +6,12 @@ import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyABv1MMNFZfZA96Um_d3pAvxPRKHt1Gt5w",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "mysyntromed-81242.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "mysyntromed-81242",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "mysyntromed-81242.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1074510275502",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1074510275502:web:19af06d958694d5d221e3f",
 };
 
 const requiredKeys = Object.entries(firebaseConfig)
