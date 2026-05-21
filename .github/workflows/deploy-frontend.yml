@@ -1,3 +1,4 @@
+# Force redeploy: trigger SSL cert provisioning after DNS cleanup
 name: Deploy Frontend to GitHub Pages
 
 on:
