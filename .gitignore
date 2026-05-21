@@ -57,3 +57,4 @@ temp/
 # Test artifacts
 test-results/
 playwright-report/
+frontend/dist/
