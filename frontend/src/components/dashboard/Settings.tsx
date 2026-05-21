@@ -125,6 +125,7 @@ const Settings = () => {
   const [twoFactor, setTwoFactor] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
@@ -132,7 +133,8 @@ const Settings = () => {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
-    
+    setSaveError(null);
+
     try {
       await updateProfile({
         displayName: profileForm.displayName,
@@ -146,11 +148,10 @@ const Settings = () => {
         yearsExperience: profileForm.yearsExperience ? Number(profileForm.yearsExperience) : undefined,
         bio: profileForm.bio,
       });
-      await refreshSessionUser();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
-      console.error('Error saving profile:', error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -262,6 +263,12 @@ const Settings = () => {
         <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
           <Check size={18} />
           <span className="text-sm font-medium">Settings saved successfully!</span>
+        </div>
+      )}
+      {saveError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          <AlertCircle size={18} />
+          <span className="text-sm font-medium">{saveError}</span>
         </div>
       )}
 
