@@ -759,7 +759,7 @@ export const inviteCodeService = {
 };
 
 /* ─── OTP Service (Backend-only) ──────────────────────────────── */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.mysyntromed.com';
 
 export const otpService = {
   async requestCode(email: string): Promise<{ success: boolean; error?: string }> {

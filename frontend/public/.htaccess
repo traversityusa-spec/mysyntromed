@@ -2,6 +2,9 @@
   RewriteEngine On
   RewriteBase /
 
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
@@ -15,5 +18,5 @@
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
-  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://apis.google.com https://www.gstatic.com https://*.firebaseio.com https://*.firebasestorage.googleapis.com https://sentry.io; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.firebaseio.com https://identitytoolkit.googleapis.com https://firestore.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://apis.google.com https://www.gstatic.com https://*.firebaseio.com https://*.firebasestorage.googleapis.com https://sentry.io; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.firebaseio.com https://identitytoolkit.googleapis.com https://firestore.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; upgrade-insecure-requests"
 </IfModule>

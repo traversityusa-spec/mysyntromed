@@ -40,6 +40,13 @@ const serveIndex = (res) => {
 };
 
 const server = http.createServer((req, res) => {
+  // Security headers
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+
   let reqPath = decodeURIComponent(req.url.split('?')[0]);
   if (reqPath === '/' || !reqPath) reqPath = '/index.html';
   

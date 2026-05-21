@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc, getDocs } from 'firebase/firestore';
-import { db, activityService } from '@/lib/firestore';
+import { db, activityService, API_BASE_URL } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
 import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -69,7 +69,7 @@ const CreateUserModal = ({
 
     try {
       const token = await user?.getIdToken();
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/create-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/create-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -265,7 +265,7 @@ export const AdminClients = () => {
       const idToken = await authUser?.getIdToken(true);
       if (!idToken) return;
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/users`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
@@ -311,7 +311,7 @@ export const AdminClients = () => {
     setActionLoading(uid);
     try {
       const token = await authUser?.getIdToken();
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/deactivate-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/deactivate-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -337,7 +337,7 @@ export const AdminClients = () => {
     setActionLoading(deletingUser.uid);
     try {
       const token = await authUser?.getIdToken();
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/delete-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/delete-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -380,7 +380,7 @@ export const AdminClients = () => {
         throw new Error('Your admin session has expired. Please log in again.');
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/assign-specialist`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/assign-specialist`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -728,7 +728,7 @@ export const AdminSpecialists = () => {
       const idToken = await authUser?.getIdToken(true);
       if (!idToken) return;
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/users`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
@@ -770,7 +770,7 @@ export const AdminSpecialists = () => {
     setActionLoading(uid);
     try {
       const token = await authUser?.getIdToken();
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/deactivate-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/deactivate-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -796,7 +796,7 @@ export const AdminSpecialists = () => {
     setActionLoading(deletingUser.uid);
     try {
       const token = await authUser?.getIdToken();
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/delete-user`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/delete-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1152,7 +1152,7 @@ export const AdminConversations = () => {
       try {
         const idToken = await authUser?.getIdToken();
         if (!idToken) return;
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/users`, {
+        const response = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
           headers: { 'Authorization': `Bearer ${idToken}` }
         });
         const data = await response.json();
@@ -1409,7 +1409,7 @@ export const AdminAnalytics = () => {
         if (!idToken) return;
 
         const [usersRes, allRequests, allMessages] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_BASE_URL || window.location.origin}/api/auth/admin/users`, {
+          fetch(`${API_BASE_URL}/api/auth/admin/users`, {
             headers: { 'Authorization': `Bearer ${idToken}` }
           }),
           getDocs(collection(db, 'requests')),
