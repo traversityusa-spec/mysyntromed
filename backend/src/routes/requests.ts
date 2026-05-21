@@ -99,14 +99,15 @@ router.post('/notify-status-change', async (req, res) => {
     const baseUrl = loginUrl || 'https://mysyntromed.com';
     const admin = (await import('../firebaseAdmin.js')).default;
 
-    if (clientEmail && userId) {
+    if (userId) {
       const userSnap = await admin.firestore().collection('users').doc(userId).get();
       const userData = userSnap.data();
+      const userEmail = userData?.email || clientEmail;
       const prefs = userData?.notificationPreferences;
-      if (!prefs || prefs.emailRequests !== false) {
+      if (userEmail && (!prefs || prefs.emailRequests !== false)) {
         await sendStatusChangeEmail({
-          recipientEmail: clientEmail,
-          recipientName: clientName || 'Client',
+          recipientEmail: userEmail,
+          recipientName: clientName || userData?.displayName || 'Client',
           role: 'client',
           requestType: requestType || 'Request',
           oldStatus: '',
