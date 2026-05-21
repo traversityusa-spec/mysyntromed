@@ -168,7 +168,6 @@ const Settings = () => {
 
     const localUrl = URL.createObjectURL(file);
     setProfileForm((prev) => ({ ...prev, photoURL: localUrl }));
-    updateSessionField('photoURL', localUrl);
 
     try {
       const fileRef = ref(storage, `profile_photos/${user.uid}/${Date.now()}-${file.name}`);

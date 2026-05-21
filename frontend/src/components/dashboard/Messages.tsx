@@ -483,13 +483,14 @@ const Messages = () => {
     const senderName = sessionUser?.displayName || user?.email?.split('@')[0] || 'User';
     const senderRole = sessionUser?.role || 'client';
     const messageText = newMessage.trim();
+    const photoURL = sessionUser?.photoURL?.startsWith('http') ? sessionUser.photoURL : '';
 
     try {
       const messageId = await messageService.sendMessage({
         senderId: user.uid,
         senderName,
         senderRole,
-        senderPhotoURL: sessionUser?.photoURL || '',
+        senderPhotoURL: photoURL,
         receiverId,
         text: messageText,
         read: false,
@@ -501,7 +502,7 @@ const Messages = () => {
         senderId: user.uid,
         senderName,
         senderRole,
-        senderPhotoURL: sessionUser?.photoURL || '',
+        senderPhotoURL: photoURL,
         receiverId,
         text: messageText,
         read: false,
@@ -535,13 +536,14 @@ const Messages = () => {
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
       const isImage = file.type.startsWith('image/');
+      const uploadPhotoURL = sessionUser?.photoURL?.startsWith('http') ? sessionUser.photoURL : '';
       
       try {
         await messageService.sendMessage({
           senderId: user.uid,
           senderName: sessionUser?.displayName || user?.email?.split('@')[0] || 'User',
           senderRole: sessionUser?.role || 'client',
-          senderPhotoURL: sessionUser?.photoURL || '',
+          senderPhotoURL: uploadPhotoURL,
           receiverId: selectedConversation,
           text: `Sent a ${file.type.startsWith('image/') ? 'photo' : 'file'}`,
           read: false,
