@@ -1238,12 +1238,31 @@ export const notificationService = {
   },
 };
 
+const getToday = () => new Date().toISOString().slice(0, 10);
+
 export const workflowService = {
   subscribe(specialistId: string, callback: (wf: WorkflowStatus | null) => void): Unsubscribe {
     const ref = doc(db, 'workflows', specialistId);
     return onSnapshot(ref, (snap) => {
       if (!snap.exists()) { callback(null); return; }
       const d = snap.data();
+      const today = getToday();
+      if (d.workflowDate !== today) {
+        setDoc(ref, {
+          morningPrepStatus: 'not_started',
+          postClinicStatus: 'not_started',
+          clinicDayFinished: false,
+          workflowDate: today,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        callback({
+          morningPrepStatus: 'not_started',
+          postClinicStatus: 'not_started',
+          clinicDayFinished: false,
+          updatedAt: new Date(),
+        });
+        return;
+      }
       callback({
         morningPrepStatus: d.morningPrepStatus || 'not_started',
         postClinicStatus: d.postClinicStatus || 'not_started',
@@ -1257,6 +1276,7 @@ export const workflowService = {
     try {
       await setDoc(doc(db, 'workflows', specialistId), {
         morningPrepStatus: status,
+        workflowDate: getToday(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (e) {
@@ -1268,6 +1288,7 @@ export const workflowService = {
     try {
       await setDoc(doc(db, 'workflows', specialistId), {
         postClinicStatus: status,
+        workflowDate: getToday(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (e) {
@@ -1279,6 +1300,7 @@ export const workflowService = {
     try {
       await setDoc(doc(db, 'workflows', specialistId), {
         clinicDayFinished: true,
+        workflowDate: getToday(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (e) {
