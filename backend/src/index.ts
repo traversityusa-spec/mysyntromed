@@ -199,9 +199,11 @@ app.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
         console.warn('[OTP] Email server returned error, code logged for dev');
       }
     } catch (emailError) {
-      console.warn('[OTP] Email server unavailable, OTP code:', code, '- DEV MODE');
+      console.error('[OTP] Email server unavailable');
+      return res.status(502).json({ error: 'Email service unavailable. Please try again later.' });
     }
 
+    console.log('[OTP] Verification code sent to email');
     res.json({ success: true, message: 'Verification code sent to your email' });
   } catch (error) {
     console.error('[OTP] Error generating OTP:', error);

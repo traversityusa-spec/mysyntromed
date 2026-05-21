@@ -70,9 +70,10 @@ const sendWelcomeEmail = (email: string, displayName: string, role: 'client' | '
           }
         });
 
-    } catch (error: any) {
-      console.error('[EMAIL] Exception for', email, ':', error.message);
-      resolve({ success: false, error: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[EMAIL] Exception for', email, ':', msg);
+      resolve({ success: false, error: msg });
     }
   });
 };
@@ -186,9 +187,9 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       tempCode: password,
       emailSent: 'pending'
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create user error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -209,8 +210,8 @@ router.post('/admin/deactivate-user', requireAuth, requireRole('admin'), async (
     });
 
     res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -262,9 +263,9 @@ router.post('/admin/delete-user', requireAuth, requireRole('admin'), async (req,
     await adminAuth.deleteUser(uid);
     
     res.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Delete user error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -364,9 +365,9 @@ router.post('/admin/assign-specialist', requireAuth, requireRole('admin'), async
       assignedSpecialistId: specialistId,
       assignedSpecialistName: specialistName,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Assign specialist error:', error);
-    res.status(500).json({ error: error.message || 'Failed to assign specialist' });
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -379,7 +380,7 @@ router.get('/admin/users', requireAuth, requireRole('admin'), async (_req, res) 
       profiles.set(doc.id, doc.data());
     });
 
-    const users = listUsersResult.users.map((u: { uid: string; email: string; displayName: string; disabled: boolean; customClaims?: { role?: string }; metadata: { creationTime: string } }) => {
+    const users = listUsersResult.users.map((u) => {
       const profile = profiles.get(u.uid) || {};
       return {
         uid: u.uid,
@@ -395,21 +396,9 @@ router.get('/admin/users', requireAuth, requireRole('admin'), async (_req, res) 
       };
     });
     res.json({ users });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
-});
-
-router.get('/me/client', requireAuth, requireRole('client'), (req: AuthedRequest, res) => {
-  res.json({ user: req.user });
-});
-
-router.get('/me/admin', requireAuth, requireRole('admin'), (req: AuthedRequest, res) => {
-  res.json({ user: req.user });
-});
-
-router.get('/me/specialist', requireAuth, requireRole('specialist'), (req: AuthedRequest, res) => {
-  res.json({ user: req.user });
 });
 
 export default router;

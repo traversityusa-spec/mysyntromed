@@ -271,7 +271,9 @@ export const notificationSoundService = {
       playTone(880, 0);
       playTone(1100, 0.1);
       setTimeout(() => ctx.close(), 300);
-    } catch {}
+    } catch (err) {
+      console.warn('[SOUND] Audio playback error:', err);
+    }
   },
 
   playOutgoingSound(): void {
@@ -287,7 +289,9 @@ export const notificationSoundService = {
       osc.start();
       osc.stop(ctx.currentTime + 0.05);
       osc.onended = () => ctx.close();
-    } catch {}
+    } catch (err) {
+      console.warn('[SOUND] Audio playback error:', err);
+    }
   },
 
   subscribeToSounds(userId: string, callback: (type: 'incoming' | 'outgoing') => void): () => void {
@@ -669,20 +673,23 @@ export const requestService = {
       return snapshot.docs
         .map((doc) => {
           const data = doc.data();
-          const history = (data.statusHistory || []).map((e: any) => ({
-            ...e,
-            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          const rawHistory = (data.statusHistory || []) as Array<Record<string, unknown>>;
+          const history: StatusEntry[] = rawHistory.map((e) => ({
+            status: e.status as StatusEntry['status'],
+            timestamp: e.timestamp && typeof e.timestamp === 'object' && 'toDate' in (e.timestamp as object) ? (e.timestamp as { toDate: () => Date }).toDate() : new Date((e.timestamp || Date.now()) as number | string),
+            changedBy: e.changedBy as string | undefined,
+            changedByName: e.changedByName as string | undefined,
           }));
           return {
             id: doc.id,
             ...data,
             statusHistory: history,
-            submittedAt: data.submittedAt?.toDate() || new Date(),
-            completedAt: data.completedAt?.toDate(),
+            submittedAt: data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt || Date.now()),
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : null,
             seen: data.seen || false,
-          };
+          } as Request;
         })
-        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+        .sort((a: Request, b: Request) => b.submittedAt.getTime() - a.submittedAt.getTime());
     } catch (error) {
       console.error('Error fetching requests:', error);
       return [];
@@ -776,21 +783,24 @@ export const requestService = {
       return snapshot.docs
         .map((doc) => {
           const data = doc.data();
-          const history = (data.statusHistory || []).map((e: any) => ({
-            ...e,
-            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          const rawHistory = (data.statusHistory || []) as Array<Record<string, unknown>>;
+          const history: StatusEntry[] = rawHistory.map((e) => ({
+            status: e.status as StatusEntry['status'],
+            timestamp: e.timestamp && typeof e.timestamp === 'object' && 'toDate' in (e.timestamp as object) ? (e.timestamp as { toDate: () => Date }).toDate() : new Date((e.timestamp || Date.now()) as number | string),
+            changedBy: e.changedBy as string | undefined,
+            changedByName: e.changedByName as string | undefined,
           }));
           return {
             id: doc.id,
             ...data,
             statusHistory: history,
-            submittedAt: data.submittedAt?.toDate() || new Date(),
-            completedAt: data.completedAt?.toDate(),
-            assignedAt: data.assignedAt?.toDate?.(),
+            submittedAt: data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt || Date.now()),
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : null,
+            assignedAt: data.assignedAt?.toDate ? data.assignedAt.toDate() : null,
             seen: data.seen || false,
-          };
+          } as Request;
         })
-        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+        .sort((a: Request, b: Request) => b.submittedAt.getTime() - a.submittedAt.getTime());
     } catch (error) {
       console.error('Error fetching requests for specialist:', error);
       return [];
@@ -802,36 +812,37 @@ export const requestService = {
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => {
       const data = doc.data();
-      const history = (data.statusHistory || []).map((e: any) => ({
-        ...e,
-        timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+      const rawHistory = (data.statusHistory || []) as Array<Record<string, unknown>>;
+      const history: StatusEntry[] = rawHistory.map((e) => ({
+        status: e.status as StatusEntry['status'],
+        timestamp: e.timestamp && typeof e.timestamp === 'object' && 'toDate' in (e.timestamp as object) ? (e.timestamp as { toDate: () => Date }).toDate() : new Date((e.timestamp || Date.now()) as number | string),
+        changedBy: e.changedBy as string | undefined,
+        changedByName: e.changedByName as string | undefined,
       }));
       return {
         id: doc.id,
         ...data,
         statusHistory: history,
-        submittedAt: data.submittedAt?.toDate() || new Date(),
-        completedAt: data.completedAt?.toDate(),
-        assignedAt: data.assignedAt?.toDate?.(),
+        submittedAt: data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt || Date.now()),
+        completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : null,
+        assignedAt: data.assignedAt?.toDate ? data.assignedAt.toDate() : null,
         seen: data.seen || false,
-      };
-    }) as Request[];
+      } as Request;
+    });
   },
 
   async updateRequestStatus(requestId: string, status: 'pending' | 'in_progress' | 'completed', changedBy?: string, changedByName?: string): Promise<void> {
-    const data: any = {
+    const historyEntry = {
       status,
-      statusHistory: arrayUnion({
-        status,
-        timestamp: new Date().toISOString(),
-        changedBy,
-        changedByName,
-      }),
+      timestamp: new Date().toISOString(),
+      changedBy,
+      changedByName,
     };
-    if (status === 'completed') {
-      data.completedAt = serverTimestamp();
-    }
-    await updateDoc(doc(db, 'requests', requestId), data);
+    await updateDoc(doc(db, 'requests', requestId), {
+      status,
+      statusHistory: arrayUnion(historyEntry),
+      ...(status === 'completed' ? { completedAt: serverTimestamp() } : {}),
+    });
 
     try {
       const requestSnap = await getDoc(doc(db, 'requests', requestId));
@@ -920,20 +931,23 @@ export const requestService = {
       const requests = snapshot.docs
         .map((doc) => {
           const data = doc.data();
-          const history = (data.statusHistory || []).map((e: any) => ({
-            ...e,
-            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          const rawHistory = (data.statusHistory || []) as Array<Record<string, unknown>>;
+          const history: StatusEntry[] = rawHistory.map((e) => ({
+            status: e.status as StatusEntry['status'],
+            timestamp: e.timestamp && typeof e.timestamp === 'object' && 'toDate' in (e.timestamp as object) ? (e.timestamp as { toDate: () => Date }).toDate() : new Date((e.timestamp || Date.now()) as number | string),
+            changedBy: e.changedBy as string | undefined,
+            changedByName: e.changedByName as string | undefined,
           }));
           return {
             id: doc.id,
             ...data,
             statusHistory: history,
-            submittedAt: data.submittedAt?.toDate() || new Date(),
-            completedAt: data.completedAt?.toDate(),
-            assignedAt: data.assignedAt?.toDate?.(),
+            submittedAt: data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt || Date.now()),
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : null,
+            assignedAt: data.assignedAt?.toDate ? data.assignedAt.toDate() : null,
             seen: data.seen || false,
-          };
-        }) as Request[];
+          } as Request;
+        });
       callback(requests);
     });
   },
@@ -948,21 +962,24 @@ export const requestService = {
       const requests = snapshot.docs
         .map((doc) => {
           const data = doc.data();
-          const history = (data.statusHistory || []).map((e: any) => ({
-            ...e,
-            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          const rawHistory = (data.statusHistory || []) as Array<Record<string, unknown>>;
+          const history: StatusEntry[] = rawHistory.map((e) => ({
+            status: e.status as StatusEntry['status'],
+            timestamp: e.timestamp && typeof e.timestamp === 'object' && 'toDate' in (e.timestamp as object) ? (e.timestamp as { toDate: () => Date }).toDate() : new Date((e.timestamp || Date.now()) as number | string),
+            changedBy: e.changedBy as string | undefined,
+            changedByName: e.changedByName as string | undefined,
           }));
           return {
             id: doc.id,
             ...data,
             statusHistory: history,
-            submittedAt: data.submittedAt?.toDate() || new Date(),
-            completedAt: data.completedAt?.toDate(),
-            assignedAt: data.assignedAt?.toDate?.(),
+            submittedAt: data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt || Date.now()),
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : null,
+            assignedAt: data.assignedAt?.toDate ? data.assignedAt.toDate() : null,
             seen: data.seen || false,
-          };
+          } as Request;
         })
-        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+        .sort((a: Request, b: Request) => b.submittedAt.getTime() - a.submittedAt.getTime());
       callback(requests);
     });
   },
@@ -977,21 +994,24 @@ export const requestService = {
       const requests = snapshot.docs
         .map((doc) => {
           const data = doc.data();
-          const history = (data.statusHistory || []).map((e: any) => ({
-            ...e,
-            timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+          const rawHistory = (data.statusHistory || []) as Array<Record<string, unknown>>;
+          const history: StatusEntry[] = rawHistory.map((e) => ({
+            status: e.status as StatusEntry['status'],
+            timestamp: e.timestamp && typeof e.timestamp === 'object' && 'toDate' in (e.timestamp as object) ? (e.timestamp as { toDate: () => Date }).toDate() : new Date((e.timestamp || Date.now()) as number | string),
+            changedBy: e.changedBy as string | undefined,
+            changedByName: e.changedByName as string | undefined,
           }));
           return {
             id: doc.id,
             ...data,
             statusHistory: history,
-            submittedAt: data.submittedAt?.toDate() || new Date(),
-            completedAt: data.completedAt?.toDate(),
-            assignedAt: data.assignedAt?.toDate?.(),
+            submittedAt: data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt || Date.now()),
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : null,
+            assignedAt: data.assignedAt?.toDate ? data.assignedAt.toDate() : null,
             seen: data.seen || false,
-          };
+          } as Request;
         })
-        .sort((a: any, b: any) => b.submittedAt.getTime() - a.submittedAt.getTime()) as Request[];
+        .sort((a: Request, b: Request) => b.submittedAt.getTime() - a.submittedAt.getTime());
       callback(requests);
     });
   },
@@ -1029,10 +1049,10 @@ export const activityService = {
       .map((doc) => ({
         id: doc.id,
         ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      }))
-      .filter((act: any) => act.createdAt >= startDate)
-      .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime()) as ActivityItem[];
+        createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt || Date.now()),
+      } as ActivityItem))
+      .filter((act: ActivityItem) => act.createdAt >= startDate)
+      .sort((a: ActivityItem, b: ActivityItem) => b.createdAt.getTime() - a.createdAt.getTime());
       
     return activities.slice(0, 50);
   },
@@ -1048,9 +1068,9 @@ export const activityService = {
         .map((doc) => ({
           id: doc.id,
           ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() || new Date(),
-        }))
-        .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime()) as ActivityItem[];
+          createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt || Date.now()),
+        } as ActivityItem))
+        .sort((a: ActivityItem, b: ActivityItem) => b.createdAt.getTime() - a.createdAt.getTime());
       callback(activity.slice(0, 50));
     });
   },
@@ -1066,9 +1086,9 @@ export const activityService = {
         .map((doc) => ({
           id: doc.id,
           ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() || new Date(),
-        }))
-        .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime()) as ActivityItem[];
+          createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt || Date.now()),
+        } as ActivityItem))
+        .sort((a: ActivityItem, b: ActivityItem) => b.createdAt.getTime() - a.createdAt.getTime());
       callback(activity.slice(0, 50));
     });
   },

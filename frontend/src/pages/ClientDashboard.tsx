@@ -2,7 +2,6 @@ import { useMemo, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell,
-  CalendarClock,
   CheckCircle,
   ClipboardCheck,
   Clock3,
@@ -13,8 +12,10 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { notificationService } from '@/lib/firestore';
-import type { AppNotification } from '@/lib/firestore';
+import { notificationService, requestService, messageService } from '@/lib/firestore';
+import type { AppNotification, Request } from '@/lib/firestore';
+import { query, collection, where, orderBy, getDocs, limit as firestoreLimit } from 'firebase/firestore';
+import { db } from '@/lib/firestore';
 
 const stats = [
   { label: 'Open Requests', value: '3', sub: '2 in progress' },
@@ -43,8 +44,12 @@ const quickActions = [
 const ClientDashboard = () => {
   const navigate = useNavigate();
   const { sessionUser, logout, refreshSessionUser } = useAuth();
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [assignmentNotification, setAssignmentNotification] = useState<AppNotification | null>(null);
+  const [openRequests, setOpenRequests] = useState(0);
+  const [inProgressRequests, setInProgressRequests] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [recentActivity, setRecentActivity] = useState<{ title: string; time: string; type: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -57,8 +62,44 @@ const ClientDashboard = () => {
 
   useEffect(() => {
     if (!sessionUser?.uid) return;
+    setLoading(true);
+
+    const fetchDashboardData = async () => {
+      try {
+        const [requestsSnap, messagesSnap, activitySnap] = await Promise.all([
+          getDocs(query(collection(db, 'requests'), where('userId', '==', sessionUser.uid))),
+          getDocs(query(collection(db, 'messages'), where('participants', 'array-contains', sessionUser.uid), where('read', '==', false))),
+          getDocs(query(collection(db, 'activity'), where('userId', '==', sessionUser.uid), orderBy('createdAt', 'desc'), firestoreLimit(5))),
+        ]);
+
+        const requests = requestsSnap.docs.map(d => ({ id: d.id, ...d.data() } as unknown as Request));
+        setOpenRequests(requests.filter(r => r.status !== 'completed').length);
+        setInProgressRequests(requests.filter(r => r.status === 'in_progress').length);
+        setUnreadMessages(messagesSnap.size);
+
+        setRecentActivity(
+          activitySnap.docs.map(d => {
+            const data = d.data();
+            return {
+              title: data.title || 'Activity',
+              time: data.createdAt?.toDate?.() ? timeAgo(data.createdAt.toDate()) : '',
+              type: data.type || 'Update',
+            };
+          })
+        );
+      } catch (err) {
+        console.error('[DASHBOARD] Error fetching data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [sessionUser?.uid]);
+
+  useEffect(() => {
+    if (!sessionUser?.uid) return;
     const unsub = notificationService.subscribeToNotifications(sessionUser.uid, (items) => {
-      setNotifications(items);
       const assignmentNotif = items.find(n => n.type === 'assignment' && !n.read);
       if (assignmentNotif) {
         setAssignmentNotification(assignmentNotif);
@@ -66,6 +107,29 @@ const ClientDashboard = () => {
     });
     return () => unsub();
   }, [sessionUser?.uid]);
+
+  const timeAgo = (date: Date): string => {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const stats = [
+    { label: 'Open Requests', value: String(openRequests), sub: `${inProgressRequests} in progress` },
+    { label: 'Unread Messages', value: String(unreadMessages), sub: 'From your specialist' },
+    { label: 'Compliance', value: '100%', sub: 'HIPAA-ready workflows' },
+  ];
+
+  const quickActions = [
+    { label: 'Create Request', hint: 'Submit a new operational task', to: '/portal/requests' },
+    { label: 'Message Specialist', hint: 'Send an update or question', to: '/portal/messages' },
+    { label: 'Book Consultation', hint: 'Schedule support call', to: '/portal/calls' },
+  ];
 
   const handleLogout = () => {
     void logout().finally(() => navigate('/portal'));
@@ -171,8 +235,12 @@ const ClientDashboard = () => {
               <span className="text-xs font-medium text-slate-500">Live updates</span>
             </div>
             <div className="divide-y divide-slate-100">
-              {recentUpdates.map((item) => (
-                <div key={item.title} className="flex items-start justify-between gap-3 px-5 py-4">
+              {loading ? (
+                <div className="p-5 text-sm text-slate-500">Loading activity...</div>
+              ) : recentActivity.length === 0 ? (
+                <div className="p-5 text-sm text-slate-500">No recent activity</div>
+              ) : recentActivity.map((item) => (
+                <div key={item.title + item.time} className="flex items-start justify-between gap-3 px-5 py-4">
                   <div>
                     <p className="font-medium text-slate-900">{item.title}</p>
                     <p className="mt-1 text-sm text-slate-500">{item.type}</p>
@@ -188,17 +256,7 @@ const ClientDashboard = () => {
               <h2 className="text-base font-semibold text-navy-900">Upcoming</h2>
             </div>
             <div className="space-y-3 p-5">
-              {upcoming.map((item) => (
-                <div key={item.title} className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex items-start gap-2">
-                    <CalendarClock size={16} className="mt-0.5 text-teal-600" />
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                      <p className="text-xs text-slate-500">{item.when}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <p className="text-sm text-slate-500">Check your <Link to="/portal/calls" className="text-teal-600 hover:underline">scheduled calls</Link> for upcoming events.</p>
             </div>
           </article>
         </section>

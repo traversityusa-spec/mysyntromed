@@ -29,13 +29,13 @@ export const presenceService = {
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === false) return;
-      onDisconnect(userStatusRef).set(offlineState).catch(() => {});
-      set(userStatusRef, onlineState).catch(() => {});
+      onDisconnect(userStatusRef).set(offlineState).catch((err) => console.warn('[PRESENCE] onDisconnect error:', err));
+      set(userStatusRef, onlineState).catch((err) => console.warn('[PRESENCE] set online error:', err));
     });
 
     return () => {
       unsubscribe();
-      set(userStatusRef, offlineState).catch(() => {});
+      set(userStatusRef, offlineState).catch((err) => console.warn('[PRESENCE] cleanup error:', err));
     };
   },
 

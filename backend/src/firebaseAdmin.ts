@@ -1,4 +1,4 @@
-import admin from 'firebase-admin';
+import admin, { type AppOptions, type ServiceAccount } from 'firebase-admin';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -53,15 +53,16 @@ function initFirebase() {
         privateKey,
       });
 
-      const config: any = { credential };
+      const config: AppOptions = { credential };
       if (databaseURL) config.databaseURL = databaseURL;
 
       admin.initializeApp(config);
       initialized = true;
       console.log('[FIREBASE] Initialized with individual env vars');
       return true;
-    } catch (err: any) {
-      console.error('[FIREBASE] Failed with individual env vars:', err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[FIREBASE] Failed with individual env vars:', message);
       console.error('[FIREBASE] Private key length:', privateKey?.length, 'Has PEM header:', privateKey?.includes('-----BEGIN PRIVATE KEY-----'));
     }
   }
@@ -74,8 +75,8 @@ function initFirebase() {
         parsed.private_key = sanitizePrivateKey(parsed.private_key);
       }
 
-      const config: any = {
-        credential: admin.credential.cert(parsed),
+      const config: AppOptions = {
+        credential: admin.credential.cert(parsed as ServiceAccount),
       };
       if (databaseURL) config.databaseURL = databaseURL;
 
@@ -83,8 +84,8 @@ function initFirebase() {
       initialized = true;
       console.log('[FIREBASE] Initialized with SERVICE_ACCOUNT_KEY');
       return true;
-    } catch (err: any) {
-      console.error('[FIREBASE] Failed to parse SERVICE_ACCOUNT_KEY:', err.message);
+    } catch (err: unknown) {
+      console.error('[FIREBASE] Failed to parse SERVICE_ACCOUNT_KEY:', err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -93,8 +94,8 @@ function initFirebase() {
     try {
       const absolute = path.resolve(serviceAccountPath);
       const serviceAccount = JSON.parse(fs.readFileSync(absolute, 'utf8'));
-      const config: any = {
-        credential: admin.credential.cert(serviceAccount),
+      const config: AppOptions = {
+        credential: admin.credential.cert(serviceAccount as ServiceAccount),
       };
       if (databaseURL) config.databaseURL = databaseURL;
 
@@ -102,24 +103,24 @@ function initFirebase() {
       initialized = true;
       console.log('[FIREBASE] Initialized with service account file');
       return true;
-    } catch (err: any) {
-      console.error('[FIREBASE] Failed to load service account file:', err.message);
+    } catch (err: unknown) {
+      console.error('[FIREBASE] Failed to load service account file:', err instanceof Error ? err.message : String(err));
     }
   }
 
   // Fallback: initialize without credentials (limited functionality)
   try {
     if (projectId) {
-      const config: any = { projectId };
+      const config: AppOptions = { projectId };
       if (databaseURL) config.databaseURL = databaseURL;
       admin.initializeApp(config);
       initialized = true;
       console.warn('[FIREBASE] Initialized without credentials - limited functionality');
       return true;
     }
-  } catch (err: any) {
-    console.error('[FIREBASE] Failed fallback init:', err.message);
-  }
+    } catch (err: unknown) {
+      console.error('[FIREBASE] Failed fallback init:', err instanceof Error ? err.message : String(err));
+    }
 
   console.error('[FIREBASE] All initialization methods failed. Firebase features will be unavailable.');
   return false;
@@ -146,14 +147,15 @@ function getAdmin() {
 }
 
 // Proxy-based adminAuth that lazily accesses admin.auth() on property access
-const adminAuthProxy = new Proxy({} as any, {
+const adminAuthProxy = new Proxy({} as admin.auth.Auth, {
   get(_target, prop) {
     if (!initialized) {
       console.warn('[FIREBASE] adminAuth accessed but Firebase not initialized');
       return undefined;
     }
     const auth = admin.auth();
-    return (auth as any)[prop];
+    const value = (auth as unknown as Record<string, unknown>)[prop as string];
+    return typeof value === 'function' ? value.bind(auth) : value;
   },
 });
 

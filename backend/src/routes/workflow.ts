@@ -7,7 +7,7 @@ import { getLogoHTML } from '../services/emailLogo.js';
 const router = Router();
 
 router.post('/notify', requireAuth, async (req: AuthedRequest, res) => {
-  const { specialistId, specialistName, step, status, loginUrl } = req.body;
+  const { specialistId, specialistName, step, status, loginUrl, recipientEmails } = req.body;
 
   if (!specialistId || !step || !status || !loginUrl) {
     return res.status(400).json({ error: 'Missing required fields: specialistId, step, status, loginUrl' });
@@ -64,44 +64,55 @@ router.post('/notify', requireAuth, async (req: AuthedRequest, res) => {
     };
 
     const subject = `[MySyntroMed] Workflow Update - ${step} is now ${statusLabel}`;
-
-    // Send to all assigned clients
-    const clientsSnap = await admin.firestore().collection('users')
-      .where('assignedSpecialistId', '==', specialistId).get();
-
     const emailPromises: Promise<any>[] = [];
 
-    clientsSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
-      if (!data.email) return;
-      emailPromises.push(
-        sendEmailViaServer({
-          from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
-          to: data.email,
-          subject,
-          html: buildHtml(data.displayName || data.email || 'Client', 'client'),
-        })
-      );
-    });
+    if (recipientEmails && Array.isArray(recipientEmails) && recipientEmails.length > 0) {
+      for (const email of recipientEmails) {
+        if (!email) continue;
+        emailPromises.push(
+          sendEmailViaServer({
+            from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
+            to: email,
+            subject,
+            html: buildHtml(email, 'client'),
+          })
+        );
+      }
+    } else {
+      const clientsSnap = await admin.firestore().collection('users')
+        .where('assignedSpecialistId', '==', specialistId).get();
 
-    // Send to all admins
-    const adminSnap = await admin.firestore().collection('users')
-      .where('role', '==', 'admin').get();
+      clientsSnap.docs.forEach((doc: any) => {
+        const data = doc.data();
+        if (!data.email) return;
+        emailPromises.push(
+          sendEmailViaServer({
+            from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
+            to: data.email,
+            subject,
+            html: buildHtml(data.displayName || data.email || 'Client', 'client'),
+          })
+        );
+      });
 
-    adminSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
-      if (!data.email) return;
-      const prefs = data.notificationPreferences;
-      if (prefs && prefs.emailRequests === false) return;
-      emailPromises.push(
-        sendEmailViaServer({
-          from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
-          to: data.email,
-          subject,
-          html: buildHtml(data.displayName || data.email || 'Admin', 'admin'),
-        })
-      );
-    });
+      const adminSnap = await admin.firestore().collection('users')
+        .where('role', '==', 'admin').get();
+
+      adminSnap.docs.forEach((doc: any) => {
+        const data = doc.data();
+        if (!data.email) return;
+        const prefs = data.notificationPreferences;
+        if (prefs && prefs.emailRequests === false) return;
+        emailPromises.push(
+          sendEmailViaServer({
+            from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
+            to: data.email,
+            subject,
+            html: buildHtml(data.displayName || data.email || 'Admin', 'admin'),
+          })
+        );
+      });
+    }
 
     await Promise.allSettled(emailPromises);
     console.log(`[WORKFLOW] Notified ${emailPromises.length} recipients of ${step} → ${statusLabel}`);

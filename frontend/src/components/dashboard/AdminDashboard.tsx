@@ -124,7 +124,6 @@ export const AdminDashboard = () => {
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
-  const [recentClient, setRecentClient] = useState<UserProfile | null>(null);
   const [selectedClient, setSelectedClient] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -157,8 +156,6 @@ export const AdminDashboard = () => {
         const clientUsers = users.filter(u => u.role === 'client');
         const sortedClients = [...clientUsers].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         setClients(sortedClients);
-        if (sortedClients.length > 0) setRecentClient(sortedClients[0]);
-
         setRequests(
           reqSnap.docs.map(d => {
             const data = d.data();

@@ -62,6 +62,13 @@ export const SpecialistDashboard = () => {
       return;
     }
     try {
+      const [adminSnap, assignedClients] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('role', '==', 'admin'))),
+        Promise.resolve(clients),
+      ]);
+      const adminEmails = adminSnap.docs.map(d => d.data().email).filter(Boolean);
+      const clientEmails = assignedClients.map(c => c.email).filter(Boolean);
+
       const token = await auth.currentUser?.getIdToken();
       if (!token) { console.warn('[WORKFLOW] No auth token'); return; }
       const res = await fetch(`${API_BASE_URL}/api/workflow/notify`, {
@@ -73,6 +80,7 @@ export const SpecialistDashboard = () => {
           step: field === 'morningPrepStatus' ? 'Morning Prep' : 'Post-Clinic Documentation',
           status: value,
           loginUrl: window.location.origin,
+          recipientEmails: [...new Set([...adminEmails, ...clientEmails])],
         }),
       });
       if (!res.ok) console.error('[WORKFLOW] Backend error:', await res.text());

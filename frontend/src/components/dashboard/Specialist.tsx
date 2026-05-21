@@ -4,26 +4,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { ratingService, userService, requestService, notificationService, type SpecialistRating, type UserProfile, type AppNotification } from '@/lib/firestore';
 
-const mockSpecialist = {
-  name: 'Assigned Specialist',
-  role: 'Medical Scribe Specialist',
-  photo: null,
-  bio: 'Experienced medical scribe specialist with over 5 years of experience supporting healthcare practices. Specialized in EHR documentation, patient chart preparation, and post-clinic workflow management. Passionate about helping healthcare providers streamline their administrative tasks.',
-  specialties: [
+const DEFAULT_SPECIALTIES = [
     'EHR Documentation',
     'Medical Chart Prep',
     'Patient Follow-Up',
     'Insurance Verification',
     'Appointment Scheduling',
     'HIPAA Compliance',
-  ],
-  experience: '5+ years',
-  availability: 'before_clinic',
-  availabilityText: 'Available 1 hour before clinic starts',
-  rating: 4.9,
-  reviews: 47,
-  responseTime: 'Usually responds within 1 hour',
-};
+  ];
 
 const Specialist = () => {
   const { sessionUser, refreshSessionUser } = useAuth();
@@ -37,7 +25,6 @@ const Specialist = () => {
   const [requestNote, setRequestNote] = useState('');
   const [requestSent, setRequestSent] = useState(false);
   const [requestNotice, setRequestNotice] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [assignmentNotification, setAssignmentNotification] = useState<AppNotification | null>(null);
 
   useEffect(() => {
@@ -54,7 +41,6 @@ const Specialist = () => {
   useEffect(() => {
     if (!sessionUser?.uid) return;
     const unsub = notificationService.subscribeToNotifications(sessionUser.uid, (items) => {
-      setNotifications(items);
       const assignmentNotif = items.find(
         n => n.type === 'assignment' && !n.read
       );
@@ -84,21 +70,6 @@ const Specialist = () => {
     if (!ratings.length) return 0;
     return ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
   }, [ratings]);
-
-  const getAvailabilityStatus = () => {
-    switch (mockSpecialist.availability) {
-      case 'before_clinic':
-        return { color: 'bg-emerald-100 text-emerald-700', text: 'Before Clinic Hours' };
-      case 'during_clinic':
-        return { color: 'bg-blue-100 text-blue-700', text: 'During Clinic Hours' };
-      case 'after_clinic':
-        return { color: 'bg-purple-100 text-purple-700', text: 'After Clinic Hours' };
-      default:
-        return { color: 'bg-slate-100 text-slate-700', text: 'Offline' };
-    }
-  };
-
-  const availability = getAvailabilityStatus();
 
   return (
     <div className="space-y-6">
@@ -209,20 +180,20 @@ const Specialist = () => {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-navy-900">{assignedName}</h1>
-                <p className="mt-1 text-slate-600">{mockSpecialist.role}</p>
+                <p className="mt-1 text-slate-600">{specialistProfile?.role || 'Medical Scribe Specialist'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-1">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <Star
                         key={i}
                         size={16}
-                        className={i < Math.floor(averageRating || mockSpecialist.rating) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}
+                        className={i < Math.floor(averageRating) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}
                       />
                     ))}
                     <span className="ml-1 text-sm font-medium text-slate-700">
-                      {(averageRating || mockSpecialist.rating).toFixed(1)}
+                      {averageRating > 0 ? averageRating.toFixed(1) : 'N/A'}
                     </span>
-                    <span className="text-sm text-slate-500">({ratings.length || mockSpecialist.reviews} reviews)</span>
+                    <span className="text-sm text-slate-500">({ratings.length} reviews)</span>
                   </div>
                 </div>
               </div>
@@ -241,19 +212,9 @@ const Specialist = () => {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${availability.color}`}>
-                  <Clock size={14} />
-                  {availability.text}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-sm text-slate-500">
-                <Clock size={14} />
-                {mockSpecialist.responseTime}
-              </div>
               <div className="flex items-center gap-1 text-sm text-slate-500">
                 <Check size={14} className="text-emerald-500" />
-                {specialistProfile?.yearsExperience ? `${specialistProfile.yearsExperience}+ years` : mockSpecialist.experience} experience
+                {specialistProfile?.yearsExperience ? `${specialistProfile.yearsExperience}+ years` : ''} experience
               </div>
             </div>
           </div>
@@ -264,13 +225,13 @@ const Specialist = () => {
         <div className="lg:col-span-2 space-y-6">
           <div className="rounded-xl border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold text-navy-900">About</h2>
-            <p className="mt-3 text-slate-600">{specialistProfile?.bio || mockSpecialist.bio}</p>
+            <p className="mt-3 text-slate-600">{specialistProfile?.bio || 'No bio available.'}</p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold text-navy-900">Specialties</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {(specialistProfile?.specialties?.length ? specialistProfile.specialties : mockSpecialist.specialties).map((specialty) => (
+              {(specialistProfile?.specialties?.length ? specialistProfile.specialties : DEFAULT_SPECIALTIES).map((specialty) => (
                 <div
                   key={specialty}
                   className="flex items-center gap-3 rounded-lg border border-slate-100 p-3"

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { API_BASE_URL } from '@/lib/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
+import { db } from '@/lib/firestore';
 
 type ScheduledCall = {
   id: string;
@@ -12,16 +14,6 @@ type ScheduledCall = {
   status: 'upcoming' | 'completed' | 'cancelled';
 };
 
-const mockUpcomingCalls: ScheduledCall[] = [
-  { id: '1', specialist: 'Dr. Sarah Chen', date: 'May 15, 2026', time: '10:00 AM', meetLink: 'https://meet.google.com/abc-defg-hij', status: 'upcoming' },
-  { id: '2', specialist: 'Dr. Sarah Chen', date: 'May 18, 2026', time: '2:00 PM', meetLink: 'https://meet.google.com/xyz-uvwx-stu', status: 'upcoming' },
-];
-
-const mockPastCalls: ScheduledCall[] = [
-  { id: '3', specialist: 'Dr. Sarah Chen', date: 'May 8, 2026', time: '11:00 AM', meetLink: 'https://meet.google.com/lmn-opqr-stu', status: 'completed' },
-  { id: '4', specialist: 'Dr. Sarah Chen', date: 'May 1, 2026', time: '3:00 PM', meetLink: 'https://meet.google.com/def-ghij-klm', status: 'completed' },
-];
-
 const notifyAdminOfCall = async (type: 'scheduled' | 'instant', specialistName?: string, date?: string, time?: string) => {
   try {
     const token = await import('firebase/auth').then(m => m.getAuth().currentUser?.getIdToken());
@@ -30,8 +22,10 @@ const notifyAdminOfCall = async (type: 'scheduled' | 'instant', specialistName?:
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ type, specialistName, date, time, loginUrl: window.location.origin }),
-    }).catch(() => {});
-  } catch {}
+    }).catch((err) => console.warn('[CALLS] Failed to notify admin:', err));
+  } catch (err) {
+    console.warn('[CALLS] Error notifying admin:', err);
+  }
 };
 
 const Calls = () => {
@@ -39,23 +33,72 @@ const Calls = () => {
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
-  const [upcomingCalls, setUpcomingCalls] = useState(mockUpcomingCalls);
-  const [pastCalls] = useState(mockPastCalls);
+  const [upcomingCalls, setUpcomingCalls] = useState<ScheduledCall[]>([]);
+  const [pastCalls, setPastCalls] = useState<ScheduledCall[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleSchedule = () => {
+  useEffect(() => {
+    const fetchCalls = async () => {
+      if (!sessionUser?.uid) return;
+      setLoading(true);
+      try {
+        const q = query(
+          collection(db, 'calls'),
+          where('userId', '==', sessionUser.uid),
+          orderBy('date', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const allCalls: ScheduledCall[] = snapshot.docs.map((doc) => {
+          const data = doc.data() as DocumentData;
+          return {
+            id: doc.id,
+            specialist: data.specialist || '',
+            date: data.date || '',
+            time: data.time || '',
+            meetLink: data.meetLink || '',
+            status: data.status || 'upcoming',
+          };
+        });
+        setUpcomingCalls(allCalls.filter(c => c.status === 'upcoming'));
+        setPastCalls(allCalls.filter(c => c.status === 'completed' || c.status === 'cancelled'));
+      } catch (err) {
+        console.error('[CALLS] Failed to fetch calls:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCalls();
+  }, [sessionUser?.uid]);
+
+  const handleSchedule = async () => {
     if (!scheduleDate || !scheduleTime) return;
     const formattedDate = new Date(scheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const formattedTime = new Date(`2000-01-01T${scheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const newCall: ScheduledCall = {
       id: Date.now().toString(),
-      specialist: sessionUser?.assignedSpecialistName || 'Dr. Sarah Chen',
+      specialist: sessionUser?.assignedSpecialistName || 'Specialist',
       date: formattedDate,
       time: formattedTime,
-      meetLink: 'https://meet.google.com/new-meeting-link',
+      meetLink: '',
       status: 'upcoming',
     };
     setUpcomingCalls(prev => [...prev, newCall]);
     notifyAdminOfCall('scheduled', newCall.specialist, formattedDate, formattedTime);
+
+    try {
+      await addDoc(collection(db, 'calls'), {
+        userId: sessionUser?.uid,
+        specialist: newCall.specialist,
+        date: formattedDate,
+        time: formattedTime,
+        meetLink: '',
+        status: 'upcoming',
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('[CALLS] Failed to save scheduled call:', err);
+    }
+
     setShowSchedule(false);
     setScheduleDate('');
     setScheduleTime('');
@@ -63,7 +106,7 @@ const Calls = () => {
 
   const handleStartInstantCall = () => {
     notifyAdminOfCall('instant', sessionUser?.assignedSpecialistName || 'Specialist');
-    window.open('https://meet.google.com/new', '_blank');
+    window.open('/portal/calls/room', '_blank');
   };
 
   return (
@@ -121,7 +164,7 @@ const Calls = () => {
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
             <ExternalLink size={16} />
-            <span>Google Meet link will be generated automatically</span>
+            <span>Video link will be available at call time</span>
           </div>
           <button
             onClick={handleSchedule}
@@ -141,7 +184,9 @@ const Calls = () => {
             Upcoming Calls
           </h2>
         </div>
-        {upcomingCalls.length === 0 ? (
+        {loading ? (
+          <div className="p-8 text-center text-slate-500">Loading calls...</div>
+        ) : upcomingCalls.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <Calendar size={32} className="mx-auto mb-2 text-slate-300" />
             <p>No upcoming calls</p>
@@ -191,7 +236,9 @@ const Calls = () => {
             Meeting History
           </h2>
         </div>
-        {pastCalls.length === 0 ? (
+        {loading ? (
+          <div className="p-8 text-center text-slate-500">Loading...</div>
+        ) : pastCalls.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <History size={32} className="mx-auto mb-2 text-slate-300" />
             <p>No past calls</p>

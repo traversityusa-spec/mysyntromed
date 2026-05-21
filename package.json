@@ -3,7 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "dev": "concurrently -n frontend,backend,email -c cyan,yellow,magenta \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:email\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:email": "cd email-server && npm run dev",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
