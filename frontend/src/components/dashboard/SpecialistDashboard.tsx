@@ -62,12 +62,12 @@ export const SpecialistDashboard = () => {
       return;
     }
     try {
-      const [adminSnap, assignedClients] = await Promise.all([
+      const [adminSnap, assignedClientsSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('role', '==', 'admin'))),
-        Promise.resolve(clients),
+        getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid))),
       ]);
       const adminEmails = adminSnap.docs.map(d => d.data().email).filter(Boolean);
-      const clientEmails = assignedClients.map(c => c.email).filter(Boolean);
+      const clientEmails = assignedClientsSnap.docs.map(d => d.data().email).filter(Boolean);
 
       const token = await auth.currentUser?.getIdToken();
       if (!token) { console.warn('[WORKFLOW] No auth token'); return; }
