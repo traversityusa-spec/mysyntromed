@@ -13,7 +13,7 @@ import Specialist from "@/components/dashboard/Specialist";
 import Activity from "@/components/dashboard/Activity";
 import Calls from "@/components/dashboard/Calls";
 import Settings from "@/components/dashboard/Settings";
-import { AdminClients, AdminSpecialists, AdminConversations, AdminAnalytics } from "@/components/dashboard/AdminPages";
+import { AdminClients, AdminSpecialists, AdminAdmins, AdminConversations, AdminAnalytics } from "@/components/dashboard/AdminPages";
 import AdminDashboard from "@/components/dashboard/AdminDashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { initSentry } from "@/lib/sentry";
@@ -195,6 +195,7 @@ function AppRoutes() {
       <Route path="/admin/dashboard" element={<AdminPage><AdminDashboard /></AdminPage>} />
       <Route path="/admin/clients" element={<AdminPage><AdminClients /></AdminPage>} />
       <Route path="/admin/specialists" element={<AdminPage><AdminSpecialists /></AdminPage>} />
+      <Route path="/admin/admins" element={<AdminPage><AdminAdmins /></AdminPage>} />
       <Route path="/admin/messages" element={<AdminPage><Messages /></AdminPage>} />
       <Route path="/admin/conversations" element={<AdminPage><AdminConversations /></AdminPage>} />
       <Route path="/admin/analytics" element={<AdminPage><AdminAnalytics /></AdminPage>} />

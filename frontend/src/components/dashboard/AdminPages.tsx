@@ -27,7 +27,7 @@ const CreateUserModal = ({
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
-  role: 'client' | 'specialist';
+  role: 'client' | 'specialist' | 'admin';
   onSuccess: (msg: string) => void;
 }) => {
   const { user } = useAuth();
@@ -1656,6 +1656,231 @@ export const AdminAnalytics = () => {
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+export const AdminAdmins = () => {
+  const { user: authUser } = useAuth();
+  const [admins, setAdmins] = useState<UserProfile[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<{uid: string; name: string} | null>(null);
+
+  const fetchAdmins = useCallback(async () => {
+    try {
+      const idToken = await authUser?.getIdToken(true);
+      if (!idToken) return;
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+        setFetchError(err.error || `Server error (${response.status})`);
+        return;
+      }
+      setFetchError(null);
+      const data = await response.json();
+      if (data.users) {
+        const list = data.users
+          .filter((u: any) => u.role === 'admin')
+          .map((u: any) => ({
+            uid: u.uid,
+            email: u.email,
+            displayName: u.displayName,
+            role: u.role,
+            disabled: u.disabled,
+            photoURL: u.photoURL,
+            createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+            updatedAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+          } as UserProfile));
+        setAdmins(list.sort((a: any, b: any) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)));
+      }
+    } catch (e: any) {
+      setFetchError(e.message || 'Failed to connect to server');
+    } finally {
+      setLoading(false);
+    }
+  }, [authUser]);
+
+  useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
+
+  const handleToggleStatus = async (uid: string, currentDisabled: boolean) => {
+    setActionLoading(uid);
+    try {
+      const token = await authUser?.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/deactivate-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ uid, disabled: !currentDisabled })
+      });
+      if (!response.ok) throw new Error('Failed to update status');
+      setSuccessMessage(`Account ${!currentDisabled ? 'deactivated' : 'activated'} successfully`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      await fetchAdmins();
+    } catch {
+      alert('Failed to update user status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
+    setActionLoading(deletingUser.uid);
+    try {
+      const token = await authUser?.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/delete-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ uid: deletingUser.uid })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to delete user');
+      }
+      setSuccessMessage('Admin account deleted successfully');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setDeleteModalOpen(false);
+      setDeletingUser(null);
+      await fetchAdmins();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete admin');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const filtered = admins.filter(a =>
+    a.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    a.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Admin Management</h1>
+          <p className="mt-1 text-slate-600">Manage platform administrators</p>
+        </div>
+        <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 transition-colors">
+          <Plus size={18} />
+          Add Admin
+        </button>
+      </div>
+
+      <CreateUserModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        role="admin"
+        onSuccess={(msg) => {
+          setSuccessMessage(msg);
+          setTimeout(() => setSuccessMessage(null), 5000);
+          fetchAdmins();
+        }}
+      />
+
+      {successMessage && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
+          <CheckCircle size={18} />
+          <span className="text-sm font-medium">{successMessage}</span>
+        </div>
+      )}
+      {fetchError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          <AlertCircle size={18} />
+          <span className="text-sm font-medium">{fetchError}</span>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-100 p-4">
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search admins..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:bg-white transition"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+          </div>
+        ) : filtered.length > 0 ? (
+          <div className="divide-y divide-slate-100">
+            {filtered.map((admin) => (
+              <div key={admin.uid} className="flex items-center justify-between p-4 hover:bg-slate-50 transition">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-sm font-bold text-purple-700">
+                    {admin.displayName?.charAt(0)?.toUpperCase() || 'A'}
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">{admin.displayName || 'Unnamed'}</p>
+                    <p className="text-sm text-slate-500">{admin.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${admin.disabled ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {admin.disabled ? 'Inactive' : 'Active'}
+                  </span>
+                  <button
+                    onClick={() => handleToggleStatus(admin.uid, !!admin.disabled)}
+                    disabled={actionLoading === admin.uid}
+                    className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition"
+                    title={admin.disabled ? 'Activate' : 'Deactivate'}
+                  >
+                    {admin.disabled ? <UserCheck size={16} /> : <UserMinus size={16} />}
+                  </button>
+                  <button
+                    onClick={() => { setDeletingUser({ uid: admin.uid, name: admin.displayName || admin.email || '' }); setDeleteModalOpen(true); }}
+                    className="rounded-lg border border-red-200 p-2 text-red-500 hover:bg-red-50 transition"
+                    title="Delete"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center py-16 text-slate-500">
+            <Shield size={40} className="text-slate-300 mb-4" />
+            <p className="font-medium">No admins found</p>
+            <p className="mt-1 text-sm">{searchTerm ? 'Try a different search' : 'Click "Add Admin" to create the first administrator'}</p>
+          </div>
+        )}
+      </div>
+
+      {deleteModalOpen && deletingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-navy-900">Delete Admin Account</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to delete <strong>{deletingUser.name}</strong>? This will permanently remove their account and all associated data.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => { setDeleteModalOpen(false); setDeletingUser(null); }} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleDeleteUser} disabled={actionLoading === deletingUser.uid} className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                {actionLoading === deletingUser.uid ? (
+                  <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Deleting...</>
+                ) : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
