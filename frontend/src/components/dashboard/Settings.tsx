@@ -124,10 +124,16 @@ const Settings = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [twoFactor, setTwoFactor] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const getPersistentPhotoURL = (value?: string) => {
+    if (!value) return '';
+    return value.startsWith('http://') || value.startsWith('https://') ? value : '';
+  };
 
   const handleProfileSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -136,11 +142,12 @@ const Settings = () => {
     setSaveError(null);
 
     try {
+      const currentPhotoURL = getPersistentPhotoURL(profileForm.photoURL) || getPersistentPhotoURL(profile?.photoURL);
       await updateProfile({
         displayName: profileForm.displayName,
         clinicName: profileForm.clinicName,
         phone: profileForm.phone,
-        photoURL: profileForm.photoURL,
+        photoURL: currentPhotoURL,
         specialties: profileForm.specialties
           .split(',')
           .map((s) => s.trim())
@@ -161,13 +168,21 @@ const Settings = () => {
     const file = e.target.files?.[0];
     if (!file || !user?.uid) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Image must be under 2MB.');
+    if (!file.type.startsWith('image/')) {
+      setSaveError('Please choose a valid image file.');
       return;
     }
 
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveError('Image must be under 2MB.');
+      return;
+    }
+
+    const previousPhotoURL = getPersistentPhotoURL(profileForm.photoURL) || getPersistentPhotoURL(profile?.photoURL);
     const localUrl = URL.createObjectURL(file);
     setProfileForm((prev) => ({ ...prev, photoURL: localUrl }));
+    setImageUploading(true);
+    setSaveError(null);
 
     try {
       const fileRef = ref(storage, `profile_photos/${user.uid}/${Date.now()}-${file.name}`);
@@ -179,7 +194,10 @@ const Settings = () => {
       await refreshSessionUser();
     } catch (error) {
       console.error('Error uploading image:', error);
+      setProfileForm((prev) => ({ ...prev, photoURL: previousPhotoURL }));
+      setSaveError(error instanceof Error ? error.message : 'Failed to upload profile image');
     } finally {
+      setImageUploading(false);
       URL.revokeObjectURL(localUrl);
     }
   };
@@ -286,14 +304,21 @@ const Settings = () => {
               ) : (
                 <User size={32} />
               )}
-              <label className="absolute bottom-0 right-0 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-teal-600 text-white shadow-sm hover:bg-teal-700">
+              {imageUploading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-slate-900/45">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                </div>
+              )}
+              <label className={`absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-teal-600 text-white shadow-sm hover:bg-teal-700 ${imageUploading ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                 <Camera size={12} />
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imageUploading} />
               </label>
             </div>
             <div>
               <p className="font-medium text-slate-900">Profile Picture</p>
-              <p className="text-sm text-slate-500">JPG, GIF or PNG. 1MB max.</p>
+              <p className="text-sm text-slate-500">
+                {imageUploading ? 'Uploading image...' : 'JPG, GIF or PNG. 2MB max.'}
+              </p>
             </div>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
@@ -375,10 +400,10 @@ const Settings = () => {
           <div className="mt-5 flex justify-end">
             <button
               type="submit"
-              disabled={saving || loading}
+              disabled={saving || loading || imageUploading}
               className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save Changes'}
+              {imageUploading ? 'Uploading...' : saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
