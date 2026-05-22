@@ -225,8 +225,9 @@ const Messages = () => {
         existing.lastMessage = lastMsgText;
         existing.time = formatMessageTime(msg.createdAt);
         existing.lastTimestamp = toMessageDate(msg.createdAt).getTime();
-        if (msg.senderId !== user.uid && msg.senderPhotoURL) {
-          existing.photoURL = msg.senderPhotoURL;
+        const latestPhoto = profileMap[otherId]?.photoURL || msg.senderPhotoURL;
+        if (msg.senderId !== user.uid && latestPhoto) {
+          existing.photoURL = latestPhoto;
         }
       }
       if (existing && isUnread) existing.unread += 1;
@@ -630,6 +631,10 @@ const Messages = () => {
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const messageGroups = groupMessagesByDate(messages);
+  const currentConversationPhotoURL = currentConversation
+    ? profileMap[currentConversation.id]?.photoURL || currentConversation.photoURL
+    : '';
+  const currentUserPhotoURL = sessionUser?.photoURL || '';
 
   return (
     <div className="flex h-full min-h-0 gap-4">
@@ -768,8 +773,8 @@ const Messages = () => {
                 >
                   <X size={20} />
                 </button>
-                {currentConversation.photoURL ? (
-                  <img src={currentConversation.photoURL} alt={currentConversation.name} className="h-11 w-11 rounded-full object-cover" />
+                {currentConversationPhotoURL ? (
+                  <img src={currentConversationPhotoURL} alt={currentConversation.name} className="h-11 w-11 rounded-full object-cover" />
                 ) : (
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-lg font-bold text-white">
                     {currentConversation.name.charAt(0).toUpperCase()}
@@ -830,6 +835,7 @@ const Messages = () => {
                     <div className="space-y-2">
                       {group.messages.map((msg) => {
                         const isOwn = msg.senderId === user?.uid;
+                        const senderPhotoURL = profileMap[msg.senderId]?.photoURL || msg.senderPhotoURL;
                         return (
                           <div
                             key={msg.id}
@@ -837,9 +843,9 @@ const Messages = () => {
                           >
                             {!isOwn && (
                               <div className="flex-shrink-0 mt-auto mb-1">
-                                {msg.senderPhotoURL || profileMap[msg.senderId]?.photoURL ? (
+                                {senderPhotoURL ? (
                                   <img 
-                                    src={msg.senderPhotoURL || profileMap[msg.senderId]?.photoURL} 
+                                    src={senderPhotoURL} 
                                     alt={msg.senderName} 
                                     className="h-8 w-8 rounded-full object-cover border border-slate-200" 
                                   />
@@ -931,9 +937,9 @@ const Messages = () => {
 
                             {isOwn && (
                               <div className="flex-shrink-0 mt-auto mb-1">
-                                {sessionUser?.photoURL ? (
+                                {currentUserPhotoURL ? (
                                   <img 
-                                    src={sessionUser.photoURL} 
+                                    src={currentUserPhotoURL} 
                                     alt="You" 
                                     className="h-8 w-8 rounded-full object-cover border border-slate-200 shadow-sm" 
                                   />
@@ -954,9 +960,9 @@ const Messages = () => {
                 {isTyping && currentConversation && (
                   <div className="flex justify-start gap-3 mb-4">
                     <div className="flex-shrink-0">
-                      {(currentConversation.photoURL || profileMap[currentConversation.id]?.photoURL) ? (
+                      {currentConversationPhotoURL ? (
                         <img 
-                          src={currentConversation.photoURL || profileMap[currentConversation.id]?.photoURL} 
+                          src={currentConversationPhotoURL} 
                           alt={currentConversation.name} 
                           className="h-8 w-8 rounded-full object-cover border border-slate-100 shadow-sm" 
                         />

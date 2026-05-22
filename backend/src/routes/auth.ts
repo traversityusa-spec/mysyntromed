@@ -391,6 +391,7 @@ router.get('/admin/users', requireAuth, requireRole('admin'), async (_req, res) 
         createdAt: profile.createdAt?.toDate?.() || u.metadata.creationTime,
         assignedSpecialistId: profile.assignedSpecialistId,
         assignedSpecialistName: profile.assignedSpecialistName,
+        photoURL: profile.photoURL,
         isNewUser: profile.isNewUser,
         lastLoginAt: profile.lastLoginAt?.toDate?.()?.toISOString() || null,
       };

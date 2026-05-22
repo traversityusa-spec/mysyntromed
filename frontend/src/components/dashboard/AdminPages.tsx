@@ -288,6 +288,7 @@ export const AdminClients = () => {
           updatedAt: u.createdAt ? new Date(u.createdAt) : new Date(),
           assignedSpecialistId: u.assignedSpecialistId,
           assignedSpecialistName: u.assignedSpecialistName,
+          photoURL: u.photoURL,
           isNewUser: u.isNewUser
         } as UserProfile);
 
@@ -749,6 +750,7 @@ export const AdminSpecialists = () => {
             displayName: u.displayName,
             role: u.role,
             disabled: u.disabled,
+            photoURL: u.photoURL,
             createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
             updatedAt: u.createdAt ? new Date(u.createdAt) : new Date(),
           } as UserProfile));
@@ -1157,8 +1159,8 @@ export const AdminConversations = () => {
         });
         const data = await response.json();
         if (data.users) {
-          setSpecialists(data.users.filter((u: any) => u.role === 'specialist').map((u: any) => ({ uid: u.uid, displayName: u.displayName, email: u.email } as UserProfile)));
-          setClients(data.users.filter((u: any) => u.role === 'client').map((u: any) => ({ uid: u.uid, displayName: u.displayName, email: u.email } as UserProfile)));
+          setSpecialists(data.users.filter((u: any) => u.role === 'specialist').map((u: any) => ({ uid: u.uid, displayName: u.displayName, email: u.email, photoURL: u.photoURL } as UserProfile)));
+          setClients(data.users.filter((u: any) => u.role === 'client').map((u: any) => ({ uid: u.uid, displayName: u.displayName, email: u.email, photoURL: u.photoURL } as UserProfile)));
         }
       } catch (e) {
         console.error(e);
