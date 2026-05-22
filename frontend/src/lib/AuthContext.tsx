@@ -14,7 +14,7 @@ import {
   type MultiFactorResolver,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, setDoc, updateDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { inviteCodeService } from './security';
 import { presenceService } from './presence';
@@ -81,34 +81,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [showWelcomeBack, setShowWelcomeBack] = useState(false);
   const [welcomeBackData, setWelcomeBackData] = useState<WelcomeBackData>({ displayName: '', isReturning: false });
 
+  const mapSessionUser = (firebaseUser: User, data: DocumentData): SessionUser => ({
+    uid: firebaseUser.uid,
+    email: data?.email || firebaseUser.email || undefined,
+    displayName: data?.displayName || firebaseUser.displayName || 'User',
+    role: data?.role || 'client',
+    isNewUser: data?.isNewUser ?? false,
+    createdAt: data?.createdAt?.toDate() || new Date(),
+    assignedSpecialistId: data?.assignedSpecialistId,
+    assignedSpecialistName: data?.assignedSpecialistName,
+    photoURL: data?.photoURL || firebaseUser.photoURL || undefined,
+    clinicName: data?.clinicName,
+    phone: data?.phone,
+    specialties: data?.specialties || [],
+    yearsExperience: data?.yearsExperience,
+    bio: data?.bio,
+    subscriptionStartDate: data?.subscriptionStartDate?.toDate(),
+    subscriptionActive: data?.subscriptionActive ?? true,
+    subscriptionEndDate: data?.subscriptionEndDate?.toDate(),
+    subscriptionReminderSent: data?.subscriptionReminderSent ?? false,
+    notificationPreferences: data?.notificationPreferences,
+  });
+
   const buildSessionUser = async (firebaseUser: User): Promise<SessionUser> => {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDoc = await getDoc(userDocRef);
-    const data = userDoc.data();
 
     if (!userDoc.exists()) {
       throw new Error('User profile not found');
     }
 
-    return {
-      uid: firebaseUser.uid,
-      displayName: data?.displayName || 'User',
-      role: data?.role || 'client',
-      isNewUser: data?.isNewUser ?? false,
-      createdAt: data?.createdAt?.toDate() || new Date(),
-      assignedSpecialistId: data?.assignedSpecialistId,
-      assignedSpecialistName: data?.assignedSpecialistName,
-      photoURL: data?.photoURL,
-      clinicName: data?.clinicName,
-      phone: data?.phone,
-      specialties: data?.specialties || [],
-      yearsExperience: data?.yearsExperience,
-      bio: data?.bio,
-      subscriptionStartDate: data?.subscriptionStartDate?.toDate(),
-      subscriptionActive: data?.subscriptionActive ?? true,
-      subscriptionEndDate: data?.subscriptionEndDate?.toDate(),
-      subscriptionReminderSent: data?.subscriptionReminderSent ?? false,
-    };
+    return mapSessionUser(firebaseUser, userDoc.data());
   };
 
   const createUserProfile = async (
@@ -193,6 +196,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const userDocRef = doc(db, 'users', user.uid);
+    return onSnapshot(userDocRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      setSessionUser(mapSessionUser(user, snapshot.data()));
+    }, (error) => {
+      console.error('profile subscription error:', error);
+    });
+  }, [user]);
 
   useEffect(() => {
     if (!user || !sessionUser) return;
