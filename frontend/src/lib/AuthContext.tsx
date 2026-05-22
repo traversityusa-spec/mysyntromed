@@ -75,7 +75,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const getPersistentPhotoURL = (value?: string | null): string | undefined => {
   if (!value) return undefined;
-  return value.startsWith('http://') || value.startsWith('https://') ? value : undefined;
+  if (value.includes('firebasestorage.googleapis.com')) return undefined;
+  return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') ? value : undefined;
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

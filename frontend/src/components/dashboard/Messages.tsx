@@ -23,6 +23,7 @@ type ConversationPreview = {
 
 const getPersistentPhotoURL = (value?: string | null): string => {
   if (!value) return '';
+  if (value.includes('firebasestorage.googleapis.com')) return '';
   return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') ? value : '';
 };
 
