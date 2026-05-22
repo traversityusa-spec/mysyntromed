@@ -276,9 +276,20 @@ const Messages = () => {
     currentIds.forEach((id) => {
       if (profileSubsRef.current.has(id)) return;
       const unsub = userService.subscribeToProfile(id, (profile) => {
-        if (profile) {
-          setProfileMap((prev) => ({ ...prev, [id]: profile }));
-        }
+        if (!profile) return;
+        setProfileMap((prev) => ({ ...prev, [id]: profile }));
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.id === id
+              ? {
+                  ...conv,
+                  name: profile.displayName || profile.email || conv.name,
+                  role: profile.role || conv.role,
+                  photoURL: getPersistentPhotoURL(profile.photoURL) || conv.photoURL,
+                }
+              : conv,
+          ),
+        );
       });
       profileSubsRef.current.set(id, unsub);
     });
