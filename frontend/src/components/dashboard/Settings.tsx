@@ -186,7 +186,11 @@ const Settings = () => {
 
     try {
       const fileRef = ref(storage, `profile_photos/${user.uid}/${Date.now()}-${file.name}`);
-      await uploadBytes(fileRef, file);
+      const uploadPromise = uploadBytes(fileRef, file);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Upload timed out after 30s. Check your network and try again.')), 30000),
+      );
+      await Promise.race([uploadPromise, timeoutPromise]);
       const url = await getDownloadURL(fileRef);
       setProfileForm((prev) => ({ ...prev, photoURL: url }));
       updateSessionField('photoURL', url);
