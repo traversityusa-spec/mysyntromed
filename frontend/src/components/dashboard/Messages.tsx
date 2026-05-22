@@ -21,6 +21,11 @@ type ConversationPreview = {
   lastTimestamp?: number;
 };
 
+const getPersistentPhotoURL = (value?: string | null): string => {
+  if (!value) return '';
+  return value.startsWith('http://') || value.startsWith('https://') ? value : '';
+};
+
 const toMessageDate = (value: unknown): Date => {
   if (!value) return new Date();
   if (value instanceof Date) return value;
@@ -207,7 +212,7 @@ const Messages = () => {
           // They sent it
           otherName = msg.senderName;
           otherRole = msg.senderRole;
-          otherPhoto = msg.senderPhotoURL || '';
+          otherPhoto = getPersistentPhotoURL(msg.senderPhotoURL);
         }
 
         conversationMap.set(otherId, {
@@ -225,7 +230,7 @@ const Messages = () => {
         existing.lastMessage = lastMsgText;
         existing.time = formatMessageTime(msg.createdAt);
         existing.lastTimestamp = toMessageDate(msg.createdAt).getTime();
-        const latestPhoto = profileMap[otherId]?.photoURL || msg.senderPhotoURL;
+        const latestPhoto = getPersistentPhotoURL(profileMap[otherId]?.photoURL) || getPersistentPhotoURL(msg.senderPhotoURL);
         if (msg.senderId !== user.uid && latestPhoto) {
           existing.photoURL = latestPhoto;
         }
@@ -261,7 +266,7 @@ const Messages = () => {
             lastTimestamp: 0,
             unread: 0,
             online: presenceMap[client.uid] || false,
-            photoURL: client.photoURL,
+            photoURL: getPersistentPhotoURL(client.photoURL),
           });
         }
       });
@@ -291,7 +296,7 @@ const Messages = () => {
         ...conv,
         name: profile?.displayName || profile?.email || conv.name,
         role: profile?.role || conv.role,
-        photoURL: profile?.photoURL || conv.photoURL,
+        photoURL: getPersistentPhotoURL(profile?.photoURL) || getPersistentPhotoURL(conv.photoURL),
         online: presenceMap[conv.id] || false,
       };
     })
@@ -494,7 +499,7 @@ const Messages = () => {
     const senderName = sessionUser?.displayName || user?.email?.split('@')[0] || 'User';
     const senderRole = sessionUser?.role || 'client';
     const messageText = newMessage.trim();
-    const photoURL = sessionUser?.photoURL?.startsWith('http') ? sessionUser.photoURL : '';
+    const photoURL = getPersistentPhotoURL(sessionUser?.photoURL);
 
     try {
       const messageId = await messageService.sendMessage({
@@ -547,7 +552,7 @@ const Messages = () => {
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
       const isImage = file.type.startsWith('image/');
-      const uploadPhotoURL = sessionUser?.photoURL?.startsWith('http') ? sessionUser.photoURL : '';
+      const uploadPhotoURL = getPersistentPhotoURL(sessionUser?.photoURL);
       
       try {
         await messageService.sendMessage({
@@ -632,9 +637,9 @@ const Messages = () => {
   );
   const messageGroups = groupMessagesByDate(messages);
   const currentConversationPhotoURL = currentConversation
-    ? profileMap[currentConversation.id]?.photoURL || currentConversation.photoURL
+    ? getPersistentPhotoURL(profileMap[currentConversation.id]?.photoURL) || getPersistentPhotoURL(currentConversation.photoURL)
     : '';
-  const currentUserPhotoURL = sessionUser?.photoURL || '';
+  const currentUserPhotoURL = getPersistentPhotoURL(sessionUser?.photoURL);
 
   return (
     <div className="flex h-full min-h-0 gap-4">
@@ -835,7 +840,7 @@ const Messages = () => {
                     <div className="space-y-2">
                       {group.messages.map((msg) => {
                         const isOwn = msg.senderId === user?.uid;
-                        const senderPhotoURL = profileMap[msg.senderId]?.photoURL || msg.senderPhotoURL;
+                        const senderPhotoURL = getPersistentPhotoURL(profileMap[msg.senderId]?.photoURL) || getPersistentPhotoURL(msg.senderPhotoURL);
                         return (
                           <div
                             key={msg.id}

@@ -73,6 +73,11 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getPersistentPhotoURL = (value?: string | null): string | undefined => {
+  if (!value) return undefined;
+  return value.startsWith('http://') || value.startsWith('https://') ? value : undefined;
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
@@ -90,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     createdAt: data?.createdAt?.toDate() || new Date(),
     assignedSpecialistId: data?.assignedSpecialistId,
     assignedSpecialistName: data?.assignedSpecialistName,
-    photoURL: data?.photoURL || firebaseUser.photoURL || undefined,
+    photoURL: getPersistentPhotoURL(data?.photoURL) || getPersistentPhotoURL(firebaseUser.photoURL),
     clinicName: data?.clinicName,
     phone: data?.phone,
     specialties: data?.specialties || [],
