@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["https://mysyntromed.com", "https://www.mysyntromed.com"],
+    "method": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "maxAgeSeconds": 3600
+  }
+]

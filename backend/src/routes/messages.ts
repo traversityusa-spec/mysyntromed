@@ -41,35 +41,22 @@ router.post('/notify-offline', requireAuth, async (req: AuthedRequest, res) => {
       </div>`
     );
 
-    // Check if recipient is offline
-    const statusRef = admin.database().ref(`/status/${receiverId}`);
-    const snap = await statusRef.once('value');
-    let isOffline = true;
-    if (snap.exists() && snap.val().state === 'online') {
-      isOffline = false;
-    }
-
-    if (isOffline) {
-      const email = receiverData?.email;
-      if (email) {
-        const prefs = receiverData?.notificationPreferences;
-        if (!prefs || prefs.emailMessages !== false) {
-          const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
-          const serviceKey = process.env.EMAIL_SERVICE_KEY;
-          fetch(`${emailServerUrl}/send-unread-message`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-            body: JSON.stringify({
-              email,
-              receiverName,
-              senderName: senderDisplayName,
-              messagePreview: messagePreview?.substring(0, 100),
-              loginUrl,
-              receiverRole,
-            }),
-          }).catch(e => console.error('[NOTIFY] Offline email failed:', e));
-        }
-      }
+    const email = receiverData?.email;
+    if (email) {
+      const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
+      const serviceKey = process.env.EMAIL_SERVICE_KEY;
+      fetch(`${emailServerUrl}/send-unread-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+        body: JSON.stringify({
+          email,
+          receiverName,
+          senderName: senderDisplayName,
+          messagePreview: messagePreview?.substring(0, 100),
+          loginUrl,
+          receiverRole,
+        }),
+      }).catch(e => console.error('[NOTIFY] Message email failed:', e));
     }
 
     return res.json({ sent: true });

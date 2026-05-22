@@ -60,8 +60,6 @@ export const notifyAdminsViaEmail = async (
       const data = doc.data();
       const email = data?.email;
       if (!email) return;
-      const prefs = data?.notificationPreferences;
-      if (prefs && prefs.emailRequests === false) return;
       promises.push(
         sendEmailViaServer({
           to: email,
