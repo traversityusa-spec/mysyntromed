@@ -402,24 +402,6 @@ export const userService = {
     });
   },
 
-  subscribeToProfile(uid: string, callback: (profile: UserProfile | null) => void): Unsubscribe {
-    const docRef = doc(db, 'users', uid);
-    return onSnapshot(docRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        callback({
-          uid: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-          subscriptionStartDate: data.subscriptionStartDate?.toDate(),
-          subscriptionEndDate: data.subscriptionEndDate?.toDate(),
-        } as UserProfile);
-      } else {
-        callback(null);
-      }
-    });
-  },
   async assignSpecialist(userId: string, specialistId: string, specialistName: string): Promise<void> {
     const docRef = doc(db, 'users', userId);
     await updateDoc(docRef, {

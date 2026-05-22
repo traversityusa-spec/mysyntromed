@@ -5,7 +5,7 @@ import {
   Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { messageService, userService, notificationService, typingService, notificationSoundService, type Message, type UserProfile } from '@/lib/firestore';
+import { messageService, userService, notificationService, typingService, notificationSoundService, type Message } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
 import { initSocket, emitMessage, emitTyping } from '@/lib/socket';
 
@@ -88,8 +88,7 @@ const Messages = () => {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
-  const [assignedClients, setAssignedClients] = useState<UserProfile[]>([]);
-  const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
+  const [assignedClients, setAssignedClients] = useState<{ uid: string; displayName?: string | null; email?: string | null; photoURL?: string }[]>([]);
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({});
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,7 +97,6 @@ const Messages = () => {
   const [sending, setSending] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUserName, setTypingUserName] = useState<string>('');
-  const profileSubsRef = useRef<Map<string, () => void>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -230,7 +228,7 @@ const Messages = () => {
         existing.lastMessage = lastMsgText;
         existing.time = formatMessageTime(msg.createdAt);
         existing.lastTimestamp = toMessageDate(msg.createdAt).getTime();
-        const latestPhoto = getPersistentPhotoURL(profileMap[otherId]?.photoURL) || getPersistentPhotoURL(msg.senderPhotoURL);
+        const latestPhoto = getPersistentPhotoURL(msg.senderPhotoURL);
         if (msg.senderId !== user.uid && latestPhoto) {
           existing.photoURL = latestPhoto;
         }
@@ -272,45 +270,11 @@ const Messages = () => {
       });
     }
 
-    const currentIds = new Set(Array.from(conversationMap.keys()));
-    currentIds.forEach((id) => {
-      if (profileSubsRef.current.has(id)) return;
-      const unsub = userService.subscribeToProfile(id, (profile) => {
-        if (!profile) return;
-        setProfileMap((prev) => ({ ...prev, [id]: profile }));
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === id
-              ? {
-                  ...conv,
-                  name: profile.displayName || profile.email || conv.name,
-                  role: profile.role || conv.role,
-                  photoURL: getPersistentPhotoURL(profile.photoURL) || conv.photoURL,
-                }
-              : conv,
-          ),
-        );
-      });
-      profileSubsRef.current.set(id, unsub);
-    });
-    profileSubsRef.current.forEach((unsub, id) => {
-      if (!currentIds.has(id)) {
-        unsub();
-        profileSubsRef.current.delete(id);
-      }
-    });
-
     const nextConversations = Array.from(conversationMap.values())
-      .map((conv) => {
-      const profile = profileMap[conv.id];
-      return {
+      .map((conv) => ({
         ...conv,
-        name: profile?.displayName || profile?.email || conv.name,
-        role: profile?.role || conv.role,
-        photoURL: getPersistentPhotoURL(profile?.photoURL) || getPersistentPhotoURL(conv.photoURL),
         online: presenceMap[conv.id] || false,
-      };
-    })
+      }))
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
 
     setConversations((prev) => {
@@ -341,17 +305,9 @@ const Messages = () => {
     sessionUser?.role,
     sessionUser?.assignedSpecialistId,
     sessionUser?.assignedSpecialistName,
-    profileMap,
     presenceMap,
     selectedConversation,
   ]);
-
-  useEffect(() => {
-    return () => {
-      profileSubsRef.current.forEach((unsub) => unsub());
-      profileSubsRef.current.clear();
-    };
-  }, []);
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
@@ -412,9 +368,9 @@ const Messages = () => {
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
-    const profile = profileMap[selectedConversation];
-    conversationNameRef.current = profile?.displayName || profile?.email || 'User';
-  }, [selectedConversation, profileMap]);
+    const conv = conversations.find(c => c.id === selectedConversation);
+    conversationNameRef.current = conv?.name || 'User';
+  }, [selectedConversation, conversations]);
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
@@ -648,7 +604,7 @@ const Messages = () => {
   );
   const messageGroups = groupMessagesByDate(messages);
   const currentConversationPhotoURL = currentConversation
-    ? getPersistentPhotoURL(profileMap[currentConversation.id]?.photoURL) || getPersistentPhotoURL(currentConversation.photoURL)
+    ? getPersistentPhotoURL(currentConversation.photoURL)
     : '';
   const currentUserPhotoURL = getPersistentPhotoURL(sessionUser?.photoURL);
 
@@ -851,7 +807,7 @@ const Messages = () => {
                     <div className="space-y-2">
                       {group.messages.map((msg) => {
                         const isOwn = msg.senderId === user?.uid;
-                        const senderPhotoURL = getPersistentPhotoURL(profileMap[msg.senderId]?.photoURL) || getPersistentPhotoURL(msg.senderPhotoURL);
+                        const senderPhotoURL = getPersistentPhotoURL(msg.senderPhotoURL);
                         return (
                           <div
                             key={msg.id}
