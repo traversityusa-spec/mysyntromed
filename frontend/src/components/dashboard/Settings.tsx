@@ -131,7 +131,8 @@ const Settings = () => {
 
   const getPersistentPhotoURL = (value?: string) => {
     if (!value) return '';
-    return value.startsWith('http://') || value.startsWith('https://') ? value : '';
+    if (value.includes('firebasestorage.googleapis.com')) return '';
+    return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') ? value : '';
   };
 
   const handleProfileSave = async (e: FormEvent) => {
