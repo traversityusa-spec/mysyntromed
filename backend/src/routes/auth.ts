@@ -2,6 +2,8 @@ import { Router } from 'express';
 import admin, { adminAuth } from '../firebaseAdmin.js';
 import { requireAuth, requireRole, type AuthedRequest } from '../middleware/requireAuth.js';
 
+import { sendMessageNotification } from '../services/emailClient.js';
+
 const router = Router();
 
 router.get('/health', (_req, res) => {
@@ -158,6 +160,27 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       status: 'sent',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    // Notify recipient and admins about welcome message
+    try {
+      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+      sendMessageNotification(
+        admin,
+        adminId,
+        adminName,
+        'admin',
+        userRecord.uid,
+        displayName,
+        email,
+        role,
+        role === 'client'
+          ? `Welcome to MySyntroMed, ${displayName}! We're excited to support your practice.`
+          : `Welcome to the MySyntroMed Specialist Team, ${displayName}!`,
+        loginUrl
+      ).catch((err: any) => console.error('[AUTH] Failed to send welcome message notification:', err));
+    } catch (error: any) {
+      console.error('[AUTH] Error sending welcome message notification:', error.message);
+    }
 
     // 2. Create an App Notification
     await admin.firestore().collection('notifications').add({

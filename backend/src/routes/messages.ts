@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import admin from '../firebaseAdmin.js';
 import { requireAuth, type AuthedRequest } from '../middleware/requireAuth.js';
-import { sendEmailViaServer, notifyAdminsViaEmail } from '../services/emailClient.js';
+import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from '../services/emailClient.js';
 
 const router = Router();
 
@@ -27,37 +27,19 @@ router.post('/notify-offline', requireAuth, async (req: AuthedRequest, res) => {
     const senderRole = senderData?.role || 'client';
     const senderDisplayName = senderData?.displayName || senderName;
 
-    // Notify the admin about the message activity
-    const preview = (messagePreview || '').substring(0, 120);
-    const dashboardLink = `${loginUrl.replace(/\/+$/, '')}/admin/conversations`;
-    notifyAdminsViaEmail(
+    // Send email to recipient and admins
+    await sendMessageNotification(
       admin,
-      `[MySyntroMed] New Message from ${senderDisplayName}`,
-      `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #0f172a;">New Message Activity</h2>
-        <p style="color: #475569;"><strong>${senderDisplayName}</strong> (${senderRole}) sent a message to <strong>${receiverName}</strong> (${receiverRole}).</p>
-        ${preview ? `<div style="background: #f8fafc; border-left: 4px solid #0d9488; padding: 12px; margin: 16px 0; color: #475569; font-style: italic;">"${preview}..."</div>` : ''}
-        <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Messages</a>
-      </div>`
+      req.user!.uid,
+      senderDisplayName,
+      senderRole,
+      receiverId,
+      receiverName,
+      receiverData?.email,
+      receiverRole,
+      messagePreview,
+      loginUrl
     );
-
-    const email = receiverData?.email;
-    if (email) {
-      const emailServerUrl = process.env.EMAIL_SERVER_URL || 'http://localhost:3002';
-      const serviceKey = process.env.EMAIL_SERVICE_KEY;
-      fetch(`${emailServerUrl}/send-unread-message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-        body: JSON.stringify({
-          email,
-          receiverName,
-          senderName: senderDisplayName,
-          messagePreview: messagePreview?.substring(0, 100),
-          loginUrl,
-          receiverRole,
-        }),
-      }).catch(e => console.error('[NOTIFY] Message email failed:', e));
-    }
 
     return res.json({ sent: true });
   } catch (error: any) {

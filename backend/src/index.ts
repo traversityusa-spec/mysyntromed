@@ -14,7 +14,7 @@ import contactRoutes from './routes/contact.js';
 import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
 import notifyRoutes from './routes/notify.js';
-import workflowRoutes from './routes/workflow.js';
+import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from './services/emailClient.js';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
@@ -380,17 +380,19 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 const userSockets = new Map<string, string>();
+const socketUserMap = new Map<string, string>();
 
 io.on('connection', (socket) => {
   console.log('[SOCKET] Client connected:', socket.id);
 
   socket.on('authenticate', (userId: string) => {
     userSockets.set(userId, socket.id);
+    socketUserMap.set(socket.id, userId);
     socket.join(`user:${userId}`);
     console.log('[SOCKET] User authenticated:', userId);
   });
 
-  socket.on('sendMessage', (data: { to: string; message: unknown }) => {
+  socket.on('sendMessage', async (data: { to: string; message: unknown }) => {
     console.log('[SOCKET] ========== SEND MESSAGE ==========');
     console.log('[SOCKET] From socket ID:', socket.id);
     console.log('[SOCKET] Target user ID:', data.to);
@@ -399,6 +401,50 @@ io.on('connection', (socket) => {
     io.to(`user:${data.to}`).emit('newMessage', data.message);
     console.log('[SOCKET] Emit complete for user:', data.to);
     console.log('[SOCKET] =================================');
+
+    // Send email notification to recipient and admins
+    try {
+      const senderId = socketUserMap.get(socket.id);
+      if (!senderId) {
+        console.warn('[SOCKET] sendMessage: No authenticated user for this socket');
+        return;
+      }
+      
+      // Get sender info
+      const firestore = admin.firestore();
+      const [senderDoc, receiverDoc] = await Promise.all([
+        firestore.collection('users').doc(senderId).get(),
+        firestore.collection('users').doc(data.to).get()
+      ]);
+      
+      const senderData = senderDoc.data();
+      const receiverData = receiverDoc.data();
+      
+      if (!senderData || !receiverData) {
+        console.warn('[SOCKET] sendMessage: Could not find sender or receiver data');
+        return;
+      }
+      
+      const messageObj = (data.message as any) || {};
+      const messagePreview = messageObj.text || '';
+      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+      
+      // Send the message notification
+      await sendMessageNotification(
+        admin,
+        senderId,
+        senderData.displayName || 'User',
+        senderData.role || 'client',
+        data.to,
+        receiverData.displayName || 'User',
+        receiverData.email,
+        receiverData.role || 'client',
+        messagePreview,
+        loginUrl
+      );
+    } catch (error: any) {
+      console.error('[SOCKET] sendMessage email notification error:', error.message);
+    }
   });
 
   socket.on('typing', (data: { to: string; isTyping: boolean; senderName?: string; senderId?: string }) => {
@@ -410,7 +456,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('callInvite', (data: { to: string; callType: string; callerId?: string; callerName: string; meetingLink: string; sessionId?: string }) => {
+  socket.on('callInvite', async (data: { to: string; callType: string; callerId?: string; callerName: string; meetingLink: string; sessionId?: string }) => {
     console.log('[SOCKET] Call invite from:', data.callerName, 'type:', data.callType, 'to:', data.to);
     io.to(`user:${data.to}`).emit('incomingCall', {
       callType: data.callType,
@@ -419,22 +465,83 @@ io.on('connection', (socket) => {
       meetingLink: data.meetingLink,
       sessionId: data.sessionId,
     });
+    
+    // Send call notification emails
+    try {
+      const firestore = admin.firestore();
+      const receiverDoc = await firestore.collection('users').doc(data.to).get();
+      const receiverData = receiverDoc.data();
+      
+      if (!receiverData) {
+        console.warn('[SOCKET] callInvite: Could not find receiver data');
+        return;
+      }
+      
+      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+      
+      await sendCallNotification(
+        admin,
+        data.callerName,
+        receiverData.displayName || 'User',
+        receiverData.email,
+        data.callType,
+        data.meetingLink,
+        loginUrl
+      );
+    } catch (error: any) {
+      console.error('[SOCKET] callInvite email notification error:', error.message);
+    }
   });
 
   socket.on('callAccepted', (data: { to: string }) => {
     console.log('[SOCKET] Call accepted, notifying:', data.to);
     io.to(`user:${data.to}`).emit('callAnswered', {});
+    
+    // Notify admins for follow-up
+    try {
+      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+      const dashboardLink = `${loginUrl.replace(/\/+/, '')}/admin/conversations`;
+      notifyAdminsViaEmail(
+        admin,
+        '[MySyntroMed] Call Accepted',
+        `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #0f172a;">Call Accepted</h2>
+          <p style="color: #475569;">A call has been accepted. Please monitor for proper follow up.</p>
+          <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Messages</a>
+        </div>`
+      );
+    } catch (error: any) {
+      console.error('[SOCKET] callAccepted notification error:', error.message);
+    }
   });
 
   socket.on('callEnded', (data: { to: string }) => {
     console.log('[SOCKET] Call ended, notifying:', data.to);
     io.to(`user:${data.to}`).emit('callRejected', {});
+    
+    // Notify admins for immediate follow-up
+    try {
+      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+      const dashboardLink = `${loginUrl.replace(/\/+/, '')}/admin/conversations`;
+      notifyAdminsViaEmail(
+        admin,
+        '[MySyntroMed] Call Ended - Follow Up Required',
+        `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #0f172a;">Call Ended - Immediate Follow Up</h2>
+          <p style="color: #475569;">A call has ended. Please follow up with the participant immediately for proper care.</p>
+          <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Messages</a>
+        </div>`
+      );
+    } catch (error: any) {
+      console.error('[SOCKET] callEnded notification error:', error.message);
+    }
   });
 
   socket.on('disconnect', () => {
     for (const [userId, sockId] of userSockets.entries()) {
       if (sockId === socket.id) {
         userSockets.delete(userId);
+        socketUserMap.delete(socket.id);
         break;
       }
     }

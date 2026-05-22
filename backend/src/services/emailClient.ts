@@ -73,3 +73,110 @@ export const notifyAdminsViaEmail = async (
     console.error('[NOTIFY ADMINS] Failed:', e);
   }
 };
+
+export const sendMessageNotification = async (
+  adminInstance: any,
+  senderId: string,
+  senderName: string,
+  senderRole: string,
+  receiverId: string,
+  receiverName: string,
+  receiverEmail: string | null | undefined,
+  receiverRole: string,
+  messagePreview: string | undefined | null,
+  loginUrl: string
+): Promise<void> => {
+  try {
+    const preview = (messagePreview || '').substring(0, 120);
+    const dashboardLink = `${loginUrl.replace(/\/+$/, '')}/admin/conversations`;
+
+    // Notify admins
+    notifyAdminsViaEmail(
+      adminInstance,
+      `[MySyntroMed] New Message from ${senderName}`,
+      `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0f172a;">New Message Activity</h2>
+        <p style="color: #475569;"><strong>${senderName}</strong> (${senderRole}) sent a message to <strong>${receiverName}</strong> (${receiverRole}).</p>
+        ${preview ? `<div style="background: #f8fafc; border-left: 4px solid #0d9488; padding: 12px; margin: 16px 0; color: #475569; font-style: italic;">"${preview}..."</div>` : ''}
+        <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Messages</a>
+      </div>`
+    );
+
+    // Send email to receiver
+    sendEmailToReceiver(receiverEmail, receiverName, senderName, messagePreview, loginUrl, receiverRole).catch(e => console.error('[NOTIFY] Message email failed:', e));
+  } catch (error: any) {
+    console.error('[SEND MESSAGE NOTIFICATION] Error:', error.message);
+  }
+};
+
+export const sendCallNotification = async (
+  adminInstance: any,
+  callerName: string,
+  receiverName: string,
+  receiverEmail: string | null | undefined,
+  callType: string,
+  meetingLink: string,
+  loginUrl: string
+): Promise<void> => {
+  try {
+    const dashboardLink = `${loginUrl.replace(/\/+$/, '')}/admin/conversations`;
+
+    // Notify admins
+    notifyAdminsViaEmail(
+      adminInstance,
+      `[MySyntroMed] Call from ${callerName}`,
+      `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0f172a;">New Call Activity</h2>
+        <p style="color: #475569;"><strong>${callerName}</strong> started a ${callType} call with <strong>${receiverName}</strong>.</p>
+        <a href="${meetingLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">Join Call</a>
+        <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Conversations</a>
+      </div>`
+    );
+
+    // Send email to receiver
+    if (receiverEmail && EMAIL_SERVICE_KEY) {
+      fetch(`${EMAIL_SERVER_URL}/send-unread-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${EMAIL_SERVICE_KEY}` },
+        body: JSON.stringify({
+          email: receiverEmail,
+          receiverName,
+          senderName: callerName,
+          messagePreview: `Incoming ${callType} call from ${callerName}`,
+          loginUrl,
+          receiverRole: 'client',
+        }),
+      }).catch(e => console.error('[NOTIFY] Call email failed:', e));
+    }
+  } catch (error: any) {
+    console.error('[SEND CALL NOTIFICATION] Error:', error.message);
+  }
+};
+
+const sendEmailToReceiver = async (
+  receiverEmail: string | null | undefined,
+  receiverName: string,
+  senderName: string,
+  messagePreview: string | undefined | null,
+  loginUrl: string,
+  receiverRole: string
+): Promise<void> => {
+  if (receiverEmail && EMAIL_SERVICE_KEY) {
+    const res = await fetch(`${EMAIL_SERVER_URL}/send-unread-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${EMAIL_SERVICE_KEY}` },
+      body: JSON.stringify({
+        email: receiverEmail,
+        receiverName,
+        senderName,
+        messagePreview: (messagePreview || '').substring(0, 100),
+        loginUrl,
+        receiverRole,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error(`[EMAIL CLIENT] Unread message email failed: ${await res.text()}`);
+    }
+  }
+};
