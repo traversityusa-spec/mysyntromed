@@ -13,8 +13,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserProfile } from '@/lib/dashboard';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
 import { userService } from '@/lib/firestore';
 import { passwordValidation } from '@/lib/security';
 
@@ -174,28 +172,26 @@ const Settings = () => {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveError('Image must be under 2MB.');
+    if (file.size > 500 * 1024) {
+      setSaveError('Image must be under 500KB.');
       return;
     }
 
-    const previousPhotoURL = getPersistentPhotoURL(profileForm.photoURL) || getPersistentPhotoURL(profile?.photoURL);
-    const localUrl = URL.createObjectURL(file);
-    setProfileForm((prev) => ({ ...prev, photoURL: localUrl }));
     setImageUploading(true);
     setSaveError(null);
+    const previousPhotoURL = getPersistentPhotoURL(profileForm.photoURL) || getPersistentPhotoURL(profile?.photoURL);
 
     try {
-      const fileRef = ref(storage, `profile_photos/${user.uid}/${Date.now()}-${file.name}`);
-      const uploadPromise = uploadBytes(fileRef, file);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Upload timed out after 30s. Check your network and try again.')), 30000),
-      );
-      await Promise.race([uploadPromise, timeoutPromise]);
-      const url = await getDownloadURL(fileRef);
-      setProfileForm((prev) => ({ ...prev, photoURL: url }));
-      updateSessionField('photoURL', url);
-      await updateProfile({ photoURL: url });
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read image file'));
+        reader.readAsDataURL(file);
+      });
+
+      setProfileForm((prev) => ({ ...prev, photoURL: dataUrl }));
+      updateSessionField('photoURL', dataUrl);
+      await updateProfile({ photoURL: dataUrl });
       await refreshSessionUser();
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -203,7 +199,6 @@ const Settings = () => {
       setSaveError(error instanceof Error ? error.message : 'Failed to upload profile image');
     } finally {
       setImageUploading(false);
-      URL.revokeObjectURL(localUrl);
     }
   };
 

@@ -23,7 +23,7 @@ type ConversationPreview = {
 
 const getPersistentPhotoURL = (value?: string | null): string => {
   if (!value) return '';
-  return value.startsWith('http://') || value.startsWith('https://') ? value : '';
+  return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') ? value : '';
 };
 
 const toMessageDate = (value: unknown): Date => {
