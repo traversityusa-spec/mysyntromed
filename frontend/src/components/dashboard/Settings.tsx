@@ -1,4 +1,4 @@
-import { type FormEvent, useState, type ChangeEvent, useEffect } from 'react';
+import { type FormEvent, useState, type ChangeEvent, useEffect, useRef } from 'react';
 import {
   Bell,
   Check,
@@ -129,6 +129,7 @@ const Settings = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getPersistentPhotoURL = (value?: string) => {
     if (!value) return '';
@@ -313,10 +314,10 @@ const Settings = () => {
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 </div>
               )}
-              <label className={`absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-teal-600 text-white shadow-sm hover:bg-teal-700 ${imageUploading ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+              <button type="button" disabled={imageUploading} onClick={() => fileInputRef.current?.click()} className={`absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-teal-600 text-white shadow-sm hover:bg-teal-700 ${imageUploading ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                 <Camera size={12} />
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imageUploading} />
-              </label>
+              </button>
+              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
             </div>
             <div>
               <p className="font-medium text-slate-900">Profile Picture</p>
