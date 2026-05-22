@@ -93,6 +93,7 @@ const Messages = () => {
   const [sending, setSending] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUserName, setTypingUserName] = useState<string>('');
+  const profileSubsRef = useRef<Map<string, () => void>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -265,16 +266,21 @@ const Messages = () => {
       });
     }
 
-    const profileUnsubs: (() => void)[] = [];
-    const ids = Array.from(conversationMap.keys());
-    ids.forEach((id) => {
-      if (profileMap[id]) return;
+    const currentIds = new Set(Array.from(conversationMap.keys()));
+    currentIds.forEach((id) => {
+      if (profileSubsRef.current.has(id)) return;
       const unsub = userService.subscribeToProfile(id, (profile) => {
         if (profile) {
           setProfileMap((prev) => ({ ...prev, [id]: profile }));
         }
       });
-      profileUnsubs.push(unsub);
+      profileSubsRef.current.set(id, unsub);
+    });
+    profileSubsRef.current.forEach((unsub, id) => {
+      if (!currentIds.has(id)) {
+        unsub();
+        profileSubsRef.current.delete(id);
+      }
     });
 
     const nextConversations = Array.from(conversationMap.values())
@@ -311,9 +317,6 @@ const Messages = () => {
     if (!selectedConversation && nextConversations.length > 0) {
       setSelectedConversation(nextConversations[0].id);
     }
-    return () => {
-      profileUnsubs.forEach((fn) => fn());
-    };
   }, [
     allMessages,
     assignedClients,
@@ -325,6 +328,13 @@ const Messages = () => {
     presenceMap,
     selectedConversation,
   ]);
+
+  useEffect(() => {
+    return () => {
+      profileSubsRef.current.forEach((unsub) => unsub());
+      profileSubsRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
