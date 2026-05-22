@@ -14,6 +14,7 @@ import contactRoutes from './routes/contact.js';
 import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
 import notifyRoutes from './routes/notify.js';
+import workflowRoutes from './routes/workflow.js';
 import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from './services/emailClient.js';
 
 if (process.env.SENTRY_DSN) {
