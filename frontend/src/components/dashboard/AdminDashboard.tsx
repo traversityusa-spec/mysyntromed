@@ -266,7 +266,7 @@ export const AdminDashboard = () => {
                   <th className="text-left p-3 font-semibold text-slate-600">Type</th>
                   <th className="text-left p-3 font-semibold text-slate-600">Priority</th>
                   <th className="text-left p-3 font-semibold text-slate-600">Status</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Submitted</th>
+                  <th className="text-left p-3 font-semibold text-slate-600">Open</th>
                   <th className="text-left p-3 font-semibold text-slate-600">Response Time</th>
                   <th className="text-left p-3 font-semibold text-slate-600">Completed</th>
                   <th className="text-left p-3 font-semibold text-slate-600">Specialist</th>
