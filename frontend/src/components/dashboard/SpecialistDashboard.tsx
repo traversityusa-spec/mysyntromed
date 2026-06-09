@@ -33,19 +33,28 @@ export const SpecialistDashboard = () => {
       (err) => { console.error('[REQUESTS] Subscription error:', err); setLoading(false); }
     );
 
-    getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid)))
-      .then(snap => setClients(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile))))
-      .catch(err => console.error('[CLIENTS] getDocs error:', err));
+    getDocs(query(collection(db, 'requests'), where('specialistId', '==', sessionUser.uid)))
+      .then(snap => {
+        setRequests(snap.docs.map(d => ({ id: d.id, ...d.data(), submittedAt: d.data().submittedAt?.toDate() } as Request)));
+        setLoading(false);
+      })
+      .catch(err => { console.error('[REQUESTS] getDocs error:', err); setLoading(false); });
 
-    const unsubClients = onSnapshot(
-      query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid)),
-      (snap) => {
-        if (!snap.metadata.hasPendingWrites) setClients(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
-      },
-      (err) => { console.error('[CLIENTS] Subscription error:', err); }
-    );
+    auth.currentUser?.getIdToken().then(token => {
+      if (!token) return;
+      fetch(`${API_BASE_URL}/api/auth/specialist/clients`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.clients) {
+          setClients(data.clients.map((c: any) => ({ ...c, createdAt: c.createdAt ? new Date(c.createdAt) : new Date() } as UserProfile)));
+        }
+      })
+      .catch(err => console.error('[CLIENTS] API error:', err));
+    });
 
-    return () => { unsubReqs(); unsubClients(); };
+    return () => { unsubReqs(); };
   }, [sessionUser?.uid]);
 
   useEffect(() => {

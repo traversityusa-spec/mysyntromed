@@ -292,6 +292,27 @@ router.post('/admin/delete-user', requireAuth, requireRole('admin'), async (req,
   }
 });
 
+router.get('/specialist/clients', requireAuth, requireRole('specialist'), async (req: AuthedRequest, res) => {
+  try {
+    const firestore = admin.firestore();
+    const snap = await firestore.collection('users')
+      .where('assignedSpecialistId', '==', req.user!.uid)
+      .get();
+    const clients = snap.docs.map(d => ({
+      uid: d.id,
+      ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null,
+      updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() || null,
+      subscriptionStartDate: d.data().subscriptionStartDate?.toDate?.()?.toISOString() || null,
+      subscriptionEndDate: d.data().subscriptionEndDate?.toDate?.()?.toISOString() || null,
+    }));
+    res.json({ clients });
+  } catch (e) {
+    console.error('[SPECIALIST CLIENTS] Error:', e);
+    res.status(500).json({ error: 'Failed to fetch clients' });
+  }
+});
+
 router.post('/admin/assign-specialist', requireAuth, requireRole('admin'), async (req, res) => {
   const { userId, specialistId } = req.body;
 
