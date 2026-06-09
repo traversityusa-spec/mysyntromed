@@ -360,7 +360,6 @@ export const SpecialistDashboard = () => {
             </Link>
           </div>
 
-          {clients.length > 0 && (
           <div className="rounded-xl border border-slate-200 bg-white">
             <div className="border-b border-slate-100 p-4">
               <h2 className="text-lg font-semibold text-navy-900 flex items-center gap-2">
@@ -368,6 +367,13 @@ export const SpecialistDashboard = () => {
                 My Clients ({clients.length})
               </h2>
             </div>
+            {clients.length === 0 ? (
+              <div className="p-6 text-center text-slate-500">
+                <Users size={32} className="mx-auto mb-2 text-slate-300" />
+                <p className="font-medium">No clients assigned yet</p>
+                <p className="text-xs mt-1">Ask an admin to assign clients to you from the admin panel</p>
+              </div>
+            ) : (
             <div className="divide-y divide-slate-100">
               {clients.map((client) => (
                 <button
@@ -396,8 +402,8 @@ export const SpecialistDashboard = () => {
                 </button>
               ))}
             </div>
+            )}
           </div>
-          )}
 
           {/* Client Detail Panel */}
           {managingClient && (
