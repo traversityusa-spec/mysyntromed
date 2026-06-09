@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, FileText, ListTodo, MessageSquare, RefreshCw, Users, Stethoscope, X, Phone, Building } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
@@ -37,6 +37,16 @@ export const SpecialistDashboard = () => {
     assignedAt: data.assignedAt?.toDate?.(),
   } as Request);
 
+  const refreshAssignedClients = useCallback(async () => {
+    if (!sessionUser?.uid) return;
+    try {
+      const assignedClients = await userService.getAssignedClients(sessionUser.uid);
+      setClients(assignedClients);
+    } catch (error) {
+      console.error('[ASSIGNED CLIENTS] Refresh failed:', error);
+    }
+  }, [sessionUser?.uid]);
+
   useEffect(() => {
     if (!sessionUser?.uid) { setSpecialistRequests([]); setAssignedClientRequests([]); setClients([]); setLoading(false); return; }
     setLoading(true);
@@ -58,9 +68,10 @@ export const SpecialistDashboard = () => {
       .catch(err => { console.error('[REQUESTS] getDocs error:', err); setLoading(false); });
 
     const unsubClients = userService.subscribeToAssignedClients(sessionUser.uid, setClients);
+    refreshAssignedClients();
 
     return () => { unsubReqs(); unsubClients(); };
-  }, [sessionUser?.uid]);
+  }, [sessionUser?.uid, refreshAssignedClients]);
 
   useEffect(() => {
     if (!clients.length) {
@@ -237,7 +248,10 @@ export const SpecialistDashboard = () => {
         <div className="flex items-center gap-4">
           <DateTimeDisplay />
           <div className="flex gap-3">
-            <button className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <button
+              onClick={refreshAssignedClients}
+              className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
               <RefreshCw size={18} />
               Refresh
             </button>

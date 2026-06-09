@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { adminAuth } from '../firebaseAdmin.js';
+import admin from '../firebaseAdmin.js';
 
 export type UserRole = 'client' | 'admin' | 'specialist';
 
@@ -26,10 +27,23 @@ export const requireAuth = async (req: AuthedRequest, res: Response, next: NextF
     let email = decoded.email;
     let roleClaim = decoded.role;
 
-    const role: UserRole | undefined =
+    let role: UserRole | undefined =
       roleClaim === 'client' || roleClaim === 'admin' || roleClaim === 'specialist'
         ? roleClaim
         : undefined;
+
+    if (!role) {
+      try {
+        const userSnap = await admin.firestore().collection('users').doc(decoded.uid).get();
+        const profileRole = userSnap.data()?.role;
+        role =
+          profileRole === 'client' || profileRole === 'admin' || profileRole === 'specialist'
+            ? profileRole
+            : undefined;
+      } catch (error) {
+        console.error('[AUTH] Failed to load user role fallback:', error);
+      }
+    }
 
     req.user = { uid: decoded.uid, email: email, role };
     next();

@@ -440,6 +440,9 @@ export const userService = {
   },
 
   async getAssignedClients(specialistId: string): Promise<UserProfile[]> {
+    const apiClients = await this.getAssignedClientsFromApi();
+    if (apiClients.length > 0) return apiClients;
+
     const q = query(
       collection(db, 'users'),
       where('assignedSpecialistId', '==', specialistId)
@@ -454,6 +457,28 @@ export const userService = {
         updatedAt: data.updatedAt?.toDate?.() || new Date(),
       } as UserProfile;
     });
+  },
+
+  async getAssignedClientsFromApi(): Promise<UserProfile[]> {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return [];
+
+    const response = await fetch(`${API_BASE_URL}/api/auth/specialist/clients`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to fetch assigned clients');
+    }
+
+    const data = await response.json();
+    return (data.clients || []).map((client: any) => ({
+      ...client,
+      createdAt: client.createdAt ? new Date(client.createdAt) : new Date(),
+      updatedAt: client.updatedAt ? new Date(client.updatedAt) : new Date(),
+      subscriptionStartDate: client.subscriptionStartDate ? new Date(client.subscriptionStartDate) : undefined,
+      subscriptionEndDate: client.subscriptionEndDate ? new Date(client.subscriptionEndDate) : undefined,
+    } as UserProfile));
   },
 
   subscribeToAssignedClients(specialistId: string, callback: (clients: UserProfile[]) => void): Unsubscribe {
@@ -473,8 +498,16 @@ export const userService = {
       });
       console.log(`[ASSIGNED CLIENTS] ${clients.length} clients for specialist ${specialistId}`);
       callback(clients);
+      this.getAssignedClientsFromApi()
+        .then((apiClients) => {
+          if (apiClients.length > clients.length) callback(apiClients);
+        })
+        .catch((err) => console.error('[ASSIGNED CLIENTS] API fallback error:', err));
     }, (err) => {
       console.error('[ASSIGNED CLIENTS] Subscription error:', err);
+      this.getAssignedClientsFromApi()
+        .then(callback)
+        .catch((apiErr) => console.error('[ASSIGNED CLIENTS] API fallback error:', apiErr));
     });
   },
   async saveNotificationPreferences(uid: string, prefs: { emailRequests: boolean; emailMessages: boolean }): Promise<void> {
