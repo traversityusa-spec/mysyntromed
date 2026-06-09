@@ -357,20 +357,21 @@ router.post('/admin/assign-specialist', requireAuth, requireRole('admin'), async
       updatedAt: now,
     });
 
-    const assignmentRequestsSnap = await firestore.collection('requests')
+    const clientRequestsSnap = await firestore.collection('requests')
       .where('userId', '==', userId)
       .get();
 
-    assignmentRequestsSnap.docs.forEach((requestDoc) => {
+    clientRequestsSnap.docs.forEach((requestDoc) => {
       const request = requestDoc.data();
-      if (request.type !== 'Specialist Assignment' || request.status !== 'pending') return;
+      if (request.status === 'completed') return;
 
       batch.update(requestDoc.ref, {
         specialistId,
         specialistName,
-        status: 'completed',
         assignedAt: now,
-        completedAt: now,
+        ...(request.type === 'Specialist Assignment'
+          ? { status: 'completed', completedAt: now }
+          : { status: request.status || 'pending' }),
       });
     });
 

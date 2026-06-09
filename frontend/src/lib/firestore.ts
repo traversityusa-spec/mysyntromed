@@ -403,12 +403,40 @@ export const userService = {
   },
 
   async assignSpecialist(userId: string, specialistId: string, specialistName: string): Promise<void> {
-    const docRef = doc(db, 'users', userId);
-    await updateDoc(docRef, {
+    const token = await auth.currentUser?.getIdToken();
+    if (token) {
+      const response = await fetch(`${API_BASE_URL}/api/auth/admin/assign-specialist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId, specialistId }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to assign specialist');
+      }
+      return;
+    }
+
+    const clientRef = doc(db, 'users', userId);
+    await updateDoc(clientRef, {
       assignedSpecialistId: specialistId,
       assignedSpecialistName: specialistName,
       updatedAt: serverTimestamp(),
     });
+
+    const openRequests = await getDocs(query(collection(db, 'requests'), where('userId', '==', userId)));
+    await Promise.all(openRequests.docs.map((requestDoc) => {
+      const request = requestDoc.data();
+      if (request.status === 'completed') return Promise.resolve();
+      return updateDoc(requestDoc.ref, {
+        specialistId,
+        specialistName,
+        assignedAt: serverTimestamp(),
+      });
+    }));
   },
 
   async getAssignedClients(specialistId: string): Promise<UserProfile[]> {

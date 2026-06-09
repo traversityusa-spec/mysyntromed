@@ -11,7 +11,8 @@ import { DateTimeDisplay } from '@/lib/datetime';
 
 export const SpecialistDashboard = () => {
   const { sessionUser, showWelcomeBack, welcomeBackData, clearWelcomeBack } = useAuth();
-  const [requests, setRequests] = useState<Request[]>([]);
+  const [specialistRequests, setSpecialistRequests] = useState<Request[]>([]);
+  const [assignedClientRequests, setAssignedClientRequests] = useState<Request[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,14 +23,28 @@ export const SpecialistDashboard = () => {
   const [clientMsgs, setClientMsgs] = useState<Message[]>([]);
   const [loadingClient, setLoadingClient] = useState(false);
 
+  const requests = useMemo(() => {
+    const byId = new Map<string, Request>();
+    [...assignedClientRequests, ...specialistRequests].forEach((request) => byId.set(request.id, request));
+    return Array.from(byId.values()).sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  }, [assignedClientRequests, specialistRequests]);
+
+  const mapRequestDoc = (id: string, data: any): Request => ({
+    id,
+    ...data,
+    submittedAt: data.submittedAt?.toDate?.() || new Date(),
+    completedAt: data.completedAt?.toDate?.(),
+    assignedAt: data.assignedAt?.toDate?.(),
+  } as Request);
+
   useEffect(() => {
-    if (!sessionUser?.uid) { setRequests([]); setClients([]); setLoading(false); return; }
+    if (!sessionUser?.uid) { setSpecialistRequests([]); setAssignedClientRequests([]); setClients([]); setLoading(false); return; }
     setLoading(true);
 
     const unsubReqs = onSnapshot(
       query(collection(db, 'requests'), where('specialistId', '==', sessionUser.uid)),
       (snap) => {
-        setRequests(snap.docs.map(d => ({ id: d.id, ...d.data(), submittedAt: d.data().submittedAt?.toDate() } as Request)));
+        setSpecialistRequests(snap.docs.map(d => mapRequestDoc(d.id, d.data())));
         setLoading(false);
       },
       (err) => { console.error('[REQUESTS] Subscription error:', err); setLoading(false); }
@@ -37,7 +52,7 @@ export const SpecialistDashboard = () => {
 
     getDocs(query(collection(db, 'requests'), where('specialistId', '==', sessionUser.uid)))
       .then(snap => {
-        setRequests(snap.docs.map(d => ({ id: d.id, ...d.data(), submittedAt: d.data().submittedAt?.toDate() } as Request)));
+        setSpecialistRequests(snap.docs.map(d => mapRequestDoc(d.id, d.data())));
         setLoading(false);
       })
       .catch(err => { console.error('[REQUESTS] getDocs error:', err); setLoading(false); });
@@ -46,6 +61,34 @@ export const SpecialistDashboard = () => {
 
     return () => { unsubReqs(); unsubClients(); };
   }, [sessionUser?.uid]);
+
+  useEffect(() => {
+    if (!clients.length) {
+      setAssignedClientRequests([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadClientRequests = async () => {
+      try {
+        const chunks: UserProfile[][] = [];
+        for (let index = 0; index < clients.length; index += 10) {
+          chunks.push(clients.slice(index, index + 10));
+        }
+        const snaps = await Promise.all(
+          chunks.map((chunk) => getDocs(query(collection(db, 'requests'), where('userId', 'in', chunk.map(client => client.uid)))))
+        );
+        if (!cancelled) {
+          setAssignedClientRequests(snaps.flatMap(snap => snap.docs.map(d => mapRequestDoc(d.id, d.data()))));
+        }
+      } catch (err) {
+        console.error('[CLIENT REQUESTS] Failed to load assigned client requests:', err);
+      }
+    };
+
+    loadClientRequests();
+    return () => { cancelled = true; };
+  }, [clients]);
 
   // Subscribe to the currently selected client's workflow
   useEffect(() => {
@@ -73,12 +116,9 @@ export const SpecialistDashboard = () => {
       return;
     }
     try {
-      const [adminSnap, assignedClientsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('role', '==', 'admin'))),
-        getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid))),
-      ]);
+      const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
       const adminEmails = adminSnap.docs.map(d => d.data().email).filter(Boolean);
-      const clientEmails = assignedClientsSnap.docs.map(d => d.data().email).filter(Boolean);
+      const clientEmails = clients.filter(client => client.uid === clientId).map(client => client.email).filter(Boolean);
 
       const token = await auth.currentUser?.getIdToken();
       if (!token) { console.warn('[WORKFLOW] No auth token'); return; }
@@ -88,6 +128,8 @@ export const SpecialistDashboard = () => {
         body: JSON.stringify({
           specialistId: sessionUser.uid,
           specialistName: sessionUser.displayName || 'Your Specialist',
+          clientId,
+          clientName: clients.find(client => client.uid === clientId)?.displayName || 'Client',
           step: field === 'morningPrepStatus' ? 'Morning Prep' : 'Post-Clinic Documentation',
           status: value,
           loginUrl: window.location.origin,
@@ -97,6 +139,15 @@ export const SpecialistDashboard = () => {
       if (!res.ok) console.error('[WORKFLOW] Backend error:', await res.text());
     } catch (e) {
       console.error('[WORKFLOW] Failed to send notification:', e);
+    }
+  };
+
+  const handleClinicDayFinished = async (clientId: string) => {
+    if (!sessionUser?.uid) return;
+    try {
+      await workflowService.clinicDayFinished(sessionUser.uid, clientId);
+    } catch (e) {
+      console.error('[WORKFLOW] Failed to finish clinic day:', e);
     }
   };
 
@@ -116,7 +167,8 @@ export const SpecialistDashboard = () => {
   const handleClientRequestStatusChange = async (requestId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
     try {
       await requestService.updateRequestStatus(requestId, newStatus, sessionUser?.uid, sessionUser?.displayName || sessionUser?.email || 'Specialist');
-      setRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : req.completedAt } : req));
+      setSpecialistRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : req.completedAt } : req));
+      setAssignedClientRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: newStatus, completedAt: newStatus === 'completed' ? new Date() : req.completedAt } : req));
     } catch (e) {
       console.error('Error updating client request status:', e);
     }
@@ -450,6 +502,18 @@ export const SpecialistDashboard = () => {
                     </select>
                   </div>
                 </div>
+
+                {currentWorkflow?.morningPrepStatus === 'completed' && !currentWorkflow?.clinicDayFinished && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => handleClinicDayFinished(managingClient.uid)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
+                    >
+                      <Check size={16} />
+                      Clinic Day Finished
+                    </button>
+                  </div>
+                )}
 
                 {currentWorkflow?.clinicDayFinished && (
                   <div className="mt-4 flex flex-wrap gap-3">
