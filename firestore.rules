@@ -15,21 +15,21 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn() && (
-        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin' ||
         getUserRole(request.auth.uid) == 'admin'
       );
     }
 
     function isSpecialist() {
       return signedIn() && (
-        request.auth.token.specialist == true ||
+        request.auth.token.role == 'specialist' ||
         getUserRole(request.auth.uid) == 'specialist'
       );
     }
 
     function isClient() {
       return signedIn() && (
-        request.auth.token.client == true ||
+        request.auth.token.role == 'client' ||
         getUserRole(request.auth.uid) == 'client'
       );
     }
