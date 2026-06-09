@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Activity, ArrowUpRight, CheckCircle, Clock, Inbox, Shield, Stethoscope, Users, X, Mail, Phone, Building,
-  RefreshCw, ClipboardList, AlertCircle, ChevronRight,
+  RefreshCw, ClipboardList, AlertCircle, ChevronRight, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { UserProfile, Request } from '@/lib/firestore';
-import { userService } from '@/lib/firestore';
+import type { UserProfile, Request, Message } from '@/lib/firestore';
+import { userService, messageService } from '@/lib/firestore';
 import { DateTimeDisplay } from '@/lib/datetime';
 
 const ClientDetailModal = ({ client, onClose }: { client: UserProfile; onClose: () => void }) => {
@@ -125,6 +125,10 @@ export const AdminDashboard = () => {
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
   const [selectedClient, setSelectedClient] = useState<UserProfile | null>(null);
+  const [viewingClient, setViewingClient] = useState<UserProfile | null>(null);
+  const [clientRequests, setClientRequests] = useState<Request[]>([]);
+  const [clientMessages, setClientMessages] = useState<Message[]>([]);
+  const [loadingClientData, setLoadingClientData] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -188,6 +192,24 @@ export const AdminDashboard = () => {
     { title: 'Consultations', value: metrics.calls, icon: Activity, color: 'bg-emerald-50 text-emerald-600', trend: 'Scheduled' },
   ];
 
+  const handleViewClient = async (client: UserProfile) => {
+    setViewingClient(client);
+    setLoadingClientData(true);
+    setClientRequests(requests.filter(r => r.userId === client.uid));
+    if (client.assignedSpecialistId) {
+      try {
+        const msgs = await messageService.getConversation(client.uid, client.assignedSpecialistId);
+        setClientMessages(msgs);
+      } catch (e) {
+        console.error('Error loading messages:', e);
+        setClientMessages([]);
+      }
+    } else {
+      setClientMessages([]);
+    }
+    setLoadingClientData(false);
+  };
+
   return (
     <div className="space-y-6">
       {selectedClient && <ClientDetailModal client={selectedClient} onClose={() => setSelectedClient(null)} />}
@@ -244,67 +266,163 @@ export const AdminDashboard = () => {
         })}
       </div>
 
-      {/* Requests Table */}
+      {/* Per-Client Analysis */}
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-slate-50/50">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-            <ClipboardList size={20} className="text-teal-600" />
-            All Requests
+            <Users size={20} className="text-teal-600" />
+            Client Analysis
           </h2>
-          <span className="text-xs text-slate-500">{requests.length} total</span>
+          <span className="text-xs text-slate-500">{clients.length} clients</span>
         </div>
         {metricsLoading ? (
-          <div className="p-12 text-center text-slate-400 animate-pulse">Loading requests...</div>
-        ) : requests.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">No requests yet</div>
+          <div className="p-12 text-center text-slate-400 animate-pulse">Loading clients...</div>
+        ) : clients.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">No clients yet</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="text-left p-3 font-semibold text-slate-600">Client</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Type</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Priority</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Status</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Open</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Response Time</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Completed</th>
-                  <th className="text-left p-3 font-semibold text-slate-600">Specialist</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {requests.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50 transition">
-                    <td className="p-3 font-medium text-slate-900">{req.clientName || req.clientEmail || 'Unknown'}</td>
-                    <td className="p-3 text-slate-700">{req.type}</td>
-                    <td className="p-3">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-                        req.priority === 'urgent' ? 'bg-red-100 text-red-700' :
-                        req.priority === 'high' ? 'bg-amber-100 text-amber-700' :
-                        'bg-teal-100 text-teal-700'
-                      }`}>{req.priority}</span>
-                    </td>
-                    <td className="p-3">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${statusColors[req.status]}`}>
-                        {statusLabels[req.status]}
+          <div className="flex">
+            <div className="w-72 shrink-0 border-r border-slate-200 divide-y divide-slate-100 overflow-y-auto max-h-[600px]">
+              {clients.map(client => (
+                <button
+                  key={client.uid}
+                  onClick={() => handleViewClient(client)}
+                  className={`w-full text-left p-4 hover:bg-slate-50 transition ${
+                    viewingClient?.uid === client.uid ? 'bg-teal-50 border-l-2 border-teal-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xs font-bold shrink-0">
+                      {client.displayName?.[0]?.toUpperCase() || 'C'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{client.displayName || 'Unnamed'}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {client.assignedSpecialistName ? `→ ${client.assignedSpecialistName}` : 'Unassigned'}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 p-6">
+              {viewingClient ? (
+                loadingClientData ? (
+                  <div className="flex items-center justify-center h-64">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="h-14 w-14 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xl font-bold">
+                          {viewingClient.displayName?.[0]?.toUpperCase() || 'C'}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-900">{viewingClient.displayName || 'Client'}</h3>
+                          <p className="text-sm text-slate-500">{viewingClient.email}</p>
+                          <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                            <Stethoscope size={12} />
+                            {viewingClient.assignedSpecialistName || 'No specialist assigned'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
+                        viewingClient.disabled ? 'bg-red-100 text-red-700' :
+                        viewingClient.isNewUser ? 'bg-blue-100 text-blue-700' :
+                        'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {viewingClient.disabled ? 'Inactive' : viewingClient.isNewUser ? 'Pending' : 'Active'}
                       </span>
-                    </td>
-                    <td className="p-3 text-slate-600 text-xs">{req.submittedAt.toLocaleDateString()} {req.submittedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td className="p-3">
-                      <span className={`text-xs font-medium ${getResponseTime(req) === 'Waiting' ? 'text-amber-600' : 'text-slate-700'}`}>
-                        {getResponseTime(req)}
-                      </span>
-                    </td>
-                    <td className="p-3 text-xs text-slate-600">
-                      {req.completedAt
-                        ? `${req.completedAt.toLocaleDateString()} ${req.completedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                        : '-'}
-                    </td>
-                    <td className="p-3 text-xs text-slate-600">{req.specialistName || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                        <ClipboardList size={16} />
+                        Requests ({clientRequests.length})
+                      </h4>
+                      {clientRequests.length === 0 ? (
+                        <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg">No requests from this client</p>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-100 bg-slate-50">
+                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Type</th>
+                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Priority</th>
+                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Status</th>
+                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Open</th>
+                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Response</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {clientRequests.map(req => (
+                                <tr key={req.id} className="hover:bg-slate-50">
+                                  <td className="p-2.5 text-slate-800">{req.type}</td>
+                                  <td className="p-2.5">
+                                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
+                                      req.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                                      req.priority === 'high' ? 'bg-amber-100 text-amber-700' :
+                                      'bg-teal-100 text-teal-700'
+                                    }`}>{req.priority}</span>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${statusColors[req.status]}`}>
+                                      {statusLabels[req.status]}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-xs text-slate-500">{req.submittedAt.toLocaleDateString()}</td>
+                                  <td className="p-2.5 text-xs">
+                                    <span className={`font-medium ${getResponseTime(req) === 'Waiting' ? 'text-amber-600' : 'text-slate-600'}`}>
+                                      {getResponseTime(req)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {viewingClient.assignedSpecialistId && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <MessageSquare size={16} />
+                          Recent Messages
+                        </h4>
+                        {clientMessages.length === 0 ? (
+                          <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg">No messages yet</p>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                            {clientMessages.slice(-10).map(msg => (
+                              <div key={msg.id} className={`flex ${msg.senderId === viewingClient.uid ? 'justify-start' : 'justify-end'}`}>
+                                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
+                                  msg.senderId === viewingClient.uid
+                                    ? 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                                    : 'bg-teal-500 text-white rounded-br-sm'
+                                }`}>
+                                  <p className="text-xs font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
+                                  <p>{msg.text}</p>
+                                  <p className={`text-[10px] mt-0.5 opacity-60`}>
+                                    {msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : (
+                <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                  <Users size={48} className="mb-3 text-slate-300" />
+                  <p className="font-medium">Select a client</p>
+                  <p className="text-sm mt-1">Click a client on the left to view their full analysis</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

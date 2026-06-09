@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, FileText, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, X } from 'lucide-react';
+import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, FileText, ListTodo, MessageSquare, Plus, RefreshCw, Users, Stethoscope, X, Mail, Phone, Building } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { workflowService, API_BASE_URL } from '@/lib/firestore';
-import type { Request, UserProfile, WorkflowStatus } from '@/lib/firestore';
+import type { Request, UserProfile, WorkflowStatus, Message } from '@/lib/firestore';
+import { messageService } from '@/lib/firestore';
 import { DateTimeDisplay } from '@/lib/datetime';
 
 export const SpecialistDashboard = () => {
@@ -14,6 +15,10 @@ export const SpecialistDashboard = () => {
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [workflow, setWorkflow] = useState<WorkflowStatus | null>(null);
+  const [managingClient, setManagingClient] = useState<UserProfile | null>(null);
+  const [clientReqs, setClientReqs] = useState<Request[]>([]);
+  const [clientMsgs, setClientMsgs] = useState<Message[]>([]);
+  const [loadingClient, setLoadingClient] = useState(false);
 
   useEffect(() => {
     if (!sessionUser?.uid) { setRequests([]); setClients([]); setLoading(false); return; }
@@ -87,6 +92,31 @@ export const SpecialistDashboard = () => {
     } catch (e) {
       console.error('[WORKFLOW] Failed to send notification:', e);
     }
+  };
+
+  const handleManageClient = async (client: UserProfile) => {
+    setManagingClient(client);
+    setLoadingClient(true);
+    setClientReqs(requests.filter(r => r.userId === client.uid));
+    try {
+      const msgs = await messageService.getConversation(sessionUser!.uid, client.uid);
+      setClientMsgs(msgs);
+    } catch (e) {
+      console.error('Error loading messages:', e);
+      setClientMsgs([]);
+    }
+    setLoadingClient(false);
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-slate-100 text-slate-600',
+    in_progress: 'bg-blue-100 text-blue-700',
+    completed: 'bg-emerald-100 text-emerald-700',
+  };
+  const statusLabels: Record<string, string> = {
+    pending: 'Pending',
+    in_progress: 'Active',
+    completed: 'Done',
   };
 
   const stats = [
@@ -335,33 +365,153 @@ export const SpecialistDashboard = () => {
             <div className="border-b border-slate-100 p-4">
               <h2 className="text-lg font-semibold text-navy-900 flex items-center gap-2">
                 <Users size={18} className="text-indigo-500" />
-                Assigned Doctors
+                My Clients ({clients.length})
               </h2>
             </div>
             <div className="divide-y divide-slate-100">
               {clients.map((client) => (
-                <div key={client.uid} className="flex items-center gap-3 p-4">
-                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white">
+                <button
+                  key={client.uid}
+                  onClick={() => handleManageClient(client)}
+                  className={`w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition ${
+                    managingClient?.uid === client.uid ? 'bg-indigo-50' : ''
+                  }`}
+                >
+                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white shrink-0">
                     {client.photoURL ? (
                       <img src={client.photoURL} alt={client.displayName || 'Client'} className="h-full w-full object-cover" />
                     ) : (
                       client.displayName?.charAt(0) || 'C'
                     )}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-900">{client.displayName || client.email || 'Client'}</p>
-                    <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-sm font-medium text-slate-900 truncate">{client.displayName || client.email || 'Client'}</p>
+                    <p className="text-xs text-slate-500 truncate">{client.email}</p>
+                    <p className="text-xs text-emerald-600 flex items-center gap-1 mt-0.5">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Active
+                      {requests.filter(r => r.userId === client.uid && r.status !== 'completed').length} open request{(requests.filter(r => r.userId === client.uid && r.status !== 'completed').length) !== 1 ? 's' : ''}
                     </p>
                   </div>
-                  <Link to="/specialist/messages" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
-                    Message
-                  </Link>
-                </div>
+                  <ChevronRight size={16} className="text-slate-300 shrink-0" />
+                </button>
               ))}
             </div>
           </div>
+          )}
+
+          {/* Client Detail Panel */}
+          {managingClient && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setManagingClient(null)}>
+              <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between border-b border-slate-200 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-sm font-bold text-white">
+                      {managingClient.photoURL ? (
+                        <img src={managingClient.photoURL} alt="" className="h-full w-full object-cover rounded-full" />
+                      ) : (
+                        managingClient.displayName?.charAt(0) || 'C'
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">{managingClient.displayName || 'Client'}</h3>
+                      <p className="text-xs text-slate-500">{managingClient.email}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setManagingClient(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 transition">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                  {managingClient.phone && (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <Phone size={14} className="text-slate-400" />
+                      {managingClient.phone}
+                    </div>
+                  )}
+                  {managingClient.clinicName && (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <Building size={14} className="text-slate-400" />
+                      {managingClient.clinicName}
+                    </div>
+                  )}
+
+                  {loadingClient ? (
+                    <div className="flex justify-center py-8">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                          <ClipboardList size={14} />
+                          Requests ({clientReqs.length})
+                        </h4>
+                        {clientReqs.length === 0 ? (
+                          <p className="text-sm text-slate-400 py-3 text-center bg-slate-50 rounded-lg">No requests yet</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {clientReqs.map(req => (
+                              <div key={req.id} className="rounded-lg border border-slate-200 p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm font-medium text-slate-900">{req.type}</span>
+                                  <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${statusColors[req.status]}`}>
+                                    {statusLabels[req.status]}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mb-1">{req.description}</p>
+                                <div className="flex items-center justify-between">
+                                  <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
+                                    req.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                                    req.priority === 'high' ? 'bg-amber-100 text-amber-700' :
+                                    'bg-teal-100 text-teal-700'
+                                  }`}>{req.priority}</span>
+                                  <span className="text-[10px] text-slate-400">{req.submittedAt.toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                          <MessageSquare size={14} />
+                          Recent Messages
+                        </h4>
+                        {clientMsgs.length === 0 ? (
+                          <p className="text-sm text-slate-400 py-3 text-center bg-slate-50 rounded-lg">No messages yet</p>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                            {clientMsgs.slice(-10).map(msg => (
+                              <div key={msg.id} className={`flex ${msg.senderId === sessionUser?.uid ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
+                                  msg.senderId === sessionUser?.uid
+                                    ? 'bg-teal-500 text-white rounded-br-sm'
+                                    : 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                                }`}>
+                                  <p className="text-xs font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
+                                  <p>{msg.text}</p>
+                                  <p className="text-[10px] mt-0.5 opacity-60">
+                                    {msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <Link
+                          to="/specialist/messages"
+                          className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-teal-600 hover:text-teal-700"
+                        >
+                          <MessageSquare size={14} />
+                          Open full conversation
+                        </Link>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
 
           <Link to="/specialist/calls" className="block rounded-xl border border-slate-200 bg-gradient-to-r from-purple-50 to-blue-50 p-4 hover:shadow-sm transition">
