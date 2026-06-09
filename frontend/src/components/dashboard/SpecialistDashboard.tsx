@@ -14,7 +14,10 @@ export const SpecialistDashboard = () => {
   const [requests, setRequests] = useState<Request[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [workflow, setWorkflow] = useState<WorkflowStatus | null>(null);
+
+  // Per-client workflow state: keyed by clientId
+  const [clientWorkflows, setClientWorkflows] = useState<Record<string, WorkflowStatus | null>>({});
+
   const [managingClient, setManagingClient] = useState<UserProfile | null>(null);
   const [clientMsgs, setClientMsgs] = useState<Message[]>([]);
   const [loadingClient, setLoadingClient] = useState(false);
@@ -44,19 +47,33 @@ export const SpecialistDashboard = () => {
     return () => { unsubReqs(); unsubClients(); };
   }, [sessionUser?.uid]);
 
+  // Subscribe to per-client workflows for all assigned clients
   useEffect(() => {
-    if (!sessionUser?.uid) return;
-    const unsubWf = workflowService.subscribe(sessionUser.uid, setWorkflow);
-    return () => { unsubWf(); };
-  }, [sessionUser?.uid]);
+    if (!sessionUser?.uid || clients.length === 0) return;
 
-  const handleWorkflowChange = async (field: 'morningPrepStatus' | 'postClinicStatus', value: 'not_started' | 'in_progress' | 'completed') => {
+    const unsubscribes: (() => void)[] = [];
+
+    clients.forEach((client) => {
+      const unsub = workflowService.subscribe(sessionUser.uid, (wf) => {
+        setClientWorkflows(prev => ({ ...prev, [client.uid]: wf }));
+      }, client.uid);
+      unsubscribes.push(unsub);
+    });
+
+    return () => { unsubscribes.forEach(u => u()); };
+  }, [sessionUser?.uid, clients.length]); // re-subscribe if client list changes
+
+  const handleWorkflowChange = async (
+    clientId: string,
+    field: 'morningPrepStatus' | 'postClinicStatus',
+    value: 'not_started' | 'in_progress' | 'completed'
+  ) => {
     if (!sessionUser?.uid) return;
     try {
       if (field === 'morningPrepStatus') {
-        await workflowService.updateMorningPrep(sessionUser.uid, value);
+        await workflowService.updateMorningPrep(sessionUser.uid, value, clientId);
       } else {
-        await workflowService.updatePostClinic(sessionUser.uid, value);
+        await workflowService.updatePostClinic(sessionUser.uid, value, clientId);
       }
     } catch (e) {
       console.error('[WORKFLOW] Failed to update:', e);
@@ -132,6 +149,9 @@ export const SpecialistDashboard = () => {
     { label: 'Pending', value: requests.filter(r => r.status === 'pending').length, icon: Clock, color: 'bg-amber-50 text-amber-600' },
     { label: 'Completed', value: requests.filter(r => r.status === 'completed').length, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
   ];
+
+  // Helper to get workflow for currently managing client
+  const currentWorkflow = managingClient ? clientWorkflows[managingClient.uid] : null;
 
   return (
     <div className="space-y-6">
@@ -243,87 +263,6 @@ export const SpecialistDashboard = () => {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {/* Today With Your Clients */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="mb-4 text-lg font-semibold text-navy-900">Today With Your Clients</h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${workflow?.morningPrepStatus === 'completed' ? 'bg-emerald-100' : workflow?.morningPrepStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                    {workflow?.morningPrepStatus === 'completed' ? (
-                      <Check className="h-5 w-5 text-emerald-600" />
-                    ) : workflow?.morningPrepStatus === 'in_progress' ? (
-                      <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
-                    ) : (
-                      <Clock className="h-5 w-5 text-slate-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-900">Morning Prep</p>
-                    <p className="text-sm text-slate-500">Prepare charts and patient details</p>
-                  </div>
-                </div>
-                <select
-                  value={workflow?.morningPrepStatus || 'not_started'}
-                  onChange={(e) => handleWorkflowChange('morningPrepStatus', e.target.value as 'not_started' | 'in_progress' | 'completed')}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
-                    workflow?.morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                    workflow?.morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">Ongoing</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${workflow?.postClinicStatus === 'completed' ? 'bg-emerald-100' : workflow?.postClinicStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                    {workflow?.postClinicStatus === 'completed' ? (
-                      <Check className="h-5 w-5 text-emerald-600" />
-                    ) : workflow?.postClinicStatus === 'in_progress' ? (
-                      <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
-                    ) : (
-                      <FileText className="h-5 w-5 text-slate-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-900">Post-Clinic Documentation</p>
-                    <p className="text-sm text-slate-500">Finalize notes in EHR</p>
-                  </div>
-                </div>
-                <select
-                  value={workflow?.postClinicStatus || 'not_started'}
-                  onChange={(e) => handleWorkflowChange('postClinicStatus', e.target.value as 'not_started' | 'in_progress' | 'completed')}
-                  disabled={!workflow?.clinicDayFinished}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
-                    !workflow?.clinicDayFinished ? 'cursor-not-allowed opacity-50' :
-                    workflow?.postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                    workflow?.postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
-                    'border-slate-200 bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">Ongoing</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-            </div>
-
-            {workflow?.clinicDayFinished && (
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Link
-                to="/specialist/messages"
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <MessageSquare size={16} />
-                Message Clients
-              </Link>
-            </div>
-            )}
-          </div>
 
           {/* Client Dashboards */}
           <div className="rounded-xl border border-slate-200 bg-white">
@@ -401,8 +340,10 @@ export const SpecialistDashboard = () => {
             </div>
           </div>
 
+          {/* Per-Client Detail Panel */}
           {managingClient && selectedClientDashboard && (
             <div className="rounded-xl border border-teal-200 bg-white shadow-sm">
+              {/* Header */}
               <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-sm font-bold text-white">
@@ -433,6 +374,7 @@ export const SpecialistDashboard = () => {
                 </div>
               </div>
 
+              {/* Stats */}
               <div className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-4">
                 {[
                   { label: 'Open Requests', value: selectedClientDashboard.openRequests.length },
@@ -447,6 +389,89 @@ export const SpecialistDashboard = () => {
                 ))}
               </div>
 
+              {/* Today With This Client — Per-client workflow */}
+              <div className="border-b border-slate-100 p-5">
+                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Today with {managingClient.displayName || 'this client'}</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${currentWorkflow?.morningPrepStatus === 'completed' ? 'bg-emerald-100' : currentWorkflow?.morningPrepStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                        {currentWorkflow?.morningPrepStatus === 'completed' ? (
+                          <Check className="h-5 w-5 text-emerald-600" />
+                        ) : currentWorkflow?.morningPrepStatus === 'in_progress' ? (
+                          <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
+                        ) : (
+                          <Clock className="h-5 w-5 text-slate-400" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900">Morning Prep</p>
+                        <p className="text-sm text-slate-500">Prepare charts and patient details</p>
+                      </div>
+                    </div>
+                    <select
+                      value={currentWorkflow?.morningPrepStatus || 'not_started'}
+                      onChange={(e) => handleWorkflowChange(managingClient.uid, 'morningPrepStatus', e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                        currentWorkflow?.morningPrepStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                        currentWorkflow?.morningPrepStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                        'border-slate-200 bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      <option value="not_started">Not Started</option>
+                      <option value="in_progress">Ongoing</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${currentWorkflow?.postClinicStatus === 'completed' ? 'bg-emerald-100' : currentWorkflow?.postClinicStatus === 'in_progress' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                        {currentWorkflow?.postClinicStatus === 'completed' ? (
+                          <Check className="h-5 w-5 text-emerald-600" />
+                        ) : currentWorkflow?.postClinicStatus === 'in_progress' ? (
+                          <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
+                        ) : (
+                          <FileText className="h-5 w-5 text-slate-400" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900">Post-Clinic Documentation</p>
+                        <p className="text-sm text-slate-500">Finalize notes in EHR</p>
+                      </div>
+                    </div>
+                    <select
+                      value={currentWorkflow?.postClinicStatus || 'not_started'}
+                      onChange={(e) => handleWorkflowChange(managingClient.uid, 'postClinicStatus', e.target.value as 'not_started' | 'in_progress' | 'completed')}
+                      disabled={!currentWorkflow?.clinicDayFinished}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                        !currentWorkflow?.clinicDayFinished ? 'cursor-not-allowed opacity-50' :
+                        currentWorkflow?.postClinicStatus === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                        currentWorkflow?.postClinicStatus === 'in_progress' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                        'border-slate-200 bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      <option value="not_started">Not Started</option>
+                      <option value="in_progress">Ongoing</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>
+                </div>
+
+                {currentWorkflow?.clinicDayFinished && (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Link
+                      to="/specialist/messages"
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <MessageSquare size={16} />
+                      Message {managingClient.displayName || 'Client'}
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* Requests + Messages */}
               <div className="grid gap-5 p-5 lg:grid-cols-2">
                 <div>
                   <div className="mb-3 flex items-center justify-between">

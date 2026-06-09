@@ -1223,8 +1223,14 @@ export const notificationService = {
 const getToday = () => new Date().toISOString().slice(0, 10);
 
 export const workflowService = {
-  subscribe(specialistId: string, callback: (wf: WorkflowStatus | null) => void): Unsubscribe {
-    const ref = doc(db, 'workflows', specialistId);
+  // Per-client workflow
+  _docRef(specialistId: string, clientId?: string) {
+    const docId = clientId ? `${specialistId}_${clientId}` : specialistId;
+    return doc(db, 'workflows', docId);
+  },
+
+  subscribe(specialistId: string, callback: (wf: WorkflowStatus | null) => void, clientId?: string): Unsubscribe {
+    const ref = this._docRef(specialistId, clientId);
     return onSnapshot(ref, (snap) => {
       if (!snap.exists()) { callback(null); return; }
       const d = snap.data();
@@ -1254,9 +1260,9 @@ export const workflowService = {
     });
   },
 
-  async updateMorningPrep(specialistId: string, status: 'not_started' | 'in_progress' | 'completed'): Promise<void> {
+  async updateMorningPrep(specialistId: string, status: 'not_started' | 'in_progress' | 'completed', clientId?: string): Promise<void> {
     try {
-      await setDoc(doc(db, 'workflows', specialistId), {
+      await setDoc(this._docRef(specialistId, clientId), {
         morningPrepStatus: status,
         workflowDate: getToday(),
         updatedAt: serverTimestamp(),
@@ -1266,9 +1272,9 @@ export const workflowService = {
     }
   },
 
-  async updatePostClinic(specialistId: string, status: 'not_started' | 'in_progress' | 'completed'): Promise<void> {
+  async updatePostClinic(specialistId: string, status: 'not_started' | 'in_progress' | 'completed', clientId?: string): Promise<void> {
     try {
-      await setDoc(doc(db, 'workflows', specialistId), {
+      await setDoc(this._docRef(specialistId, clientId), {
         postClinicStatus: status,
         workflowDate: getToday(),
         updatedAt: serverTimestamp(),
@@ -1278,9 +1284,9 @@ export const workflowService = {
     }
   },
 
-  async clinicDayFinished(specialistId: string): Promise<void> {
+  async clinicDayFinished(specialistId: string, clientId?: string): Promise<void> {
     try {
-      await setDoc(doc(db, 'workflows', specialistId), {
+      await setDoc(this._docRef(specialistId, clientId), {
         clinicDayFinished: true,
         workflowDate: getToday(),
         updatedAt: serverTimestamp(),
