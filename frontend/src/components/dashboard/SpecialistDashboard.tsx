@@ -47,21 +47,14 @@ export const SpecialistDashboard = () => {
     return () => { unsubReqs(); unsubClients(); };
   }, [sessionUser?.uid]);
 
-  // Subscribe to per-client workflows for all assigned clients
+  // Subscribe to the currently selected client's workflow
   useEffect(() => {
-    if (!sessionUser?.uid || clients.length === 0) return;
-
-    const unsubscribes: (() => void)[] = [];
-
-    clients.forEach((client) => {
-      const unsub = workflowService.subscribe(sessionUser.uid, (wf) => {
-        setClientWorkflows(prev => ({ ...prev, [client.uid]: wf }));
-      }, client.uid);
-      unsubscribes.push(unsub);
-    });
-
-    return () => { unsubscribes.forEach(u => u()); };
-  }, [sessionUser?.uid, clients.length]); // re-subscribe if client list changes
+    if (!sessionUser?.uid || !managingClient) return;
+    const unsub = workflowService.subscribe(sessionUser.uid, (wf) => {
+      setClientWorkflows(prev => ({ ...prev, [managingClient.uid]: wf }));
+    }, managingClient.uid);
+    return () => unsub();
+  }, [sessionUser?.uid, managingClient?.uid]);
 
   const handleWorkflowChange = async (
     clientId: string,

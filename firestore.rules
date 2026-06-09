@@ -72,16 +72,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /workflows/{specialistId} {
+    match /workflows/{docId} {
       allow read: if signedIn() && (
-        isOwner(specialistId) ||
+        request.auth.uid == docId.split('_')[0] ||
         isAdmin() ||
-        (isClient() && getUserData(request.auth.uid).assignedSpecialistId == specialistId)
+        (isClient() && getUserData(request.auth.uid).assignedSpecialistId == docId.split('_')[0])
       );
       allow create, update: if signedIn() && (
-        isOwner(specialistId) ||
-        isAdmin() ||
-        (isClient() && getUserData(request.auth.uid).assignedSpecialistId == specialistId)
+        request.auth.uid == docId.split('_')[0] ||
+        isAdmin()
       );
       allow delete: if isAdmin();
     }

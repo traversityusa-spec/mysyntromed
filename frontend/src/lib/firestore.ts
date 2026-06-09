@@ -443,7 +443,10 @@ export const userService = {
           updatedAt: data.updatedAt?.toDate?.() || new Date(),
         } as UserProfile;
       });
+      console.log(`[ASSIGNED CLIENTS] ${clients.length} clients for specialist ${specialistId}`);
       callback(clients);
+    }, (err) => {
+      console.error('[ASSIGNED CLIENTS] Subscription error:', err);
     });
   },
   async saveNotificationPreferences(uid: string, prefs: { emailRequests: boolean; emailMessages: boolean }): Promise<void> {
