@@ -2,8 +2,11 @@ import { type FormEvent, useState, useEffect, useRef, type ChangeEvent, useMemo 
 import { Link } from 'react-router-dom';
 import { 
   Paperclip, Phone, Plus, Search, Send, Shield, Video, X, MessageSquare, 
-  Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image
+  Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image,
+  Users, User
 } from 'lucide-react';
+import { collection, getDocs, query } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, userService, notificationService, typingService, notificationSoundService, type Message } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
@@ -105,6 +108,11 @@ const Messages = () => {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const conversationNameRef = useRef<string>('');
 
+  const [showNewMessageModal, setShowNewMessageModal] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<{ uid: string; displayName: string; email: string | null; role: string; photoURL?: string }[]>([]);
+  const [searchUserQuery, setSearchUserQuery] = useState('');
+  const [addedConversations, setAddedConversations] = useState<ConversationPreview[]>([]);
+
   const chatEnabled = sessionUser?.role !== 'client' || !!sessionUser?.assignedSpecialistId;
   const clientPending = sessionUser?.role === 'client' && !sessionUser?.assignedSpecialistId;
   const conversationIdsKey = useMemo(
@@ -186,6 +194,30 @@ const Messages = () => {
     });
     return () => unsubscribe();
   }, [user?.uid, sessionUser?.role]);
+
+  useEffect(() => {
+    if (sessionUser?.role !== 'admin' || !showNewMessageModal) return;
+    const fetchUsers = async () => {
+      try {
+        const q = query(collection(db, 'users'));
+        const snap = await getDocs(q);
+        const users = snap.docs
+          .map(doc => ({ uid: doc.id, ...doc.data() }))
+          .filter((u: any) => u.uid !== user?.uid)
+          .map((u: any) => ({
+            uid: u.uid,
+            displayName: u.displayName || u.email?.split('@')[0] || 'Unknown',
+            email: u.email || '',
+            role: u.role === 'admin' ? 'admin' : u.role === 'specialist' ? 'specialist' : 'client',
+            photoURL: u.photoURL || '',
+          }));
+        setAvailableUsers(users);
+      } catch (err) {
+        console.error('[MESSAGES] Failed to fetch users:', err);
+      }
+    };
+    fetchUsers();
+  }, [sessionUser?.role, showNewMessageModal, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -278,11 +310,17 @@ const Messages = () => {
       }))
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
 
+    const nextIds = new Set(nextConversations.map(c => c.id));
+    const mergedConversations = [
+      ...nextConversations,
+      ...addedConversations.filter(ac => !nextIds.has(ac.id)),
+    ].sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
+
     setConversations((prev) => {
       const same =
-        prev.length === nextConversations.length &&
+        prev.length === mergedConversations.length &&
         prev.every((item, index) => {
-          const next = nextConversations[index];
+          const next = mergedConversations[index];
           return next &&
             item.id === next.id &&
             item.name === next.name &&
@@ -294,7 +332,7 @@ const Messages = () => {
             item.photoURL === next.photoURL &&
             item.lastTimestamp === next.lastTimestamp;
         });
-      return same ? prev : nextConversations;
+      return same ? prev : mergedConversations;
     });
     if (!selectedConversation && nextConversations.length > 0) {
       setSelectedConversation(nextConversations[0].id);
@@ -308,6 +346,7 @@ const Messages = () => {
     sessionUser?.assignedSpecialistName,
     presenceMap,
     selectedConversation,
+    addedConversations,
   ]);
 
   useEffect(() => {
@@ -571,6 +610,30 @@ const Messages = () => {
     }, 3000);
   };
 
+  const handleStartNewConversation = (user: { uid: string; displayName: string; email: string | null; role: string; photoURL?: string }) => {
+    const existing = conversations.find(c => c.id === user.uid);
+    if (!existing) {
+      setAddedConversations(prev => {
+        if (prev.some(c => c.id === user.uid)) return prev;
+        return [...prev, {
+          id: user.uid,
+          name: user.displayName || user.email?.split('@')[0] || 'Unknown',
+          role: user.role === 'specialist' ? 'Specialist' : user.role === 'admin' ? 'Admin' : 'Client',
+          lastMessage: '',
+          time: '',
+          lastTimestamp: 0,
+          unread: 0,
+          online: presenceMap[user.uid] || false,
+          photoURL: getPersistentPhotoURL(user.photoURL),
+        }];
+      });
+    }
+    setSelectedConversation(user.uid);
+    setShowNewMessageModal(false);
+    setSearchUserQuery('');
+    setMobileView('chat');
+  };
+
   const getStatusIcon = (status?: string, isOwn: boolean = false) => {
     if (!isOwn) return null;
     if (status === 'read') return <CheckCheck size={14} className="text-blue-400" />;
@@ -632,12 +695,22 @@ const Messages = () => {
                 E2E Encrypted
               </div>
             </div>
-            <Link
-              to="/portal/specialist"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
-            >
-              <Plus size={18} />
-            </Link>
+            {sessionUser?.role === 'admin' ? (
+              <button
+                onClick={() => setShowNewMessageModal(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
+                title="New Message"
+              >
+                <Plus size={18} />
+              </button>
+            ) : (
+              <Link
+                to="/portal/specialist"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
+              >
+                <Plus size={18} />
+              </Link>
+            )}
           </div>
           <div className="relative mt-4">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -723,7 +796,16 @@ const Messages = () => {
                 <MessageSquare size={28} className="text-slate-400" />
               </div>
               <p className="font-medium">No conversations yet</p>
-              <p className="mt-1 text-sm">Start chatting with your specialist</p>
+              {sessionUser?.role === 'admin' ? (
+                <button
+                  onClick={() => setShowNewMessageModal(true)}
+                  className="mt-2 text-sm text-teal-600 hover:underline"
+                >
+                  Start a new conversation
+                </button>
+              ) : (
+                <p className="mt-1 text-sm">Start chatting with your specialist</p>
+              )}
             </div>
           )}
         </div>
@@ -1028,6 +1110,89 @@ const Messages = () => {
           </div>
         )}
       </div>
+
+      {/* New Message Modal */}
+      {showNewMessageModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16">
+          <div className="mx-4 w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">New Message</h3>
+              <button
+                onClick={() => { setShowNewMessageModal(false); setSearchUserQuery(''); }}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={searchUserQuery}
+                  onChange={(e) => setSearchUserQuery(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:bg-white transition"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto border-t border-slate-100">
+              {availableUsers
+                .filter(u =>
+                  u.displayName.toLowerCase().includes(searchUserQuery.toLowerCase()) ||
+                  (u.email && u.email.toLowerCase().includes(searchUserQuery.toLowerCase()))
+                )
+                .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                .map((user) => (
+                  <button
+                    key={user.uid}
+                    onClick={() => handleStartNewConversation(user)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-teal-50 transition border-b border-slate-50 last:border-0"
+                  >
+                    <div className="relative">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt={user.displayName} className="h-10 w-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-sm font-bold text-white">
+                          {user.displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-semibold text-slate-900">{user.displayName}</p>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          user.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
+                          user.role === 'admin' ? 'bg-teal-100 text-teal-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {user.role === 'specialist' ? 'Specialist' : user.role === 'admin' ? 'Admin' : 'Client'}
+                        </span>
+                      </div>
+                      {user.email && (
+                        <p className="truncate text-xs text-slate-400">{user.email}</p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-teal-600">
+                      <MessageSquare size={16} />
+                    </div>
+                  </button>
+                ))}
+              {availableUsers.filter(u =>
+                u.displayName.toLowerCase().includes(searchUserQuery.toLowerCase()) ||
+                (u.email && u.email.toLowerCase().includes(searchUserQuery.toLowerCase()))
+              ).length === 0 && (
+                <div className="flex flex-col items-center py-8 text-slate-400">
+                  <Users size={24} className="mb-2" />
+                  <p className="text-sm font-medium">No users found</p>
+                  <p className="text-xs">Try a different search term</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

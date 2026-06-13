@@ -129,7 +129,8 @@ export const SpecialistDashboard = () => {
     try {
       const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
       const adminEmails = adminSnap.docs.map(d => d.data().email).filter(Boolean);
-      const clientEmails = clients.filter(client => client.uid === clientId).map(client => client.email).filter(Boolean);
+      const client = clients.find(client => client.uid === clientId);
+      const clientEmails = client?.email ? [client.email] : [];
 
       const token = await auth.currentUser?.getIdToken();
       if (!token) { console.warn('[WORKFLOW] No auth token'); return; }
@@ -140,7 +141,8 @@ export const SpecialistDashboard = () => {
           specialistId: sessionUser.uid,
           specialistName: sessionUser.displayName || 'Your Specialist',
           clientId,
-          clientName: clients.find(client => client.uid === clientId)?.displayName || 'Client',
+          clientName: client?.displayName || 'Client',
+          clientEmail: client?.email || '',
           step: field === 'morningPrepStatus' ? 'Morning Prep' : 'Post-Clinic Documentation',
           status: value,
           loginUrl: window.location.origin,

@@ -7,7 +7,7 @@ import { getLogoHTML } from '../services/emailLogo.js';
 const router = Router();
 
 router.post('/notify', requireAuth, async (req: AuthedRequest, res) => {
-  const { specialistId, specialistName, step, status, loginUrl, recipientEmails } = req.body;
+  const { specialistId, specialistName, step, status, loginUrl, recipientEmails, clientName, clientEmail } = req.body;
 
   if (!specialistId || !step || !status || !loginUrl) {
     return res.status(400).json({ error: 'Missing required fields: specialistId, step, status, loginUrl' });
@@ -69,12 +69,15 @@ router.post('/notify', requireAuth, async (req: AuthedRequest, res) => {
     if (recipientEmails && Array.isArray(recipientEmails) && recipientEmails.length > 0) {
       for (const email of recipientEmails) {
         if (!email) continue;
+        const recipientName = clientEmail && email === clientEmail
+          ? (clientName || email)
+          : email.split('@')[0] || email;
         emailPromises.push(
           sendEmailViaServer({
             from: process.env.SMTP_FROM || '"MySyntroMed" <noreply@mysyntromed.com>',
             to: email,
             subject,
-            html: buildHtml(email, 'client'),
+            html: buildHtml(recipientName, 'client'),
           })
         );
       }

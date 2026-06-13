@@ -146,7 +146,7 @@ const ClientDashboardContent = () => {
         setMorningPrepStatus(wf.morningPrepStatus);
         setPostClinicStatus(wf.postClinicStatus);
       }
-    });
+    }, sessionUser.uid);
     return () => { cancelled = true; unsub(); };
   }, [sessionUser?.assignedSpecialistId]);
 
@@ -175,9 +175,9 @@ const ClientDashboardContent = () => {
 
   const handleClinicFinish = async () => {
     setPostClinicStatus('in_progress');
-    if (!sessionUser?.assignedSpecialistId) return;
+    if (!sessionUser?.assignedSpecialistId || !sessionUser?.uid) return;
     try {
-      await workflowService.clinicDayFinished(sessionUser.assignedSpecialistId);
+      await workflowService.clinicDayFinished(sessionUser.assignedSpecialistId, sessionUser.uid);
     } catch (error) {
       console.error('Error marking clinic day finished:', error);
     }
