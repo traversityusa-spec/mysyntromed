@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { API_BASE_URL, db } from '@/lib/firestore';
+import { API_BASE_URL, db, notificationService } from '@/lib/firestore';
 import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
 import { getSocket } from '@/lib/socket';
 
@@ -157,19 +157,27 @@ const Calls = () => {
     const meetUrl = `https://meet.jit.si/MySyntroMed-${roomCode}`;
     window.dispatchEvent(new CustomEvent('call:start', { detail: { roomName: roomCode, meetingLink: meetUrl, callType } }));
     notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
+    const callerName = sessionUser?.displayName || 'User';
     const socket = getSocket();
-    if (socket?.connected && user?.uid) {
-      selectedUsers.forEach(targetId => {
+    selectedUsers.forEach(targetId => {
+      if (socket?.connected && user?.uid) {
         socket.emit('callInvite', {
           to: targetId,
           callType,
           callerId: user.uid,
-          callerName: sessionUser?.displayName || 'User',
+          callerName,
           meetingLink: meetUrl,
           sessionId: roomCode,
         });
-      });
-    }
+      }
+      notificationService.addNotification({
+        userId: targetId,
+        title: `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`,
+        message: `${callerName} is calling you`,
+        type: 'call',
+        data: { meetingLink: meetUrl, roomName: roomCode, callType, callerId: user?.uid, callerName },
+      }).catch(err => console.error('[CALLS] Failed to save call notification:', err));
+    });
     setShowParticipants(false);
     setSelectedUsers([]);
   };

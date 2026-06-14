@@ -11,30 +11,20 @@ type JitsiCallProps = {
 const JitsiCall = ({ roomName, callType, displayName, onLeave }: JitsiCallProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const params = new URLSearchParams({
-    userInfo: JSON.stringify({ displayName: displayName || 'User' }),
-    config: JSON.stringify({
-      startWithAudioMuted: callType === 'voice',
-      startWithVideoMuted: callType === 'voice',
-      prejoinPageEnabled: false,
-      enableWelcomePage: false,
-      disableDeepLinking: true,
-      requireDisplayName: false,
-      enableUserRolesBasedOnToken: false,
-      disableInviteFunctions: true,
-      doNotStoreRoom: true,
-    }),
-    interfaceConfig: JSON.stringify({
-      SHOW_JITSI_WATERMARK: false,
-      SHOW_WATERMARK_FOR_GUESTS: false,
-      TOOLBAR_ALWAYS_VISIBLE: true,
-      DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-      MOBILE_APP_PROMO: false,
-    }),
-    jwt: undefined,
+  const hash = new URLSearchParams({
+    'config.startWithAudioMuted': callType === 'voice' ? 'true' : 'false',
+    'config.startWithVideoMuted': callType === 'voice' ? 'true' : 'false',
+    'config.prejoinPageEnabled': 'false',
+    'config.enableWelcomePage': 'false',
+    'config.disableDeepLinking': 'true',
+    'config.requireDisplayName': 'false',
+    'config.enableUserRolesBasedOnToken': 'false',
+    'config.disableInviteFunctions': 'true',
+    'config.doNotStoreRoom': 'true',
+    'userInfo.displayName': displayName || 'User',
   }).toString();
 
-  const src = `https://meet.jit.si/${encodeURIComponent(roomName)}#${params}`;
+  const src = `https://meet.jit.si/${encodeURIComponent(roomName)}#${hash}`;
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-black">

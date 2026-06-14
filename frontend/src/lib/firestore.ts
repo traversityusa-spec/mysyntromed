@@ -165,9 +165,10 @@ export type AppNotification = {
   userId: string;
   title: string;
   message: string;
-  type: 'request' | 'message' | 'system' | 'assignment';
+  type: 'request' | 'message' | 'system' | 'assignment' | 'call';
   read: boolean;
   createdAt: Date;
+  data?: Record<string, unknown>;
 };
 
 export type WorkflowStatus = {

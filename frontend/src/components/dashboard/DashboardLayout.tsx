@@ -157,7 +157,16 @@ const role = sessionUser?.role || 'client';
       const newNotifs = items.filter(n => !n.read);
       if (newNotifs.length > 0) {
         const latest = newNotifs[0];
-        showToast(latest.type, latest.title, latest.message);
+        if (latest.type === 'call' && latest.data?.meetingLink) {
+          setIncomingCall({ callerName: latest.data.callerName as string || 'Someone', meetingLink: latest.data.meetingLink as string, callerId: (latest.data.callerId as string) || '', callType: (latest.data.callType as string) || 'video' });
+          if (soundEnabled) {
+            playNotificationSound();
+            setTimeout(() => playNotificationSound(), 600);
+            setTimeout(() => playNotificationSound(), 1200);
+          }
+        } else {
+          showToast(latest.type, latest.title, latest.message);
+        }
       }
     });
 
