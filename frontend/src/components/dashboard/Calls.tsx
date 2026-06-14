@@ -28,10 +28,6 @@ const notifyAdminOfCall = async (type: 'scheduled' | 'instant', specialistName?:
   }
 };
 
-const generateRoomId = () => {
-  return 'call-' + Math.random().toString(36).substring(2, 10) + '-' + Date.now().toString(36);
-};
-
 const Calls = () => {
   const { sessionUser, user } = useAuth();
   const [showSchedule, setShowSchedule] = useState(false);
@@ -157,27 +153,10 @@ const Calls = () => {
     setShowParticipants(true);
   };
 
-  const startCallWithParticipants = async () => {
+  const startCallWithParticipants = () => {
     if (selectedUsers.length === 0) return;
-    const roomName = `${sessionUser?.displayName || 'User'}-${Date.now().toString(36)}`;
-    let meetUrl = '';
-    try {
-      const token = await import('firebase/auth').then(m => m.getAuth().currentUser?.getIdToken());
-      if (token) {
-        const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ roomName }),
-        });
-        const data = await res.json();
-        meetUrl = data.meetLink || '';
-      }
-    } catch (err) {
-      console.error('[CALLS] Failed to create Meet link:', err);
-    }
-    if (!meetUrl) {
-      meetUrl = `https://meet.google.com/lookup/msm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
-    }
+    const roomCode = `msm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+    const meetUrl = `https://meet.jit.si/MySyntroMed-${roomCode}`;
     window.open(meetUrl, '_blank');
     notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
     const socket = getSocket();
@@ -189,7 +168,7 @@ const Calls = () => {
           callerId: user.uid,
           callerName: sessionUser?.displayName || 'User',
           meetingLink: meetUrl,
-          sessionId: roomName,
+          sessionId: roomCode,
         });
       });
     }
