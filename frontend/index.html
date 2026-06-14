@@ -168,6 +168,15 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function() {
+        var redirect = sessionStorage.getItem('spaRedirect');
+        if (redirect) {
+          sessionStorage.removeItem('spaRedirect');
+          history.replaceState(null, '', redirect);
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

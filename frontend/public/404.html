@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MySyntroMed</title>
+  <script>
+    var path = location.pathname + location.search + location.hash;
+    if (path !== '/404.html') {
+      sessionStorage.setItem('spaRedirect', path);
+    }
+  </script>
+  <meta http-equiv="refresh" content="0;URL='/'" />
+</head>
+<body></body>
+</html>
