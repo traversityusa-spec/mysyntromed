@@ -42,7 +42,6 @@ const Calls = () => {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [callType, setCallType] = useState<'voice' | 'video'>('video');
-  const [scheduleParticipant, setScheduleParticipant] = useState<{ uid: string; displayName: string } | null>(null);
 
   useEffect(() => {
     const fetchCalls = async () => {
@@ -106,12 +105,13 @@ const Calls = () => {
   }, [showParticipants, showSchedule, sessionUser?.uid, sessionUser?.role, user?.uid]);
 
   const handleSchedule = async () => {
-    if (!scheduleParticipant || !scheduleDate || !scheduleTime) return;
+    if (selectedUsers.length === 0 || !scheduleDate || !scheduleTime) return;
     const formattedDate = new Date(scheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const formattedTime = new Date(`2000-01-01T${scheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const participantNames = selectedUsers.map(uid => availableUsers.find(u => u.uid === uid)?.displayName || uid).join(', ');
     const newCall: ScheduledCall = {
       id: Date.now().toString(),
-      specialist: scheduleParticipant.displayName,
+      specialist: participantNames,
       date: formattedDate,
       time: formattedTime,
       meetLink: '',
@@ -120,11 +120,13 @@ const Calls = () => {
     setUpcomingCalls(prev => [...prev, newCall]);
     notifyAdminOfCall('scheduled', newCall.specialist, formattedDate, formattedTime);
 
+    const callerName = sessionUser?.displayName || 'Someone';
+
     try {
       await addDoc(collection(db, 'calls'), {
         userId: sessionUser?.uid,
         specialist: newCall.specialist,
-        specialistId: scheduleParticipant.uid,
+        participantIds: selectedUsers,
         date: formattedDate,
         time: formattedTime,
         meetLink: '',
@@ -135,18 +137,19 @@ const Calls = () => {
       console.error('[CALLS] Failed to save scheduled call:', err);
     }
 
-    const callerName = sessionUser?.displayName || 'Someone';
-    notificationService.addNotification({
-      userId: scheduleParticipant.uid,
-      title: 'Scheduled Call',
-      message: `${callerName} scheduled a call with you on ${formattedDate} at ${formattedTime}`,
-      type: 'system',
-    }).catch(err => console.error('[CALLS] Failed to notify participant:', err));
+    selectedUsers.forEach(uid => {
+      notificationService.addNotification({
+        userId: uid,
+        title: 'Scheduled Call',
+        message: `${callerName} scheduled a call with you on ${formattedDate} at ${formattedTime}`,
+        type: 'system',
+      }).catch(err => console.error('[CALLS] Failed to notify participant:', err));
+    });
 
     setShowSchedule(false);
     setScheduleDate('');
     setScheduleTime('');
-    setScheduleParticipant(null);
+    setSelectedUsers([]);
   };
 
   const toggleUser = (uid: string) => {
@@ -214,7 +217,7 @@ const Calls = () => {
             Start Instant Call
           </button>
           <button
-            onClick={() => setShowSchedule(true)}
+            onClick={() => { setShowSchedule(true); setSelectedUsers([]); setSearchQuery(''); }}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
           >
             <Plus size={18} />
@@ -227,7 +230,7 @@ const Calls = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-navy-900">Schedule a Call</h2>
-            <button onClick={() => { setShowSchedule(false); setScheduleParticipant(null); setScheduleDate(''); setScheduleTime(''); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+            <button onClick={() => { setShowSchedule(false); setSearchQuery(''); setScheduleDate(''); setScheduleTime(''); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
               <X size={20} />
             </button>
           </div>
@@ -245,19 +248,19 @@ const Calls = () => {
             </div>
             <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-100">
               {filteredUsers.length > 0 ? filteredUsers.map((u) => {
-                const isSelected = scheduleParticipant?.uid === u.uid;
+                const isSelected = selectedUsers.includes(u.uid);
                 return (
                   <button
                     key={u.uid}
-                    onClick={() => { setScheduleParticipant({ uid: u.uid, displayName: u.displayName }); setSearchQuery(''); }}
+                    onClick={() => toggleUser(u.uid)}
                     className={`flex w-full items-center gap-3 px-3 py-2 text-left transition border-b border-slate-50 last:border-0 ${
                       isSelected ? 'bg-teal-50' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                    <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition ${
                       isSelected ? 'border-teal-600 bg-teal-600' : 'border-slate-300'
                     }`}>
-                      {isSelected && <div className="h-2 w-2 rounded-full bg-white" />}
+                      {isSelected && <Check size={12} className="text-white" />}
                     </div>
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white shrink-0">
                       {u.displayName.charAt(0).toUpperCase()}
@@ -305,11 +308,11 @@ const Calls = () => {
           </div>
           <button
             onClick={handleSchedule}
-            disabled={!scheduleParticipant || !scheduleDate || !scheduleTime}
+            disabled={selectedUsers.length === 0 || !scheduleDate || !scheduleTime}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 transition"
           >
             <Calendar size={18} />
-            Confirm Schedule
+            {selectedUsers.length > 0 ? `Schedule with ${selectedUsers.length} participant${selectedUsers.length > 1 ? 's' : ''}` : 'Confirm Schedule'}
           </button>
         </div>
       )}
