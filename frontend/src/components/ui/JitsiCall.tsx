@@ -31,6 +31,12 @@ const JitsiCall = ({ roomName, callType, displayName, onLeave }: JitsiCallProps)
           startWithAudioMuted: callType === 'voice',
           startWithVideoMuted: callType === 'voice',
           prejoinPageEnabled: false,
+          enableWelcomePage: false,
+          disableDeepLinking: true,
+          requireDisplayName: false,
+          enableUserRolesBasedOnToken: false,
+          disableInviteFunctions: true,
+          doNotStoreRoom: true,
           toolbarButtons: [
             'microphone', 'camera', 'chat', 'raisehand',
             'tileview', 'fullscreen', 'settings',
@@ -41,6 +47,8 @@ const JitsiCall = ({ roomName, callType, displayName, onLeave }: JitsiCallProps)
           SHOW_WATERMARK_FOR_GUESTS: false,
           TOOLBAR_ALWAYS_VISIBLE: true,
           DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+          MOBILE_APP_PROMO: false,
+          DISABLE_DOMINANT_SPEAKER_INDICATOR: true,
         },
         userInfo: {
           displayName: displayName || 'User',
