@@ -50,6 +50,12 @@ const ensureListeners = (userId: string) => {
     window.dispatchEvent(new CustomEvent('socket:callInvite', { detail: data }));
   });
 
+  if (socket.connected) {
+    console.log('[SOCKET] Already connected, authenticating immediately:', userId);
+    socket.emit('authenticate', userId);
+    window.dispatchEvent(new CustomEvent('socket:connected'));
+  }
+
   listenersInitialized = true;
 };
 
