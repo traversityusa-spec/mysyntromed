@@ -176,6 +176,7 @@ const ClientDashboardContent = () => {
   const handleClinicFinish = async () => {
     setPostClinicStatus('in_progress');
     if (!sessionUser?.assignedSpecialistId || !sessionUser?.uid) return;
+    setWorkflow(prev => prev ? { ...prev, clinicDayFinished: true } : prev);
     try {
       await workflowService.clinicDayFinished(sessionUser.assignedSpecialistId, sessionUser.uid);
     } catch (error) {
