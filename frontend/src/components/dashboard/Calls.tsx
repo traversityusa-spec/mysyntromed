@@ -42,6 +42,7 @@ const Calls = () => {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [callType, setCallType] = useState<'voice' | 'video'>('video');
+  const [scheduleParticipant, setScheduleParticipant] = useState<{ uid: string; displayName: string } | null>(null);
 
   useEffect(() => {
     const fetchCalls = async () => {
@@ -77,7 +78,7 @@ const Calls = () => {
   }, [sessionUser?.uid]);
 
   useEffect(() => {
-    if (!showParticipants) return;
+    if (!showParticipants && !showSchedule) return;
     const fetchUsers = async () => {
       try {
         const token = await import('firebase/auth').then(m => m.getAuth().currentUser?.getIdToken());
@@ -102,15 +103,15 @@ const Calls = () => {
       }
     };
     fetchUsers();
-  }, [showParticipants, sessionUser?.uid, sessionUser?.role, user?.uid]);
+  }, [showParticipants, showSchedule, sessionUser?.uid, sessionUser?.role, user?.uid]);
 
   const handleSchedule = async () => {
-    if (!scheduleDate || !scheduleTime) return;
+    if (!scheduleParticipant || !scheduleDate || !scheduleTime) return;
     const formattedDate = new Date(scheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const formattedTime = new Date(`2000-01-01T${scheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const newCall: ScheduledCall = {
       id: Date.now().toString(),
-      specialist: sessionUser?.assignedSpecialistName || 'Specialist',
+      specialist: scheduleParticipant.displayName,
       date: formattedDate,
       time: formattedTime,
       meetLink: '',
@@ -123,6 +124,7 @@ const Calls = () => {
       await addDoc(collection(db, 'calls'), {
         userId: sessionUser?.uid,
         specialist: newCall.specialist,
+        specialistId: scheduleParticipant.uid,
         date: formattedDate,
         time: formattedTime,
         meetLink: '',
@@ -136,6 +138,7 @@ const Calls = () => {
     setShowSchedule(false);
     setScheduleDate('');
     setScheduleTime('');
+    setScheduleParticipant(null);
   };
 
   const toggleUser = (uid: string) => {
@@ -216,9 +219,57 @@ const Calls = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-navy-900">Schedule a Call</h2>
-            <button onClick={() => setShowSchedule(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+            <button onClick={() => { setShowSchedule(false); setScheduleParticipant(null); setScheduleDate(''); setScheduleTime(''); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
               <X size={20} />
             </button>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Who are you calling?</label>
+            <div className="relative mb-2">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search participants..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:bg-white transition"
+              />
+            </div>
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-100">
+              {filteredUsers.length > 0 ? filteredUsers.map((u) => {
+                const isSelected = scheduleParticipant?.uid === u.uid;
+                return (
+                  <button
+                    key={u.uid}
+                    onClick={() => { setScheduleParticipant({ uid: u.uid, displayName: u.displayName }); setSearchQuery(''); }}
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left transition border-b border-slate-50 last:border-0 ${
+                      isSelected ? 'bg-teal-50' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                      isSelected ? 'border-teal-600 bg-teal-600' : 'border-slate-300'
+                    }`}>
+                      {isSelected && <div className="h-2 w-2 rounded-full bg-white" />}
+                    </div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white shrink-0">
+                      {u.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">{u.displayName}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      u.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
+                      u.role === 'admin' ? 'bg-teal-100 text-teal-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {u.role === 'specialist' ? 'Specialist' : u.role === 'admin' ? 'Admin' : 'Client'}
+                    </span>
+                  </button>
+                );
+              }) : (
+                <p className="px-3 py-4 text-center text-sm text-slate-400">No participants found</p>
+              )}
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -246,7 +297,7 @@ const Calls = () => {
           </div>
           <button
             onClick={handleSchedule}
-            disabled={!scheduleDate || !scheduleTime}
+            disabled={!scheduleParticipant || !scheduleDate || !scheduleTime}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 transition"
           >
             <Calendar size={18} />
