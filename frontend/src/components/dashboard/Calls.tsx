@@ -153,8 +153,8 @@ const Calls = () => {
 
   const startCallWithParticipants = () => {
     if (selectedUsers.length === 0) return;
-    const roomCode = `msm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
-    const meetUrl = `https://meet.jit.si/MySyntroMed-${roomCode}`;
+    const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+    const meetUrl = `https://meet.jit.si/${roomCode}`;
     window.dispatchEvent(new CustomEvent('call:start', { detail: { roomName: roomCode, meetingLink: meetUrl, callType } }));
     notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
     const callerName = sessionUser?.displayName || 'User';

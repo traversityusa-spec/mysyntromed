@@ -20,6 +20,8 @@ const JitsiCall = ({ roomName, callType, displayName, onLeave }: JitsiCallProps)
     'config.requireDisplayName': 'false',
     'config.enableUserRolesBasedOnToken': 'false',
     'config.disableInviteFunctions': 'true',
+    'config.disableLobby': 'true',
+    'config.startConferenceWithLobby': 'false',
     'config.doNotStoreRoom': 'true',
     'userInfo.displayName': displayName || 'User',
   }).toString();
