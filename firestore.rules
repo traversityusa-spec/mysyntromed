@@ -132,14 +132,18 @@ service cloud.firestore {
       allow read: if signedIn() && (
         resource.data.userId == request.auth.uid ||
         resource.data.specialistId == request.auth.uid ||
+        request.auth.uid in resource.data.participantIds ||
         isAdmin()
       );
       allow create: if signedIn() && (
-        request.resource.data.userId == request.auth.uid || request.resource.data.specialistId == request.auth.uid
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.specialistId == request.auth.uid ||
+        request.auth.uid in request.resource.data.participantIds
       );
       allow update: if signedIn() && (
         resource.data.userId == request.auth.uid ||
         resource.data.specialistId == request.auth.uid ||
+        request.auth.uid in resource.data.participantIds ||
         isAdmin()
       );
       allow delete: if isAdmin();
