@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check } from 'lucide-react';
+import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check, XCircle } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { API_BASE_URL, db } from '@/lib/firestore';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, doc, updateDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
 import { auth } from '@/lib/firebase';
 import { getSocket } from '@/lib/socket';
 
 type ScheduledCall = {
   id: string;
+  docId?: string;
   specialist: string;
   date: string;
   time: string;
@@ -65,13 +66,14 @@ const Calls = () => {
       try {
         const q = query(
           collection(db, 'calls'),
-          where('userId', '==', sessionUser.uid)
+          where('participantIds', 'array-contains', sessionUser.uid)
         );
         const snapshot = await getDocs(q);
-        const allCalls: ScheduledCall[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as DocumentData;
+        const allCalls: ScheduledCall[] = snapshot.docs.map((snap) => {
+          const data = snap.data() as DocumentData;
           return {
-            id: doc.id,
+            id: snap.id,
+            docId: snap.id,
             specialist: data.specialist || '',
             date: data.date || '',
             time: data.time || '',
@@ -136,18 +138,26 @@ const Calls = () => {
     notifyAdminOfCall('scheduled', newCall.specialist, formattedDate, formattedTime);
 
     const callerName = sessionUser?.displayName || 'Someone';
+    const allParticipants = [...new Set([...(sessionUser?.uid ? [sessionUser.uid] : []), ...selectedUsers])];
 
     try {
-      await addDoc(collection(db, 'calls'), {
+      const docRef = await addDoc(collection(db, 'calls'), {
         userId: sessionUser?.uid,
         specialist: newCall.specialist,
-        participantIds: selectedUsers,
+        participantIds: allParticipants,
         date: formattedDate,
         time: formattedTime,
         meetLink: '',
         status: 'upcoming',
         createdAt: serverTimestamp(),
       });
+      newCall.docId = docRef.id;
+      const idx = upcomingCalls.findIndex(c => c.id === newCall.id);
+      if (idx >= 0) {
+        const updated = [...upcomingCalls];
+        updated[idx] = { ...newCall };
+        setUpcomingCalls(updated);
+      }
     } catch (err) {
       console.error('[CALLS] Failed to save scheduled call:', err);
     }
@@ -198,6 +208,17 @@ const Calls = () => {
     });
     setShowParticipants(false);
     setSelectedUsers([]);
+  };
+
+  const handleCancel = async (call: ScheduledCall) => {
+    if (!call.docId) return;
+    try {
+      await updateDoc(doc(db, 'calls', call.docId), { status: 'cancelled' });
+      setUpcomingCalls(prev => prev.filter(c => c.id !== call.id));
+      setPastCalls(prev => [...prev, { ...call, status: 'cancelled' }]);
+    } catch (err) {
+      console.error('[CALLS] Failed to cancel call:', err);
+    }
   };
 
   const filteredUsers = availableUsers.filter(u =>
@@ -487,6 +508,13 @@ const Calls = () => {
                   </a>
                   <button className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
                     Reschedule
+                  </button>
+                  <button
+                    onClick={() => handleCancel(call)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition"
+                  >
+                    <XCircle size={14} />
+                    Cancel
                   </button>
                 </div>
               </div>

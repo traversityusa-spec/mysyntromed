@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import admin from '../firebaseAdmin.js';
 import { requireAuth, type AuthedRequest } from '../middleware/requireAuth.js';
-import { notifyAdminsViaEmail } from '../services/emailClient.js';
+import { notifyAdminsViaEmail, sendEmailViaServer } from '../services/emailClient.js';
 
 const router = Router();
 
@@ -52,6 +52,27 @@ router.post('/create', requireAuth, async (req: AuthedRequest, res) => {
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    if (type === 'system') {
+      const userDoc = await admin.firestore().collection('users').doc(userId).get();
+      const userData = userDoc.data();
+      const recipientEmail = userData?.email;
+      const recipientName = userData?.displayName || userId;
+      const loginUrl = process.env.FRONTEND_ORIGIN || 'https://mysyntromed.com';
+
+      if (recipientEmail) {
+        sendEmailViaServer({
+          to: recipientEmail,
+          subject: `[MySyntroMed] ${title}`,
+          html: `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #0f172a;">${title}</h2>
+            <p style="color: #475569;">${message}</p>
+            <a href="${loginUrl.replace(/\/+$/, '')}/portal/dashboard" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Dashboard</a>
+          </div>`,
+        }).catch(e => console.error('[NOTIFY CREATE] Email failed:', e));
+      }
+    }
+
     res.json({ success: true, id: docRef.id });
   } catch (error: any) {
     console.error('[NOTIFY CREATE] Error:', error.message);
