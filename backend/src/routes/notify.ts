@@ -38,4 +38,25 @@ router.post('/call', requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
+router.post('/create', requireAuth, async (req: AuthedRequest, res) => {
+  const { userId, title, message, type } = req.body;
+  if (!userId || !title || !message || !type) {
+    return res.status(400).json({ error: 'Missing required fields: userId, title, message, type' });
+  }
+  try {
+    const docRef = await admin.firestore().collection('notifications').add({
+      userId,
+      title,
+      message,
+      type,
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true, id: docRef.id });
+  } catch (error: any) {
+    console.error('[NOTIFY CREATE] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

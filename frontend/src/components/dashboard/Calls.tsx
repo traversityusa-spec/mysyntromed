@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { API_BASE_URL, db, notificationService } from '@/lib/firestore';
+import { API_BASE_URL, db } from '@/lib/firestore';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { getSocket } from '@/lib/socket';
 
 type ScheduledCall = {
@@ -12,6 +13,20 @@ type ScheduledCall = {
   time: string;
   meetLink: string;
   status: 'upcoming' | 'completed' | 'cancelled';
+};
+
+const notifyViaApi = async (userId: string, title: string, message: string, type: string) => {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch(`${API_BASE_URL}/api/notify/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ userId, title, message, type }),
+    });
+  } catch (err) {
+    console.error('[CALLS] Failed to notify via API:', err);
+  }
 };
 
 const notifyAdminOfCall = async (type: 'scheduled' | 'instant', specialistName?: string, date?: string, time?: string) => {
@@ -138,12 +153,7 @@ const Calls = () => {
     }
 
     selectedUsers.forEach(uid => {
-      notificationService.addNotification({
-        userId: uid,
-        title: 'Scheduled Call',
-        message: `${callerName} scheduled a call with you on ${formattedDate} at ${formattedTime}`,
-        type: 'system',
-      }).catch(err => console.error('[CALLS] Failed to notify participant:', err));
+      notifyViaApi(uid, 'Scheduled Call', `${callerName} scheduled a call with you on ${formattedDate} at ${formattedTime}`, 'system');
     });
 
     setShowSchedule(false);
@@ -184,13 +194,7 @@ const Calls = () => {
           sessionId: roomCode,
         });
       }
-      notificationService.addNotification({
-        userId: targetId,
-        title: `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`,
-        message: `${callerName} is calling you`,
-        type: 'call',
-        data: { meetingLink: meetUrl, roomName: roomCode, callType, callerId: user?.uid, callerName },
-      }).catch(err => console.error('[CALLS] Failed to save call notification:', err));
+      notifyViaApi(targetId, `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`, `${callerName} is calling you`, 'call');
     });
     setShowParticipants(false);
     setSelectedUsers([]);
