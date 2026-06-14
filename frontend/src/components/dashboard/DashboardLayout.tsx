@@ -26,6 +26,8 @@ import { messageService, notificationService, type AppNotification } from '@/lib
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
+import JitsiCall from '@/components/ui/JitsiCall';
+import { initSocket } from '@/lib/socket';
 
 type NavItem = {
   label: string;
@@ -115,9 +117,20 @@ const role = sessionUser?.role || 'client';
 
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [incomingCall, setIncomingCall] = useState<{ callerName: string; meetingLink: string; callerId: string; callType: string } | null>(null);
+  const [activeCall, setActiveCall] = useState<{ roomName: string; meetingLink: string; callType: string } | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
+
+    initSocket(user.uid);
+
+    const handleCallStart = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.meetingLink) return;
+      setActiveCall({ roomName: detail.roomName || '', meetingLink: detail.meetingLink, callType: detail.callType || 'video' });
+    };
+    window.addEventListener('call:start', handleCallStart);
+
     const messageUnsub = messageService.subscribeToUserMessages(user.uid, (messages) => {
       try {
         const unread = messages.filter((m) => !m.read && m.senderId !== user.uid).length;
@@ -161,6 +174,7 @@ const role = sessionUser?.role || 'client';
     window.addEventListener('socket:callInvite', handleCallInvite);
 
     return () => {
+      window.removeEventListener('call:start', handleCallStart);
       window.removeEventListener('socket:callInvite', handleCallInvite);
       messageUnsub();
       notificationUnsub();
@@ -408,16 +422,16 @@ const markAllRead = () => {
                 <p className="text-sm font-semibold text-purple-900">Incoming {incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call</p>
                 <p className="text-xs text-purple-700 truncate">{incomingCall.callerName} is calling you</p>
               </div>
-              <a
-                href={incomingCall.meetingLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setIncomingCall(null)}
+              <button
+                onClick={() => {
+                  setActiveCall({ roomName: incomingCall.meetingLink.split('/').pop() || '', meetingLink: incomingCall.meetingLink, callType: incomingCall.callType });
+                  setIncomingCall(null);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition shrink-0"
               >
                 {incomingCall.callType === 'voice' ? <Phone size={16} /> : <Video size={16} />}
                 Join Call
-              </a>
+              </button>
               <button
                 onClick={() => setIncomingCall(null)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-purple-400 hover:bg-purple-100 shrink-0"
@@ -429,6 +443,14 @@ const markAllRead = () => {
           {children}
         </main>
       </div>
+      {activeCall && (
+        <JitsiCall
+          roomName={activeCall.roomName}
+          callType={activeCall.callType as 'voice' | 'video'}
+          displayName={sessionUser?.displayName || sessionUser?.email?.split('@')[0] || 'User'}
+          onLeave={() => setActiveCall(null)}
+        />
+      )}
     </div>
   );
 };
