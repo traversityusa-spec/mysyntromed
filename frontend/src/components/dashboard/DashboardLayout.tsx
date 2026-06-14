@@ -114,7 +114,7 @@ const role = sessionUser?.role || 'client';
   };
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [incomingCall, setIncomingCall] = useState<{ callerName: string; meetingLink: string; callerId: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ callerName: string; meetingLink: string; callerId: string; callType: string } | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -151,8 +151,12 @@ const role = sessionUser?.role || 'client';
     const handleCallInvite = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (!detail?.meetingLink) return;
-      setIncomingCall({ callerName: detail.callerName || 'Someone', meetingLink: detail.meetingLink, callerId: detail.callerId });
-      if (soundEnabled) playNotificationSound();
+      setIncomingCall({ callerName: detail.callerName || 'Someone', meetingLink: detail.meetingLink, callerId: detail.callerId, callType: detail.callType || 'video' });
+      if (soundEnabled) {
+        playNotificationSound();
+        setTimeout(() => playNotificationSound(), 600);
+        setTimeout(() => playNotificationSound(), 1200);
+      }
     };
     window.addEventListener('socket:callInvite', handleCallInvite);
 
@@ -396,12 +400,12 @@ const markAllRead = () => {
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {incomingCall && (
-            <div className="mb-4 flex items-center gap-3 rounded-xl border border-purple-200 bg-purple-50 p-4 shadow-sm">
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-purple-200 bg-purple-50 p-4 shadow-sm animate-pulse">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-200">
-                <Video size={18} className="text-purple-700" />
+                {incomingCall.callType === 'voice' ? <Phone size={18} className="text-purple-700" /> : <Video size={18} className="text-purple-700" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-purple-900">Incoming Call</p>
+                <p className="text-sm font-semibold text-purple-900">Incoming {incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call</p>
                 <p className="text-xs text-purple-700 truncate">{incomingCall.callerName} is calling you</p>
               </div>
               <a
@@ -411,7 +415,7 @@ const markAllRead = () => {
                 onClick={() => setIncomingCall(null)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition shrink-0"
               >
-                <Video size={16} />
+                {incomingCall.callType === 'voice' ? <Phone size={16} /> : <Video size={16} />}
                 Join Call
               </a>
               <button

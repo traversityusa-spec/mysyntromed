@@ -41,6 +41,7 @@ const Calls = () => {
   const [availableUsers, setAvailableUsers] = useState<{ uid: string; displayName: string; email: string | null; role: string; photoURL?: string }[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [callType, setCallType] = useState<'voice' | 'video'>('video');
 
   useEffect(() => {
     const fetchCalls = async () => {
@@ -146,6 +147,7 @@ const Calls = () => {
   const handleStartInstantCall = () => {
     setSelectedUsers([]);
     setSearchQuery('');
+    setCallType('video');
     setShowParticipants(true);
   };
 
@@ -160,7 +162,7 @@ const Calls = () => {
       selectedUsers.forEach(targetId => {
         socket.emit('callInvite', {
           to: targetId,
-          callType: 'video',
+          callType,
           callerId: user.uid,
           callerName: sessionUser?.displayName || 'User',
           meetingLink: meetUrl,
@@ -260,7 +262,7 @@ const Calls = () => {
             </div>
             <div className="p-4">
               <p className="mb-3 text-sm text-slate-600">Select who you want to call:</p>
-              <div className="relative">
+              <div className="relative mb-3">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
@@ -270,6 +272,30 @@ const Calls = () => {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:bg-white transition"
                   autoFocus
                 />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCallType('video')}
+                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition ${
+                    callType === 'video'
+                      ? 'border-teal-600 bg-teal-50 text-teal-700'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Video size={16} />
+                  Video
+                </button>
+                <button
+                  onClick={() => setCallType('voice')}
+                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition ${
+                    callType === 'voice'
+                      ? 'border-teal-600 bg-teal-50 text-teal-700'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Phone size={16} />
+                  Voice
+                </button>
               </div>
             </div>
             <div className="max-h-64 overflow-y-auto border-t border-slate-100">
@@ -335,8 +361,8 @@ const Calls = () => {
                 disabled={selectedUsers.length === 0}
                 className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
-                <Video size={16} />
-                Start Call
+                {callType === 'video' ? <Video size={16} /> : <Phone size={16} />}
+                Start {callType === 'video' ? 'Video' : 'Voice'} Call
               </button>
             </div>
           </div>
