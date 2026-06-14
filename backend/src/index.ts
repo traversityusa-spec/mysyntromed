@@ -15,6 +15,7 @@ import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
 import notifyRoutes from './routes/notify.js';
 import workflowRoutes from './routes/workflow.js';
+import callsRoutes from './routes/calls.js';
 import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from './services/emailClient.js';
 
 if (process.env.SENTRY_DSN) {
@@ -291,6 +292,7 @@ app.use('/api/messages', authLimiter, messageRoutes);
 app.use('/api/requests', authLimiter, requestRoutes);
 app.use('/api/notify', authLimiter, notifyRoutes);
 app.use('/api/workflow', authLimiter, workflowRoutes);
+app.use('/api/calls', authLimiter, callsRoutes);
 
 // Subscription management endpoint
 app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedRequest, res) => {

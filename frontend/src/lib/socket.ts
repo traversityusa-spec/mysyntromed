@@ -87,6 +87,14 @@ export const emitMessage = (to: string, message: unknown): void => {
   socket.emit('sendMessage', { to, message });
 };
 
+export const emitCallInvite = (to: string, data: { callType: string; callerId: string; callerName: string; meetingLink: string; sessionId: string }): void => {
+  if (!socket?.connected) {
+    console.warn('[SOCKET] Cannot emit call invite - not connected');
+    return;
+  }
+  socket.emit('callInvite', { to, ...data });
+};
+
 export const emitTyping = (to: string, isTyping: boolean, senderName?: string): void => {
   if (!socket?.connected) {
     console.warn('[SOCKET] Cannot emit typing - not connected');

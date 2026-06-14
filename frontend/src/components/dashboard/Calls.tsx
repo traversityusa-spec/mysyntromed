@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, ChevronRight } from 'lucide-react';
+import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, ChevronRight, Search, Users, User, Check } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { API_BASE_URL } from '@/lib/firestore';
+import { API_BASE_URL, db } from '@/lib/firestore';
 import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firestore';
+import { getSocket } from '@/lib/socket';
 
 type ScheduledCall = {
   id: string;
@@ -28,14 +28,23 @@ const notifyAdminOfCall = async (type: 'scheduled' | 'instant', specialistName?:
   }
 };
 
+const generateRoomId = () => {
+  return 'call-' + Math.random().toString(36).substring(2, 10) + '-' + Date.now().toString(36);
+};
+
 const Calls = () => {
-  const { sessionUser } = useAuth();
+  const { sessionUser, user } = useAuth();
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [upcomingCalls, setUpcomingCalls] = useState<ScheduledCall[]>([]);
   const [pastCalls, setPastCalls] = useState<ScheduledCall[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<{ uid: string; displayName: string; email: string | null; role: string; photoURL?: string }[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchCalls = async () => {
@@ -69,6 +78,38 @@ const Calls = () => {
     };
     fetchCalls();
   }, [sessionUser?.uid]);
+
+  useEffect(() => {
+    if (!showParticipants) return;
+    const fetchUsers = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'users'));
+        const users = snap.docs
+          .map(doc => ({ uid: doc.id, ...doc.data() }))
+          .filter((u: any) => u.uid !== user?.uid)
+          .map((u: any) => ({
+            uid: u.uid,
+            displayName: u.displayName || u.email?.split('@')[0] || 'Unknown',
+            email: u.email || '',
+            role: u.role === 'admin' ? 'admin' : u.role === 'specialist' ? 'specialist' : 'client',
+            photoURL: u.photoURL || '',
+          }));
+        if (sessionUser?.role === 'client') {
+          const assigned = users.filter((u: any) => u.uid === sessionUser?.assignedSpecialistId);
+          setAvailableUsers(assigned);
+        } else if (sessionUser?.role === 'specialist') {
+          const clientsSnap = await getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid)));
+          const clientIds = new Set(clientsSnap.docs.map(d => d.id));
+          setAvailableUsers(users.filter((u: any) => clientIds.has(u.uid)));
+        } else {
+          setAvailableUsers(users);
+        }
+      } catch (err) {
+        console.error('[CALLS] Failed to fetch users:', err);
+      }
+    };
+    fetchUsers();
+  }, [showParticipants, sessionUser?.uid, sessionUser?.role, user?.uid]);
 
   const handleSchedule = async () => {
     if (!scheduleDate || !scheduleTime) return;
@@ -104,17 +145,69 @@ const Calls = () => {
     setScheduleTime('');
   };
 
-  const handleStartInstantCall = () => {
-    notifyAdminOfCall('instant', sessionUser?.assignedSpecialistName || 'Specialist');
-    window.open('/portal/calls/room', '_blank');
+  const toggleUser = (uid: string) => {
+    setSelectedUsers(prev =>
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    );
   };
+
+  const handleStartInstantCall = () => {
+    setSelectedUsers([]);
+    setSearchQuery('');
+    setShowParticipants(true);
+  };
+
+  const startCallWithParticipants = async () => {
+    if (selectedUsers.length === 0) return;
+    const roomName = `${sessionUser?.displayName || 'User'}-${Date.now().toString(36)}`;
+    let meetUrl = '';
+    try {
+      const token = await import('firebase/auth').then(m => m.getAuth().currentUser?.getIdToken());
+      if (token) {
+        const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ roomName }),
+        });
+        const data = await res.json();
+        meetUrl = data.meetLink || '';
+      }
+    } catch (err) {
+      console.error('[CALLS] Failed to create Meet link:', err);
+    }
+    if (!meetUrl) {
+      meetUrl = `https://meet.google.com/lookup/msm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+    }
+    window.open(meetUrl, '_blank');
+    notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
+    const socket = getSocket();
+    if (socket?.connected && user?.uid) {
+      selectedUsers.forEach(targetId => {
+        socket.emit('callInvite', {
+          to: targetId,
+          callType: 'video',
+          callerId: user.uid,
+          callerName: sessionUser?.displayName || 'User',
+          meetingLink: meetUrl,
+          sessionId: roomName,
+        });
+      });
+    }
+    setShowParticipants(false);
+    setSelectedUsers([]);
+  };
+
+  const filteredUsers = availableUsers.filter(u =>
+    u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-navy-900">Calls</h1>
-          <p className="mt-1 text-sm text-slate-500">Schedule and manage meetings with your specialist</p>
+          <p className="mt-1 text-sm text-slate-500">Schedule and manage meetings</p>
         </div>
         <div className="flex gap-3">
           <button
@@ -174,6 +267,104 @@ const Calls = () => {
             <Calendar size={18} />
             Confirm Schedule
           </button>
+        </div>
+      )}
+
+      {/* Participants Selection Modal */}
+      {showParticipants && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16">
+          <div className="mx-4 w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">Start a Call</h3>
+              <button
+                onClick={() => { setShowParticipants(false); setSelectedUsers([]); setSearchQuery(''); }}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="mb-3 text-sm text-slate-600">Select who you want to call:</p>
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search participants..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:bg-white transition"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="max-h-64 overflow-y-auto border-t border-slate-100">
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((u) => {
+                  const isSelected = selectedUsers.includes(u.uid);
+                  return (
+                    <button
+                      key={u.uid}
+                      onClick={() => toggleUser(u.uid)}
+                      className={`flex w-full items-center gap-3 px-4 py-3 text-left transition border-b border-slate-50 last:border-0 ${
+                        isSelected ? 'bg-teal-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`flex h-5 w-5 items-center justify-center rounded border-2 transition ${
+                        isSelected ? 'border-teal-600 bg-teal-600' : 'border-slate-300'
+                      }`}>
+                        {isSelected && <Check size={12} className="text-white" />}
+                      </div>
+                      <div className="relative">
+                        {u.photoURL ? (
+                          <img src={u.photoURL} alt={u.displayName} className="h-10 w-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-sm font-bold text-white">
+                            {u.displayName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-semibold text-slate-900">{u.displayName}</p>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            u.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
+                            u.role === 'admin' ? 'bg-teal-100 text-teal-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {u.role === 'specialist' ? 'Specialist' : u.role === 'admin' ? 'Admin' : 'Client'}
+                          </span>
+                        </div>
+                        {u.email && (
+                          <p className="truncate text-xs text-slate-400">{u.email}</p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center py-8 text-slate-400">
+                  <Users size={24} className="mb-2" />
+                  <p className="text-sm font-medium">No users found</p>
+                  <p className="text-xs">Try a different search term</p>
+                </div>
+              )}
+            </div>
+            <div className="border-t border-slate-100 p-4 flex items-center justify-between">
+              <p className="text-xs text-slate-500">
+                {selectedUsers.length > 0
+                  ? `${selectedUsers.length} participant${selectedUsers.length > 1 ? 's' : ''} selected`
+                  : 'Select at least one participant'}
+              </p>
+              <button
+                onClick={startCallWithParticipants}
+                disabled={selectedUsers.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <Video size={16} />
+                Start Call
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
