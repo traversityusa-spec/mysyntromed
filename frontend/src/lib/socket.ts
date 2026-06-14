@@ -45,6 +45,11 @@ const ensureListeners = (userId: string) => {
     window.dispatchEvent(new CustomEvent('socket:typing', { detail: data }));
   });
 
+  socket.on('callInvite', (data: { callerId: string; callerName: string; meetingLink: string; sessionId: string; callType: string }) => {
+    if (data.callerId === currentUserId) return;
+    window.dispatchEvent(new CustomEvent('socket:callInvite', { detail: data }));
+  });
+
   listenersInitialized = true;
 };
 
