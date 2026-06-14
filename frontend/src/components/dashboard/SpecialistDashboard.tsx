@@ -155,15 +155,6 @@ export const SpecialistDashboard = () => {
     }
   };
 
-  const handleClinicDayFinished = async (clientId: string) => {
-    if (!sessionUser?.uid) return;
-    try {
-      await workflowService.clinicDayFinished(sessionUser.uid, clientId);
-    } catch (e) {
-      console.error('[WORKFLOW] Failed to finish clinic day:', e);
-    }
-  };
-
   const handleManageClient = async (client: UserProfile) => {
     setManagingClient(client);
     setLoadingClient(true);
@@ -518,18 +509,6 @@ export const SpecialistDashboard = () => {
                     </select>
                   </div>
                 </div>
-
-                {currentWorkflow?.morningPrepStatus === 'completed' && !currentWorkflow?.clinicDayFinished && (
-                  <div className="mt-4">
-                    <button
-                      onClick={() => handleClinicDayFinished(managingClient.uid)}
-                      className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
-                    >
-                      <Check size={16} />
-                      Clinic Day Finished
-                    </button>
-                  </div>
-                )}
 
                 {currentWorkflow?.clinicDayFinished && (
                   <div className="mt-4 flex flex-wrap gap-3">
