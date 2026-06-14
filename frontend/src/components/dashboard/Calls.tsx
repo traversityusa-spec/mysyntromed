@@ -135,6 +135,14 @@ const Calls = () => {
       console.error('[CALLS] Failed to save scheduled call:', err);
     }
 
+    const callerName = sessionUser?.displayName || 'Someone';
+    notificationService.addNotification({
+      userId: scheduleParticipant.uid,
+      title: 'Scheduled Call',
+      message: `${callerName} scheduled a call with you on ${formattedDate} at ${formattedTime}`,
+      type: 'system',
+    }).catch(err => console.error('[CALLS] Failed to notify participant:', err));
+
     setShowSchedule(false);
     setScheduleDate('');
     setScheduleTime('');
