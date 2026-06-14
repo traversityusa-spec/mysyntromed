@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { API_BASE_URL, db, notificationService } from '@/lib/firestore';
-import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
 import { getSocket } from '@/lib/socket';
 
 type ScheduledCall = {
@@ -50,8 +50,7 @@ const Calls = () => {
       try {
         const q = query(
           collection(db, 'calls'),
-          where('userId', '==', sessionUser.uid),
-          orderBy('date', 'desc')
+          where('userId', '==', sessionUser.uid)
         );
         const snapshot = await getDocs(q);
         const allCalls: ScheduledCall[] = snapshot.docs.map((doc) => {
@@ -65,6 +64,7 @@ const Calls = () => {
             status: data.status || 'upcoming',
           };
         });
+        allCalls.sort((a, b) => String(b.date).localeCompare(String(a.date)));
         setUpcomingCalls(allCalls.filter(c => c.status === 'upcoming'));
         setPastCalls(allCalls.filter(c => c.status === 'completed' || c.status === 'cancelled'));
       } catch (err) {

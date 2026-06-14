@@ -175,6 +175,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       try {
+        try {
+          await nextUser.getIdToken(true);
+        } catch {
+          // token refresh non-critical
+        }
         const profile = await buildSessionUser(nextUser);
         
         if (profile.role === 'client' && profile.subscriptionEndDate) {
