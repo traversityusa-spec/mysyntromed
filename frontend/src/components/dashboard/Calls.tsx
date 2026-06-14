@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, ChevronRight, Search, Users, User, Check } from 'lucide-react';
+import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { API_BASE_URL, db } from '@/lib/firestore';
 import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
@@ -79,9 +79,14 @@ const Calls = () => {
     if (!showParticipants) return;
     const fetchUsers = async () => {
       try {
-        const snap = await getDocs(collection(db, 'users'));
-        const users = snap.docs
-          .map(doc => ({ uid: doc.id, ...doc.data() }))
+        const token = await import('firebase/auth').then(m => m.getAuth().currentUser?.getIdToken());
+        if (!token) return;
+        const res = await fetch(`${API_BASE_URL}/api/auth/call-participants`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Failed to fetch participants');
+        const data = await res.json();
+        const formatted = (data.users || [])
           .filter((u: any) => u.uid !== user?.uid)
           .map((u: any) => ({
             uid: u.uid,
@@ -90,16 +95,7 @@ const Calls = () => {
             role: u.role === 'admin' ? 'admin' : u.role === 'specialist' ? 'specialist' : 'client',
             photoURL: u.photoURL || '',
           }));
-        if (sessionUser?.role === 'client') {
-          const assigned = users.filter((u: any) => u.uid === sessionUser?.assignedSpecialistId);
-          setAvailableUsers(assigned);
-        } else if (sessionUser?.role === 'specialist') {
-          const clientsSnap = await getDocs(query(collection(db, 'users'), where('assignedSpecialistId', '==', sessionUser.uid)));
-          const clientIds = new Set(clientsSnap.docs.map(d => d.id));
-          setAvailableUsers(users.filter((u: any) => clientIds.has(u.uid)));
-        } else {
-          setAvailableUsers(users);
-        }
+        setAvailableUsers(formatted);
       } catch (err) {
         console.error('[CALLS] Failed to fetch users:', err);
       }

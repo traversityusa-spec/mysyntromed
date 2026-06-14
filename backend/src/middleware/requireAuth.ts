@@ -40,6 +40,14 @@ export const requireAuth = async (req: AuthedRequest, res: Response, next: NextF
           profileRole === 'client' || profileRole === 'admin' || profileRole === 'specialist'
             ? profileRole
             : undefined;
+        if (role) {
+          try {
+            await adminAuth.setCustomUserClaims(decoded.uid, { role });
+            console.log(`[AUTH] Auto-synced custom claims for ${decoded.uid}: ${role}`);
+          } catch (claimErr) {
+            console.error('[AUTH] Failed to set custom claims:', claimErr);
+          }
+        }
       } catch (error) {
         console.error('[AUTH] Failed to load user role fallback:', error);
       }

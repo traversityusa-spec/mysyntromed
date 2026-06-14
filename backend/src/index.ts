@@ -275,8 +275,23 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     await otpDoc.ref.update({ used: true });
 
     const userRecord = await admin.auth().getUserByEmail(normalizedEmail);
+    let otpRole = userRecord.customClaims?.role;
+    if (!otpRole) {
+      const profileSnap = await admin.firestore().collection('users').doc(userRecord.uid).get();
+      const profileRole = profileSnap.data()?.role;
+      if (profileRole === 'admin' || profileRole === 'specialist' || profileRole === 'client') {
+        otpRole = profileRole;
+        try {
+          await admin.auth().setCustomUserClaims(userRecord.uid, { role: otpRole });
+        } catch (claimErr) {
+          console.error('[OTP] Failed to set custom claims:', claimErr);
+        }
+      } else {
+        otpRole = 'client';
+      }
+    }
     const customToken = await admin.auth().createCustomToken(userRecord.uid, {
-      role: userRecord.customClaims?.role || 'client'
+      role: otpRole
     });
 
     res.json({ success: true, customToken });
