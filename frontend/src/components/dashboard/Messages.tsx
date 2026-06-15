@@ -112,6 +112,7 @@ const Messages = () => {
   const [availableUsers, setAvailableUsers] = useState<{ uid: string; displayName: string; email: string | null; role: string; photoURL?: string }[]>([]);
   const [searchUserQuery, setSearchUserQuery] = useState('');
   const [addedConversations, setAddedConversations] = useState<ConversationPreview[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }>>({});
 
   const chatEnabled = sessionUser?.role !== 'client' || !!sessionUser?.assignedSpecialistId;
   const clientPending = sessionUser?.role === 'client' && !sessionUser?.assignedSpecialistId;
@@ -196,6 +197,25 @@ const Messages = () => {
   }, [user?.uid, sessionUser?.role]);
 
   useEffect(() => {
+    if (sessionUser?.role !== 'admin') return;
+    const fetchAll = async () => {
+      try {
+        const q = query(collection(db, 'users'));
+        const snap = await getDocs(q);
+        const map: Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }> = {};
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          map[doc.id] = { displayName: data.displayName, email: data.email, role: data.role, photoURL: data.photoURL };
+        });
+        setUsersMap(map);
+      } catch (err) {
+        console.error('[MESSAGES] Failed to load users map:', err);
+      }
+    };
+    fetchAll();
+  }, [sessionUser?.role, user?.uid]);
+
+  useEffect(() => {
     if (sessionUser?.role !== 'admin' || !showNewMessageModal) return;
     const fetchUsers = async () => {
       try {
@@ -230,18 +250,26 @@ const Messages = () => {
       const lastMsgText = msg.fileUrl ? (msg.fileType === 'image' ? '📷 Image' : '📎 File') : msg.text;
       
       if (!existing) {
-        // Resolve name and role for the other person
-        let otherName = 'User';
-        let otherRole = 'client';
+        const otherId = msg.senderId === user.uid ? msg.receiverId : msg.senderId;
+        const otherMsg = allMessages.find(m => m.senderId === otherId && m.senderName);
+        const userProfile = usersMap[otherId];
+
+        let otherName: string;
+        let otherRole: string;
         let otherPhoto = '';
 
         if (msg.senderId === user.uid) {
-          // I sent it, so the other person is the receiver
-          otherName = msg.receiverId === sessionUser?.assignedSpecialistId ? (sessionUser.assignedSpecialistName || 'Specialist') : 'Client';
-          otherRole = msg.receiverId === sessionUser?.assignedSpecialistId ? 'specialist' : 'client';
+          // I sent it — the other person is the receiver
+          if (sessionUser?.role === 'client' && msg.receiverId === sessionUser?.assignedSpecialistId) {
+            otherName = sessionUser.assignedSpecialistName || 'Specialist';
+            otherRole = 'specialist';
+          } else {
+            otherName = userProfile?.displayName || userProfile?.email || otherMsg?.senderName || (otherMsg?.senderRole === 'specialist' ? 'Specialist' : 'Client');
+            otherRole = userProfile?.role || otherMsg?.senderRole || 'client';
+          }
         } else {
           // They sent it
-          otherName = msg.senderName;
+          otherName = msg.senderName || userProfile?.displayName || userProfile?.email || 'User';
           otherRole = msg.senderRole;
           otherPhoto = getPersistentPhotoURL(msg.senderPhotoURL);
         }
@@ -347,6 +375,7 @@ const Messages = () => {
     presenceMap,
     selectedConversation,
     addedConversations,
+    usersMap,
   ]);
 
   useEffect(() => {
