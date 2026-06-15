@@ -351,16 +351,18 @@ const Settings = () => {
                 className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
               />
             </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Clinic/Practice Name</label>
-              <input
-                type="text"
-                value={profileForm.clinicName}
-                onChange={(e) => setProfileForm({ ...profileForm, clinicName: e.target.value })}
-                placeholder="Your clinic name"
-                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
-              />
-            </div>
+            {sessionUser?.role !== 'specialist' && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Clinic/Practice Name</label>
+                <input
+                  type="text"
+                  value={profileForm.clinicName}
+                  onChange={(e) => setProfileForm({ ...profileForm, clinicName: e.target.value })}
+                  placeholder="Your clinic name"
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-teal-500"
+                />
+              </div>
+            )}
           </div>
 
           {sessionUser?.role !== 'admin' && (
