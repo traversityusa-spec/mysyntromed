@@ -5,10 +5,9 @@ import {
   Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image,
   Users, User
 } from 'lucide-react';
-import { collection, getDocs, query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+
 import { useAuth } from '@/lib/AuthContext';
-import { messageService, userService, notificationService, typingService, notificationSoundService, groupChatService, type Message, type GroupInfo, type GroupMessage } from '@/lib/firestore';
+import { messageService, userService, notificationService, typingService, notificationSoundService, groupChatService, type Message, type GroupInfo, type GroupMessage, API_BASE_URL } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
 import { initSocket, emitMessage, emitTyping } from '@/lib/socket';
 
@@ -242,15 +241,18 @@ const Messages = () => {
   }, [user?.uid, sessionUser?.role]);
 
   useEffect(() => {
-    if (sessionUser?.role !== 'admin') return;
+    if (sessionUser?.role !== 'admin' || !user) return;
     const fetchAll = async () => {
       try {
-        const q = query(collection(db, 'users'));
-        const snap = await getDocs(q);
+        const token = await user.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('API returned ' + res.status);
+        const data = await res.json();
         const map: Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }> = {};
-        snap.docs.forEach(doc => {
-          const data = doc.data();
-          map[doc.id] = { displayName: data.displayName, email: data.email, role: data.role, photoURL: data.photoURL };
+        (data.users || []).forEach((u: any) => {
+          map[u.uid] = { displayName: u.displayName, email: u.email, role: u.role, photoURL: u.photoURL };
         });
         setUsersMap(map);
       } catch (err) {
@@ -261,13 +263,16 @@ const Messages = () => {
   }, [sessionUser?.role, user?.uid]);
 
   useEffect(() => {
-    if (sessionUser?.role !== 'admin' || (!showNewMessageModal && !showCreateGroupModal)) return;
+    if (sessionUser?.role !== 'admin' || (!showNewMessageModal && !showCreateGroupModal) || !user) return;
     const fetchUsers = async () => {
       try {
-        const q = query(collection(db, 'users'));
-        const snap = await getDocs(q);
-        const users = snap.docs
-          .map(doc => ({ uid: doc.id, ...doc.data() }))
+        const token = await user.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('API returned ' + res.status);
+        const data = await res.json();
+        const users = (data.users || [])
           .filter((u: any) => u.uid !== user?.uid)
           .map((u: any) => ({
             uid: u.uid,
@@ -282,7 +287,7 @@ const Messages = () => {
       }
     };
     fetchUsers();
-  }, [sessionUser?.role, showNewMessageModal, user?.uid]);
+  }, [sessionUser?.role, showNewMessageModal, showCreateGroupModal, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) return;
