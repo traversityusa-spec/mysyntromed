@@ -178,6 +178,27 @@ export type WorkflowStatus = {
   updatedAt: Date;
 };
 
+export type GroupInfo = {
+  id: string;
+  name: string;
+  participantIds: string[];
+  createdBy: string;
+  createdAt: Date;
+  lastMessage: string;
+  lastTime: Date;
+};
+
+export type GroupMessage = {
+  id: string;
+  groupId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  text: string;
+  createdAt: Date;
+  readBy: string[];
+};
+
 export type SpecialistRating = {
   id: string;
   specialistId: string;
@@ -1391,3 +1412,104 @@ export const ratingService = {
     });
   },
 };
+
+export const groupChatService = {
+
+  subscribeToGroups(userId: string, callback: (groups: GroupInfo[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'groups'),
+      where('participantIds', 'array-contains', userId)
+    );
+    return onSnapshot(q, (snap) => {
+      const items = snap.docs.map(d => {
+        const d2 = d.data();
+        return {
+          id: d.id,
+          name: d2.name || '',
+          participantIds: d2.participantIds || [],
+          createdBy: d2.createdBy || '',
+          createdAt: d2.createdAt?.toDate?.() || new Date(),
+          lastMessage: d2.lastMessage || '',
+          lastTime: d2.lastTime?.toDate?.() || new Date(),
+        } as GroupInfo;
+      });
+      callback(items);
+    });
+  },
+
+  subscribeToGroupMessages(groupId: string, callback: (messages: GroupMessage[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'group_messages'),
+      where('groupId', '==', groupId),
+      orderBy('createdAt', 'asc')
+    );
+    return onSnapshot(q, (snap) => {
+      const items = snap.docs.map(d => {
+        const d2 = d.data();
+        return {
+          id: d.id,
+          groupId: d2.groupId || '',
+          senderId: d2.senderId || '',
+          senderName: d2.senderName || '',
+          senderRole: d2.senderRole || '',
+          text: d2.text || '',
+          createdAt: d2.createdAt?.toDate?.() || new Date(),
+          readBy: d2.readBy || [],
+        } as GroupMessage;
+      });
+      callback(items);
+    });
+  },
+
+  async sendGroupMessage(msg: {
+    groupId: string;
+    senderId: string;
+    senderName: string;
+    senderRole: string;
+    text: string;
+  }): Promise<string> {
+    const docRef = await addDoc(collection(db, 'group_messages'), {
+      groupId: msg.groupId,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      senderRole: msg.senderRole,
+      text: msg.text,
+      createdAt: serverTimestamp(),
+      readBy: [msg.senderId],
+    });
+    await updateDoc(doc(db, 'groups', msg.groupId), {
+      lastMessage: msg.text,
+      lastTime: serverTimestamp(),
+    });
+    return docRef.id;
+  },
+
+  async createGroup(name: string, participantIds: string[], createdBy: string): Promise<string> {
+    const docRef = await addDoc(collection(db, 'groups'), {
+      name,
+      participantIds,
+      createdBy,
+      createdAt: serverTimestamp(),
+      lastMessage: '',
+      lastTime: serverTimestamp(),
+    });
+    return docRef.id;
+  },
+
+  async addParticipantsToGroup(groupId: string, newParticipantIds: string[]): Promise<void> {
+    const groupDoc = await getDoc(doc(db, 'groups', groupId));
+    if (!groupDoc.exists()) return;
+    const current = groupDoc.data()?.participantIds || [];
+    const merged = [...new Set([...current, ...newParticipantIds])];
+    await updateDoc(doc(db, 'groups', groupId), { participantIds: merged });
+  },
+
+  getGroupMessagesQuery(groupId: string) {
+    return query(
+      collection(db, 'group_messages'),
+      where('groupId', '==', groupId),
+      orderBy('createdAt', 'asc')
+    );
+  },
+};
+

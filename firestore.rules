@@ -224,6 +224,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /groups/{groupId} {
+      allow read: if signedIn() && (request.auth.uid in resource.data.participantIds || isAdmin());
+      allow create: if signedIn() && isAdmin();
+      allow update: if signedIn() && (request.auth.uid in resource.data.participantIds || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /group_messages/{msgId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if signedIn() && (request.resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     match /notifications/{notificationId} {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;

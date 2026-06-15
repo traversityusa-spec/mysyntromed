@@ -8,7 +8,7 @@ import {
 import { collection, getDocs, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
-import { messageService, userService, notificationService, typingService, notificationSoundService, type Message } from '@/lib/firestore';
+import { messageService, userService, notificationService, typingService, notificationSoundService, groupChatService, type Message, type GroupInfo, type GroupMessage } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
 import { initSocket, emitMessage, emitTyping } from '@/lib/socket';
 
@@ -114,6 +114,15 @@ const Messages = () => {
   const [addedConversations, setAddedConversations] = useState<ConversationPreview[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }>>({});
 
+  const [groups, setGroups] = useState<GroupInfo[]>([]);
+  const [groupMessages, setGroupMessages] = useState<GroupMessage[]>([]);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [selectedGroupParticipants, setSelectedGroupParticipants] = useState<string[]>([]);
+
+  const isGroupChat = (id: string | null) => id?.startsWith('group_');
+  const groupIdFromConversation = (id: string | null) => id?.replace('group_', '') || '';
+
   const [searchParams] = useSearchParams();
   const startUid = searchParams.get('start');
 
@@ -208,6 +217,20 @@ const Messages = () => {
   }, [user?.uid]);
 
   useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = groupChatService.subscribeToGroups(user.uid, (g) => setGroups(g));
+    return () => unsub();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const gId = isGroupChat(selectedConversation) ? groupIdFromConversation(selectedConversation) : null;
+    if (!gId) { setGroupMessages([]); return; }
+    const unsub = groupChatService.subscribeToGroupMessages(gId, (msgs) => setGroupMessages(msgs));
+    return () => unsub();
+  }, [user?.uid, selectedConversation]);
+
+  useEffect(() => {
     if (!user?.uid || sessionUser?.role !== 'specialist') {
       setAssignedClients([]);
       return;
@@ -238,7 +261,7 @@ const Messages = () => {
   }, [sessionUser?.role, user?.uid]);
 
   useEffect(() => {
-    if (sessionUser?.role !== 'admin' || !showNewMessageModal) return;
+    if (sessionUser?.role !== 'admin' || (!showNewMessageModal && !showCreateGroupModal)) return;
     const fetchUsers = async () => {
       try {
         const q = query(collection(db, 'users'));
@@ -361,8 +384,20 @@ const Messages = () => {
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
 
     const nextIds = new Set(nextConversations.map(c => c.id));
+    const groupConversations: ConversationPreview[] = groups.map(g => ({
+      id: `group_${g.id}`,
+      name: g.name,
+      role: 'Group',
+      lastMessage: g.lastMessage || 'No messages yet',
+      time: formatMessageTime(g.lastTime),
+      lastTimestamp: g.lastTime.getTime(),
+      unread: 0,
+      online: false,
+      photoURL: '',
+    }));
     const mergedConversations = [
       ...nextConversations,
+      ...groupConversations,
       ...addedConversations.filter(ac => !nextIds.has(ac.id)),
     ].sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
 
@@ -402,6 +437,10 @@ const Messages = () => {
 
   useEffect(() => {
     if (!user?.uid || !selectedConversation) return;
+    if (isGroupChat(selectedConversation)) {
+      setMessages([]);
+      return;
+    }
     const filtered = allMessages
       .filter(
         (msg) =>
@@ -464,7 +503,7 @@ const Messages = () => {
   }, [selectedConversation, conversations]);
 
   useEffect(() => {
-    if (!user?.uid || !selectedConversation) return;
+    if (!user?.uid || !selectedConversation || isGroupChat(selectedConversation)) return;
     const unsub = typingService.subscribeToTyping(user.uid, selectedConversation, (isTypingVal) => {
       if (isTypingVal) {
         setIsTyping(true);
@@ -547,45 +586,56 @@ const Messages = () => {
       alert('Please select a conversation first');
       return;
     }
-    if (!chatEnabled) {
+    if (!chatEnabled && !isGroupChat(selectedConversation)) {
       alert('Chat is not enabled. Please wait for specialist assignment.');
       return;
     }
 
     setSending(true);
-    const receiverId = selectedConversation;
     const senderName = sessionUser?.displayName || user?.email?.split('@')[0] || 'User';
     const senderRole = sessionUser?.role || 'client';
     const messageText = newMessage.trim();
     const photoURL = getPersistentPhotoURL(sessionUser?.photoURL);
 
     try {
-      const messageId = await messageService.sendMessage({
-        senderId: user.uid,
-        senderName,
-        senderRole,
-        senderPhotoURL: photoURL,
-        receiverId,
-        text: messageText,
-        read: false,
-        status: 'sent',
-      });
+      if (isGroupChat(selectedConversation)) {
+        const gId = groupIdFromConversation(selectedConversation);
+        await groupChatService.sendGroupMessage({
+          groupId: gId,
+          senderId: user.uid,
+          senderName,
+          senderRole,
+          text: messageText,
+        });
+      } else {
+        const receiverId = selectedConversation;
+        const messageId = await messageService.sendMessage({
+          senderId: user.uid,
+          senderName,
+          senderRole,
+          senderPhotoURL: photoURL,
+          receiverId,
+          text: messageText,
+          read: false,
+          status: 'sent',
+        });
 
-      emitMessage(receiverId, {
-        id: messageId,
-        senderId: user.uid,
-        senderName,
-        senderRole,
-        senderPhotoURL: photoURL,
-        receiverId,
-        text: messageText,
-        read: false,
-        status: 'sent',
-        createdAt: new Date().toISOString(),
-      });
+        emitMessage(receiverId, {
+          id: messageId,
+          senderId: user.uid,
+          senderName,
+          senderRole,
+          senderPhotoURL: photoURL,
+          receiverId,
+          text: messageText,
+          read: false,
+          status: 'sent',
+          createdAt: new Date().toISOString(),
+        });
+        typingService.setTyping(user.uid, receiverId, false);
+      }
 
       notificationSoundService.playOutgoingSound();
-      typingService.setTyping(user.uid, receiverId, false);
       setNewMessage('');
     } catch (error) {
       console.error('[MESSAGES] ERROR sending message:', error);
@@ -598,6 +648,10 @@ const Messages = () => {
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user?.uid || !selectedConversation) return;
+    if (isGroupChat(selectedConversation)) {
+      alert('File sharing in groups is coming soon');
+      return;
+    }
 
     // Check file size (Firestore document limit is 1MB, so let's cap at 800KB for safety)
     if (file.size > 800 * 1024) {
@@ -648,13 +702,13 @@ const Messages = () => {
       clearTimeout(typingTimeoutRef.current);
     }
     
-    if (selectedConversation && user?.uid) {
+    if (selectedConversation && user?.uid && !isGroupChat(selectedConversation)) {
       typingService.setTyping(user.uid, selectedConversation, !!value);
       emitTyping(selectedConversation, !!value, senderName);
     }
     
     typingTimeoutRef.current = setTimeout(() => {
-      if (selectedConversation && user?.uid) {
+      if (selectedConversation && user?.uid && !isGroupChat(selectedConversation)) {
         typingService.setTyping(user.uid, selectedConversation, false);
         emitTyping(selectedConversation, false, senderName);
       }
@@ -717,7 +771,21 @@ const Messages = () => {
   const filteredConversations = conversations.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  const messageGroups = groupMessagesByDate(messages);
+  const displayMessages = isGroupChat(selectedConversation)
+    ? groupMessages.map(msg => ({
+        id: msg.id,
+        senderId: msg.senderId,
+        senderName: msg.senderName,
+        senderRole: msg.senderRole,
+        text: msg.text,
+        createdAt: msg.createdAt,
+        read: true,
+        status: 'sent' as const,
+        receiverId: '',
+        senderPhotoURL: '',
+      }))
+    : messages;
+  const messageGroups = groupMessagesByDate(displayMessages);
   const currentConversationPhotoURL = currentConversation
     ? getPersistentPhotoURL(currentConversation.photoURL)
     : '';
@@ -747,13 +815,22 @@ const Messages = () => {
               </div>
             </div>
             {sessionUser?.role === 'admin' ? (
-              <button
-                onClick={() => setShowNewMessageModal(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
-                title="New Message"
-              >
-                <Plus size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowCreateGroupModal(true); setSearchUserQuery(''); }}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600 transition"
+                  title="New Group"
+                >
+                  <Users size={16} />
+                </button>
+                <button
+                  onClick={() => setShowNewMessageModal(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
+                  title="New Message"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
             ) : (
               <Link
                 to="/portal/specialist"
@@ -805,7 +882,11 @@ const Messages = () => {
                 }`}
               >
                 <div className="relative">
-                  {conv.photoURL ? (
+                  {conv.role === 'Group' ? (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white">
+                      <Users size={18} />
+                    </div>
+                  ) : conv.photoURL ? (
                     <img src={conv.photoURL} alt={conv.name} className="h-12 w-12 rounded-full object-cover" />
                   ) : (
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-lg font-bold text-white">
@@ -821,9 +902,10 @@ const Messages = () => {
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-slate-900">{conv.name}</p>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        conv.role === 'Group' ? 'bg-amber-100 text-amber-700' :
                         conv.role === 'specialist' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {conv.role}
+                        {conv.role === 'Group' ? 'Group' : conv.role}
                       </span>
                     </div>
                     <span className="text-xs text-slate-400">{conv.time}</span>
@@ -879,7 +961,11 @@ const Messages = () => {
                 >
                   <X size={20} />
                 </button>
-                {currentConversationPhotoURL ? (
+                {isGroupChat(selectedConversation) ? (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white">
+                    <Users size={18} />
+                  </div>
+                ) : currentConversationPhotoURL ? (
                   <img src={currentConversationPhotoURL} alt={currentConversation.name} className="h-11 w-11 rounded-full object-cover" />
                 ) : (
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-lg font-bold text-white">
@@ -890,13 +976,16 @@ const Messages = () => {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-slate-900">{currentConversation.name}</p>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      currentConversation.role === 'Group' ? 'bg-amber-100 text-amber-700' :
                       currentConversation.role === 'specialist' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                     }`}>
-                      {currentConversation.role}
+                      {currentConversation.role === 'Group' ? 'Group' : currentConversation.role}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    {currentConversation.online ? (
+                    {isGroupChat(selectedConversation) ? (
+                      <span>{groups.find(g => `group_${g.id}` === selectedConversation)?.participantIds.length || 0} participants</span>
+                    ) : currentConversation.online ? (
                       <span className="flex items-center gap-1 text-emerald-600">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         Online
@@ -1161,6 +1250,125 @@ const Messages = () => {
           </div>
         )}
       </div>
+
+      {/* Create Group Modal */}
+      {showCreateGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16">
+          <div className="mx-4 w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">Create Group</h3>
+              <button
+                onClick={() => { setShowCreateGroupModal(false); setNewGroupName(''); setSelectedGroupParticipants([]); }}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Group Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. All Specialists"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-amber-500 focus:bg-white transition"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Select Participants</label>
+                <div className="relative mb-2">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search users..."
+                    value={searchUserQuery}
+                    onChange={(e) => setSearchUserQuery(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm outline-none focus:border-amber-500 focus:bg-white transition"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl">
+                  {availableUsers
+                    .filter(u =>
+                      u.displayName.toLowerCase().includes(searchUserQuery.toLowerCase()) ||
+                      (u.email && u.email.toLowerCase().includes(searchUserQuery.toLowerCase()))
+                    )
+                    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                    .map((u) => {
+                      const selected = selectedGroupParticipants.includes(u.uid);
+                      return (
+                        <button
+                          key={u.uid}
+                          onClick={() => {
+                            setSelectedGroupParticipants(prev =>
+                              selected ? prev.filter(id => id !== u.uid) : [...prev, u.uid]
+                            );
+                          }}
+                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition border-b border-slate-50 last:border-0 ${
+                            selected ? 'bg-amber-50' : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                            selected ? 'bg-amber-500 border-amber-500' : 'border-slate-300'
+                          }`}>
+                            {selected && <span className="text-white text-xs">✓</span>}
+                          </div>
+                          <div className="relative">
+                            {u.photoURL ? (
+                              <img src={u.photoURL} alt={u.displayName} className="h-9 w-9 rounded-full object-cover" />
+                            ) : (
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-xs font-bold text-white">
+                                {u.displayName.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate font-semibold text-slate-900">{u.displayName}</p>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              u.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
+                              u.role === 'admin' ? 'bg-teal-100 text-teal-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {u.role === 'specialist' ? 'Specialist' : u.role === 'admin' ? 'Admin' : 'Client'}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  {selectedGroupParticipants.length} participant(s) selected
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!newGroupName.trim() || selectedGroupParticipants.length === 0 || !user?.uid) return;
+                  try {
+                    const gId = await groupChatService.createGroup(
+                      newGroupName.trim(),
+                      [...selectedGroupParticipants, user.uid],
+                      user.uid
+                    );
+                    setShowCreateGroupModal(false);
+                    setNewGroupName('');
+                    setSelectedGroupParticipants([]);
+                    setSearchUserQuery('');
+                    setSelectedConversation(`group_${gId}`);
+                    setMobileView('chat');
+                  } catch (err) {
+                    console.error('Failed to create group:', err);
+                    alert('Failed to create group');
+                  }
+                }}
+                disabled={!newGroupName.trim() || selectedGroupParticipants.length === 0}
+                className="w-full rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-white hover:bg-amber-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New Message Modal */}
       {showNewMessageModal && (
