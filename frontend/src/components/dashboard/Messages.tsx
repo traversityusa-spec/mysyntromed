@@ -482,6 +482,7 @@ const Messages = () => {
     selectedConversation,
     addedConversations,
     usersMap,
+    groups,
   ]);
 
   useEffect(() => {
