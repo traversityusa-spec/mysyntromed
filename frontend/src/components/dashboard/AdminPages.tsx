@@ -1,9 +1,9 @@
 import { useState, useEffect, type FormEvent, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc, getDocs } from 'firebase/firestore';
-import { db, activityService, API_BASE_URL } from '@/lib/firestore';
+import { db, activityService, messageService, API_BASE_URL } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
-import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield } from 'lucide-react';
+import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -722,6 +722,9 @@ export const AdminSpecialists = () => {
   const [deletingUser, setDeletingUser] = useState<{uid: string; name: string} | null>(null);
   const [viewingWorkFor, setViewingWorkFor] = useState<UserProfile | null>(null);
   const [specialistActivity, setSpecialistActivity] = useState<ActivityItem[]>([]);
+  const [showGroupMessage, setShowGroupMessage] = useState(false);
+  const [groupMessageText, setGroupMessageText] = useState('');
+  const [sendingGroup, setSendingGroup] = useState(false);
   
   useEffect(() => {
     if (!viewingWorkFor) return;
@@ -831,6 +834,35 @@ export const AdminSpecialists = () => {
     }
   };
 
+  const handleGroupMessage = async () => {
+    if (!groupMessageText.trim() || specialists.length === 0 || !authUser) return;
+    setSendingGroup(true);
+    const senderName = authUser.displayName || authUser.email?.split('@')[0] || 'Admin';
+    const activeSpecialists = specialists.filter(s => !s.disabled);
+    let sent = 0;
+    for (const spec of activeSpecialists) {
+      try {
+        await messageService.sendMessage({
+          senderId: authUser.uid,
+          senderName,
+          senderRole: 'admin',
+          receiverId: spec.uid,
+          text: `[Broadcast] ${groupMessageText.trim()}`,
+          read: false,
+          status: 'sent',
+        });
+        sent++;
+      } catch (err) {
+        console.error(`[GROUP MSG] Failed to send to ${spec.displayName}:`, err);
+      }
+    }
+    setSuccessMessage(`Message sent to ${sent} of ${activeSpecialists.length} specialists`);
+    setTimeout(() => setSuccessMessage(null), 4000);
+    setGroupMessageText('');
+    setShowGroupMessage(false);
+    setSendingGroup(false);
+  };
+
   const filteredSpecialists = specialists.filter(s => 
     s.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
     s.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -878,6 +910,13 @@ export const AdminSpecialists = () => {
               className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 sm:w-64"
             />
           </div>
+          <button 
+            onClick={() => setShowGroupMessage(true)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 transition shadow-sm"
+          >
+            <Megaphone size={18} />
+            Message All
+          </button>
           <button 
             onClick={() => setIsModalOpen(true)}
             className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition shadow-sm"
@@ -1087,6 +1126,53 @@ export const AdminSpecialists = () => {
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50"
               >
                 {actionLoading !== null ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Message Modal */}
+      {showGroupMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <div>
+                <h3 className="text-lg font-bold text-navy-900">Message All Specialists</h3>
+                <p className="text-sm text-slate-500">This will send a broadcast to {specialists.filter(s => !s.disabled).length} active specialists</p>
+              </div>
+              <button onClick={() => { setShowGroupMessage(false); setGroupMessageText(''); }} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4">
+              <textarea
+                value={groupMessageText}
+                onChange={(e) => setGroupMessageText(e.target.value)}
+                placeholder="Type your broadcast message..."
+                rows={4}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm outline-none focus:border-teal-500 focus:bg-white transition"
+              />
+              <div className="mt-1 text-xs text-slate-400">Messages will be prefixed with [Broadcast]</div>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 p-4">
+              <button
+                onClick={() => { setShowGroupMessage(false); setGroupMessageText(''); }}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGroupMessage}
+                disabled={!groupMessageText.trim() || sendingGroup}
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 transition"
+              >
+                {sendingGroup ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Send size={16} />
+                )}
+                Send to All
               </button>
             </div>
           </div>
