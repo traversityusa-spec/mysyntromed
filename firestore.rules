@@ -263,7 +263,7 @@ service cloud.firestore {
 
     match /ratings/{ratingId} {
       allow read: if signedIn();
-      allow create: if isClient() && request.resource.data.userId == request.auth.uid;
+      allow create: if isClient() && request.resource.data.clientId == request.auth.uid;
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
