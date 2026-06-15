@@ -118,6 +118,7 @@ const Messages = () => {
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedGroupParticipants, setSelectedGroupParticipants] = useState<string[]>([]);
+  const [usersError, setUsersError] = useState('');
 
   const isGroupChat = (id: string | null) => id?.startsWith('group_');
   const groupIdFromConversation = (id: string | null) => id?.replace('group_', '') || '';
@@ -282,8 +283,10 @@ const Messages = () => {
             photoURL: u.photoURL || '',
           }));
         setAvailableUsers(users);
+        setUsersError('');
       } catch (err) {
         console.error('[MESSAGES] Failed to fetch users:', err);
+        setUsersError(err instanceof Error ? err.message : String(err));
       }
     };
     fetchUsers();
@@ -822,7 +825,7 @@ const Messages = () => {
             {sessionUser?.role === 'admin' ? (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setShowCreateGroupModal(true); setSearchUserQuery(''); }}
+                  onClick={() => { setShowCreateGroupModal(true); setSearchUserQuery(''); setUsersError(''); }}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600 transition"
                   title="New Group"
                 >
@@ -1280,6 +1283,11 @@ const Messages = () => {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-amber-500 focus:bg-white transition"
                 />
               </div>
+              {usersError && (
+                <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                  Failed to load users: {usersError}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Select Participants</label>
                 <div className="relative mb-2">
