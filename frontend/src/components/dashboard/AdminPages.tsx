@@ -779,9 +779,13 @@ export const AdminSpecialists = () => {
     fetchSpecialists();
   }, [fetchSpecialists]);
 
+  const [ratingsTotal, setRatingsTotal] = useState(0);
+
   useEffect(() => {
     const q = query(collection(db, 'ratings'), limit(5000));
     const unsub = onSnapshot(q, (snap) => {
+      console.log(`[RATINGS] Loaded ${snap.docs.length} ratings`);
+      setRatingsTotal(snap.docs.length);
       const map: Record<string, { sum: number; count: number }> = {};
       snap.docs.forEach(d => {
         const data = d.data();
@@ -798,6 +802,8 @@ export const AdminSpecialists = () => {
         result[k] = { avg: Math.round((v.sum / v.count) * 10) / 10, count: v.count };
       });
       setRatingsMap(result);
+    }, (error) => {
+      console.error('[RATINGS] Subscription error:', error);
     });
     return () => unsub();
   }, []);
@@ -920,7 +926,12 @@ export const AdminSpecialists = () => {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy-900">Specialists</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-navy-900">Specialists</h1>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+              {ratingsTotal} total ratings
+            </span>
+          </div>
           <p className="mt-1 text-slate-600">Medical scribe specialists on the platform</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
