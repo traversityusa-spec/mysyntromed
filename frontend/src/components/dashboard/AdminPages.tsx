@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { db, activityService, messageService, API_BASE_URL } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
-import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone } from 'lucide-react';
+import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone, Star } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -725,6 +725,7 @@ export const AdminSpecialists = () => {
   const [showGroupMessage, setShowGroupMessage] = useState(false);
   const [groupMessageText, setGroupMessageText] = useState('');
   const [sendingGroup, setSendingGroup] = useState(false);
+  const [ratingsMap, setRatingsMap] = useState<Record<string, { avg: number; count: number }>>({});
   
   useEffect(() => {
     if (!viewingWorkFor) return;
@@ -777,6 +778,29 @@ export const AdminSpecialists = () => {
   useEffect(() => {
     fetchSpecialists();
   }, [fetchSpecialists]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'ratings'), limit(5000));
+    const unsub = onSnapshot(q, (snap) => {
+      const map: Record<string, { sum: number; count: number }> = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const sid = data.specialistId as string;
+        const r = data.rating as number;
+        if (sid && typeof r === 'number') {
+          if (!map[sid]) map[sid] = { sum: 0, count: 0 };
+          map[sid].sum += r;
+          map[sid].count += 1;
+        }
+      });
+      const result: Record<string, { avg: number; count: number }> = {};
+      Object.entries(map).forEach(([k, v]) => {
+        result[k] = { avg: Math.round((v.sum / v.count) * 10) / 10, count: v.count };
+      });
+      setRatingsMap(result);
+    });
+    return () => unsub();
+  }, []);
 
   const handleToggleStatus = async (uid: string, currentDisabled: boolean) => {
     setActionLoading(uid);
@@ -946,6 +970,7 @@ export const AdminSpecialists = () => {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
                     <th className="px-6 py-4 font-semibold text-slate-700">Specialist</th>
+                    <th className="px-6 py-4 font-semibold text-slate-700">Rating</th>
                     <th className="px-6 py-4 font-semibold text-slate-700">Joined</th>
                     <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
                     <th className="px-6 py-4 font-semibold text-slate-700 text-right">Actions</th>
@@ -970,6 +995,20 @@ export const AdminSpecialists = () => {
                             <p className="text-xs text-slate-500">{specialist.email}</p>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {(() => {
+                          const r = ratingsMap[specialist.uid];
+                          return r ? (
+                            <span className="flex items-center gap-1">
+                              <span className="text-amber-500 font-bold">{r.avg}</span>
+                              <Star size={14} className="fill-amber-400 text-amber-400" />
+                              <span className="text-xs text-slate-400">({r.count})</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">No ratings</span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
                         {specialist.createdAt?.toLocaleDateString()}
