@@ -1440,8 +1440,7 @@ export const groupChatService = {
   subscribeToGroupMessages(groupId: string, callback: (messages: GroupMessage[]) => void): Unsubscribe {
     const q = query(
       collection(db, 'group_messages'),
-      where('groupId', '==', groupId),
-      orderBy('createdAt', 'asc')
+      where('groupId', '==', groupId)
     );
     return onSnapshot(q, (snap) => {
       const items = snap.docs.map(d => {
@@ -1456,7 +1455,7 @@ export const groupChatService = {
           createdAt: d2.createdAt?.toDate?.() || new Date(),
           readBy: d2.readBy || [],
         } as GroupMessage;
-      });
+      }).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       callback(items);
     });
   },
@@ -1507,8 +1506,7 @@ export const groupChatService = {
   getGroupMessagesQuery(groupId: string) {
     return query(
       collection(db, 'group_messages'),
-      where('groupId', '==', groupId),
-      orderBy('createdAt', 'asc')
+      where('groupId', '==', groupId)
     );
   },
 };
