@@ -1,5 +1,5 @@
 import { type FormEvent, useState, useEffect, useRef, type ChangeEvent, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
   Paperclip, Phone, Plus, Search, Send, Shield, Video, X, MessageSquare, 
   Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image,
@@ -114,6 +114,9 @@ const Messages = () => {
   const [addedConversations, setAddedConversations] = useState<ConversationPreview[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }>>({});
 
+  const [searchParams] = useSearchParams();
+  const startUid = searchParams.get('start');
+
   const chatEnabled = sessionUser?.role !== 'client' || !!sessionUser?.assignedSpecialistId;
   const clientPending = sessionUser?.role === 'client' && !sessionUser?.assignedSpecialistId;
   const conversationIdsKey = useMemo(
@@ -126,6 +129,25 @@ const Messages = () => {
       initSocket(user.uid);
     }
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!startUid || !user) return;
+    const uid = user.uid;
+    const existing = conversations.find(c => c.id === startUid);
+    if (existing) {
+      setSelectedConversation(startUid);
+      return;
+    }
+    const profile = usersMap[startUid];
+    if (!profile) return;
+    const displayName = profile.displayName || profile.email?.split('@')[0] || 'User';
+    const roleLabel = profile.role === 'specialist' ? 'Specialist' : profile.role === 'admin' ? 'Admin' : 'Client';
+    setAddedConversations(prev => {
+      if (prev.some(c => c.id === startUid)) return prev;
+      return [...prev, { id: startUid, name: displayName, role: roleLabel, lastMessage: '', time: '', unread: 0, online: false, photoURL: profile.photoURL || '' }];
+    });
+    setSelectedConversation(startUid);
+  }, [startUid, user?.uid, conversations, usersMap]);
 
   useEffect(() => {
     const handleNewMessage = (e: CustomEvent<unknown>) => {

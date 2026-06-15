@@ -557,6 +557,13 @@ export const AdminClients = () => {
                               <option key={s.uid} value={s.uid}>{s.displayName || s.email}</option>
                             ))}
                           </select>
+                          <Link
+                            to={`/admin/messages?start=${client.uid}`}
+                            className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors"
+                            title="Message Client"
+                          >
+                            <MessageSquare size={18} />
+                          </Link>
                           <button
                             onClick={() => handleToggleStatus(client.uid, !!client.disabled)}
                             disabled={actionLoading === client.uid}
@@ -956,7 +963,7 @@ export const AdminSpecialists = () => {
                             {specialist.disabled ? <UserCheck size={18} /> : <UserMinus size={18} />}
                           </button>
                           <Link
-                            to={`/admin/messages`}
+                            to={`/admin/messages?start=${specialist.uid}`}
                             className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors"
                             title="Message Specialist"
                           >
@@ -1013,7 +1020,7 @@ export const AdminSpecialists = () => {
                   </div>
                   <div className="flex gap-2 pt-3 border-t border-slate-100">
                     <Link
-                      to="/admin/messages"
+                      to={`/admin/messages?start=${specialist.uid}`}
                       className="flex-1 p-2 rounded-lg text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 text-center"
                     >
                       Message
