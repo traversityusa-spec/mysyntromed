@@ -228,7 +228,7 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid in resource.data.participantIds || isAdmin());
       allow create: if signedIn() && isAdmin();
       allow update: if signedIn() && (request.auth.uid in resource.data.participantIds || isAdmin());
-      allow delete: if isAdmin();
+      allow delete: if signedIn() && (request.auth.uid in resource.data.participantIds || isAdmin());
     }
 
     match /group_messages/{msgId} {

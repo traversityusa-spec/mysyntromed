@@ -119,6 +119,12 @@ const Messages = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedGroupParticipants, setSelectedGroupParticipants] = useState<string[]>([]);
   const [usersError, setUsersError] = useState('');
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showAddMembers, setShowAddMembers] = useState(false);
+  const [showRenameGroup, setShowRenameGroup] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [groupMembersProfiles, setGroupMembersProfiles] = useState<Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }>>({});
 
   const isGroupChat = (id: string | null) => id?.startsWith('group_');
   const groupIdFromConversation = (id: string | null) => id?.replace('group_', '') || '';
@@ -264,7 +270,7 @@ const Messages = () => {
   }, [sessionUser?.role, user?.uid]);
 
   useEffect(() => {
-    if (sessionUser?.role !== 'admin' || (!showNewMessageModal && !showCreateGroupModal) || !user) return;
+    if (sessionUser?.role !== 'admin' || (!showNewMessageModal && !showCreateGroupModal && !showAddMembers) || !user) return;
     const fetchUsers = async () => {
       try {
         const token = await user.getIdToken();
@@ -290,7 +296,42 @@ const Messages = () => {
       }
     };
     fetchUsers();
-  }, [sessionUser?.role, showNewMessageModal, showCreateGroupModal, user?.uid]);
+  }, [sessionUser?.role, showNewMessageModal, showCreateGroupModal, showAddMembers, user?.uid]);
+
+  useEffect(() => {
+    if (sessionUser?.role !== 'admin' || !user || !showGroupInfo) return;
+    const gId = groupIdFromConversation(selectedConversation);
+    if (!gId) return;
+    const group = groups.find(g => g.id === gId);
+    if (!group) return;
+    const pIds = group.participantIds;
+    const map: Record<string, { displayName?: string | null; email?: string | null; role?: string; photoURL?: string }> = {};
+    pIds.forEach(id => {
+      const p = usersMap[id];
+      if (p) map[id] = p;
+    });
+    const missing = pIds.filter(id => !usersMap[id]);
+    if (missing.length > 0) {
+      (async () => {
+        try {
+          const token = await user.getIdToken();
+          const res = await fetch(`${API_BASE_URL}/api/auth/admin/users`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          (data.users || []).forEach((u: any) => {
+            if (pIds.includes(u.uid)) {
+              map[u.uid] = { displayName: u.displayName, email: u.email, role: u.role, photoURL: u.photoURL };
+            }
+          });
+          setGroupMembersProfiles(map);
+        } catch {}
+      })();
+    } else {
+      setGroupMembersProfiles(map);
+    }
+  }, [sessionUser?.role, user?.uid, showGroupInfo, selectedConversation, groups, usersMap]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -881,10 +922,7 @@ const Messages = () => {
             filteredConversations.map((conv) => (
               <button
                 key={conv.id}
-                onClick={() => {
-                  setSelectedConversation(conv.id);
-                  setMobileView('chat');
-                }}
+                onClick={() => { setGroupMenuOpen(false); setSelectedConversation(conv.id); setMobileView('chat'); }}
                 className={`flex w-full items-start gap-3 border-b border-slate-50 p-4 text-left transition hover:bg-slate-50 ${
                   selectedConversation === conv.id ? 'bg-teal-50' : ''
                 }`}
@@ -1004,16 +1042,118 @@ const Messages = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
-                  <Phone size={20} />
-                </button>
-                <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
-                  <Video size={20} />
-                </button>
-                <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
-                  <MoreVertical size={20} />
-                </button>
+              <div className="flex items-center gap-1 relative">
+                {isGroupChat(selectedConversation) ? (
+                  <>
+                    <button
+                      onClick={async () => {
+                        const gId = groupIdFromConversation(selectedConversation);
+                        const group = groups.find(g => g.id === gId);
+                        if (!group || !user) return;
+                        try {
+                          const token = await user.getIdToken();
+                          await fetch(`${API_BASE_URL}/api/notify/create`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({
+                              type: 'system',
+                              recipientIds: group.participantIds.filter(id => id !== user.uid),
+                              title: `Voice Call`,
+                              message: `${sessionUser?.displayName || user.email} started a voice call in ${group.name}`,
+                            }),
+                          });
+                          alert(`Voice call initiated in ${group.name}. Participants will be notified.`);
+                        } catch { alert('Failed to start call'); }
+                      }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                      title="Voice call group"
+                    >
+                      <Phone size={20} />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const gId = groupIdFromConversation(selectedConversation);
+                        const group = groups.find(g => g.id === gId);
+                        if (!group || !user) return;
+                        try {
+                          const token = await user.getIdToken();
+                          await fetch(`${API_BASE_URL}/api/notify/create`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({
+                              type: 'system',
+                              recipientIds: group.participantIds.filter(id => id !== user.uid),
+                              title: `Video Call`,
+                              message: `${sessionUser?.displayName || user.email} started a video call in ${group.name}`,
+                            }),
+                          });
+                          alert(`Video call initiated in ${group.name}. Participants will be notified.`);
+                        } catch { alert('Failed to start call'); }
+                      }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                      title="Video call group"
+                    >
+                      <Video size={20} />
+                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setGroupMenuOpen(!groupMenuOpen)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                      >
+                        <MoreVertical size={20} />
+                      </button>
+                      {groupMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-lg py-1">
+                          <button
+                            onClick={() => { setGroupMenuOpen(false); setRenameValue(currentConversation?.name || ''); setShowRenameGroup(true); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <MessageSquare size={16} /> Rename Group
+                          </button>
+                          <button
+                            onClick={() => { setGroupMenuOpen(false); setSearchUserQuery(''); setShowAddMembers(true); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <Users size={16} /> Add Members
+                          </button>
+                          <button
+                            onClick={() => { setGroupMenuOpen(false); setShowGroupInfo(true); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <User size={16} /> Group Info
+                          </button>
+                          <hr className="my-1 border-slate-100" />
+                          <button
+                            onClick={async () => {
+                              setGroupMenuOpen(false);
+                              const gId = groupIdFromConversation(selectedConversation);
+                              if (!gId || !confirm('Delete this group? This cannot be undone.')) return;
+                              try {
+                                await groupChatService.deleteGroup(gId);
+                                setSelectedConversation(null);
+                              } catch { alert('Failed to delete group'); }
+                            }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+                          >
+                            <X size={16} /> Delete Group
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
+                      <Phone size={20} />
+                    </button>
+                    <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
+                      <Video size={20} />
+                    </button>
+                    <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
+                      <MoreVertical size={20} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1378,6 +1518,165 @@ const Messages = () => {
               >
                 Create Group
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Group Modal */}
+      {showRenameGroup && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">Rename Group</h3>
+              <button onClick={() => setShowRenameGroup(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <input
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-amber-500 focus:bg-white transition"
+                autoFocus
+              />
+              <button
+                onClick={async () => {
+                  const gId = groupIdFromConversation(selectedConversation);
+                  if (!gId || !renameValue.trim()) return;
+                  try {
+                    await groupChatService.updateGroupName(gId, renameValue.trim());
+                    setShowRenameGroup(false);
+                  } catch { alert('Failed to rename group'); }
+                }}
+                disabled={!renameValue.trim()}
+                className="w-full rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-white hover:bg-amber-600 transition disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Members Modal */}
+      {showAddMembers && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16">
+          <div className="mx-4 w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">Add Members</h3>
+              <button onClick={() => setShowAddMembers(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="p-4">
+              <div className="relative mb-2">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={searchUserQuery}
+                  onChange={(e) => setSearchUserQuery(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-amber-500 focus:bg-white transition"
+                />
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto border-t border-slate-100">
+              {(() => {
+                const gId = groupIdFromConversation(selectedConversation);
+                const group = groups.find(g => g.id === gId);
+                const existingIds = group?.participantIds || [];
+                const eligible = availableUsers.filter(u => !existingIds.includes(u.uid));
+                const filtered = eligible.filter(u =>
+                  u.displayName.toLowerCase().includes(searchUserQuery.toLowerCase()) ||
+                  (u.email && u.email.toLowerCase().includes(searchUserQuery.toLowerCase()))
+                ).sort((a, b) => a.displayName.localeCompare(b.displayName));
+                return filtered.length > 0 ? filtered.map((u) => (
+                  <button
+                    key={u.uid}
+                    onClick={async () => {
+                      const gId2 = groupIdFromConversation(selectedConversation);
+                      if (!gId2) return;
+                      try {
+                        await groupChatService.addParticipantsToGroup(gId2, [u.uid]);
+                      } catch { alert('Failed to add member'); }
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-amber-50 transition border-b border-slate-50"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-xs font-bold text-white">
+                      {u.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate font-semibold text-slate-900">{u.displayName}</p>
+                      <span className="text-xs text-slate-400">{u.role}</span>
+                    </div>
+                    <span className="text-amber-600 text-sm font-medium">+ Add</span>
+                  </button>
+                )) : (
+                  <div className="flex flex-col items-center py-8 text-slate-400">
+                    <Users size={24} className="mb-2" />
+                    <p className="text-sm font-medium">No users to add</p>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Info Modal */}
+      {showGroupInfo && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">{currentConversation?.name || 'Group Info'}</h3>
+              <button onClick={() => setShowGroupInfo(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="p-4 border-b border-slate-100">
+              <p className="text-sm text-slate-500">
+                {(() => {
+                  const gId = groupIdFromConversation(selectedConversation);
+                  const group = groups.find(g => g.id === gId);
+                  return group ? `${group.participantIds.length} participants` : '';
+                })()}
+              </p>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {(() => {
+                const gId = groupIdFromConversation(selectedConversation);
+                const group = groups.find(g => g.id === gId);
+                if (!group) return null;
+                return group.participantIds.map((pId) => {
+                  const profile = groupMembersProfiles[pId] || usersMap[pId] || {};
+                  const isMe = pId === user?.uid;
+                  const canRemove = sessionUser?.role === 'admin' && !isMe;
+                  return (
+                    <div key={pId} className="flex items-center gap-3 px-4 py-3 border-b border-slate-50">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-xs font-bold text-white">
+                        {(profile.displayName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-semibold text-slate-900">
+                          {profile.displayName || profile.email || 'Unknown'}
+                          {isMe && <span className="text-xs text-slate-400 ml-1">(You)</span>}
+                        </p>
+                        <span className="text-xs text-slate-400">{profile.role || ''}</span>
+                      </div>
+                      {canRemove && (
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Remove ${profile.displayName || 'this user'} from the group?`)) return;
+                            try {
+                              await groupChatService.removeParticipantsFromGroup(gId, [pId]);
+                            } catch { alert('Failed to remove member'); }
+                          }}
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition"
+                          title="Remove from group"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>

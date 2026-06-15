@@ -11,6 +11,7 @@ import {
   addDoc,
   updateDoc,
   setDoc,
+  deleteDoc,
   serverTimestamp,
   arrayUnion,
   type DocumentData,
@@ -1508,6 +1509,29 @@ export const groupChatService = {
       collection(db, 'group_messages'),
       where('groupId', '==', groupId)
     );
+  },
+
+  async updateGroupName(groupId: string, name: string): Promise<void> {
+    await updateDoc(doc(db, 'groups', groupId), { name });
+  },
+
+  async removeParticipantsFromGroup(groupId: string, userIds: string[]): Promise<void> {
+    const groupDoc = await getDoc(doc(db, 'groups', groupId));
+    if (!groupDoc.exists()) return;
+    const current = groupDoc.data()?.participantIds || [];
+    const filtered = current.filter((id: string) => !userIds.includes(id));
+    await updateDoc(doc(db, 'groups', groupId), { participantIds: filtered });
+  },
+
+  async deleteGroup(groupId: string): Promise<void> {
+    await deleteDoc(doc(db, 'groups', groupId));
+  },
+
+  subscribeToGroupParticipants(groupId: string, callback: (participantIds: string[]) => void): Unsubscribe {
+    return onSnapshot(doc(db, 'groups', groupId), (snap) => {
+      if (!snap.exists()) { callback([]); return; }
+      callback(snap.data()?.participantIds || []);
+    });
   },
 };
 
