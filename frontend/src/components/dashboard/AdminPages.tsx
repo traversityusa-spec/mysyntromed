@@ -1196,29 +1196,34 @@ export const AdminConversations = () => {
   }, []);
 
   useEffect(() => {
+    const lookupName = (uid: string, role: 'client' | 'specialist', fallbackName?: string | null): string => {
+      const user = role === 'client'
+        ? clients.find(c => c.uid === uid)
+        : specialists.find(s => s.uid === uid);
+      const name = user?.displayName || user?.email;
+      if (name) return name;
+      if (fallbackName) return fallbackName;
+      const fromMsg = allMessages.find(m => m.senderId === uid && m.senderName);
+      return fromMsg?.senderName || (role === 'client' ? 'Client' : 'Specialist');
+    };
+
     const convMap = new Map<string, {clientId: string; clientName: string; clientPhotoURL?: string; specialistId: string; specialistName: string; lastMessage: string; lastTime: Date; unreadCount: number}>();
     
     allMessages.forEach((msg) => {
       const senderRole = msg.senderRole;
-      const receiverRole = (specialists.find(s => s.uid === msg.senderId) ? msg.senderRole : 
-                           specialists.find(s => s.uid === msg.receiverId) ? 'specialist' : 
-                           clients.find(c => c.uid === msg.receiverId) ? 'client' : '') as string;
       
       let clientId = '', specialistId = '', clientName = '', specialistName = '';
       
       if (senderRole === 'client' && msg.receiverId) {
         clientId = msg.senderId;
-        clientName = msg.senderName;
+        clientName = lookupName(clientId, 'client', msg.senderName);
         specialistId = msg.receiverId;
-        const spec = specialists.find(s => s.uid === specialistId);
-        specialistName = spec?.displayName || spec?.email || 'Specialist';
+        specialistName = lookupName(specialistId, 'specialist');
       } else if (senderRole === 'specialist' && msg.receiverId) {
         specialistId = msg.senderId;
-        const spec = specialists.find(s => s.uid === specialistId);
-        specialistName = spec?.displayName || spec?.email || 'Specialist';
+        specialistName = lookupName(specialistId, 'specialist', msg.senderName);
         clientId = msg.receiverId;
-        const cli = clients.find(c => c.uid === clientId);
-        clientName = cli?.displayName || cli?.email || 'Client';
+        clientName = lookupName(clientId, 'client');
       }
       
       if (!clientId || !specialistId) return;
