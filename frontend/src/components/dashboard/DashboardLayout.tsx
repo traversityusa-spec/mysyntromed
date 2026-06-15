@@ -20,6 +20,7 @@ import {
   Workflow,
   X,
   Shield,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, notificationService, type AppNotification } from '@/lib/firestore';
@@ -58,6 +59,7 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
       { label: 'Admins', icon: Shield, to: `${portal}/admins` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
       { label: 'Conversations', icon: MessageSquare, to: `${portal}/conversations`, badge: pendingAssignments },
+      { label: 'Activity', icon: Activity, to: `${portal}/activity` },
       { label: 'Analytics', icon: ChartBar, to: `${portal}/analytics` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
     ];

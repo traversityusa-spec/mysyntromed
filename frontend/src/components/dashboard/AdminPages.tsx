@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { db, activityService, messageService, API_BASE_URL } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
-import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone, Star } from 'lucide-react';
+import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone, Star, Phone, Activity, UserPlus, User } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -1804,6 +1804,139 @@ export const AdminAnalytics = () => {
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+export const AdminActivity = () => {
+  const { user: authUser } = useAuth();
+  const [allActivity, setAllActivity] = useState<ActivityItem[]>([]);
+  const [filterType, setFilterType] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
+
+  useEffect(() => {
+    const unsub = activityService.subscribeToAllActivity(setAllActivity);
+    return () => unsub();
+  }, []);
+
+  const filtered = allActivity.filter(a => {
+    if (filterType && a.type !== filterType) return false;
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      if (!a.title.toLowerCase().includes(q) && !a.specialistName?.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const typeOptions = [...new Set(allActivity.map(a => a.type))].sort();
+
+  const iconFor = (type: string) => {
+    const t = type.toLowerCase();
+    if (t.includes('rating')) return <Star size={18} className="text-amber-500" />;
+    if (t.includes('call')) return <Phone size={18} className="text-emerald-500" />;
+    if (t.includes('message')) return <MessageSquare size={18} className="text-blue-500" />;
+    if (t.includes('request')) return <ClipboardList size={18} className="text-indigo-500" />;
+    if (t.includes('workflow') || t.includes('clinic')) return <CheckCircle size={18} className="text-teal-500" />;
+    if (t.includes('group')) return <Users size={18} className="text-amber-500" />;
+    if (t.includes('user') || t.includes('signup') || t.includes('created')) return <UserPlus size={18} className="text-purple-500" />;
+    return <Activity size={18} className="text-slate-500" />;
+  };
+
+  const colorFor = (type: string) => {
+    const t = type.toLowerCase();
+    if (t.includes('rating') || t.includes('group')) return 'bg-amber-50 border-amber-200';
+    if (t.includes('call')) return 'bg-emerald-50 border-emerald-200';
+    if (t.includes('message')) return 'bg-blue-50 border-blue-200';
+    if (t.includes('request')) return 'bg-indigo-50 border-indigo-200';
+    if (t.includes('workflow') || t.includes('clinic')) return 'bg-teal-50 border-teal-200';
+    if (t.includes('user') || t.includes('signup') || t.includes('created')) return 'bg-purple-50 border-purple-200';
+    return 'bg-slate-50 border-slate-200';
+  };
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Activity Log</h1>
+          <p className="text-slate-600 mt-1">Step-by-step log of everything happening on the portal</p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-500">
+          {allActivity.length} total events
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-3 mb-6">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search activity or specialist..."
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none focus:border-teal-500 transition"
+          />
+        </div>
+        <select
+          value={filterType}
+          onChange={e => setFilterType(e.target.value)}
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-teal-500 transition"
+        >
+          <option value="">All types</option>
+          {typeOptions.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => { setFilterType(''); setFilterSearch(''); }}
+          className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition"
+        >
+          Clear filters
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center py-20 text-slate-500">
+          <Activity size={48} className="text-slate-200 mb-4" />
+          <p className="font-medium text-lg">No activity yet</p>
+          <p className="text-sm mt-1">Activity logs will appear here as users interact with the portal</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((act) => (
+            <div key={act.id} className={`flex items-start gap-4 rounded-xl border p-4 ${colorFor(act.type)}`}>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+                {iconFor(act.type)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-slate-900">{act.title}</p>
+                  <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[10px] font-medium text-slate-500 border border-slate-200">
+                    {act.type}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                  {act.specialistName && (
+                    <span className="flex items-center gap-1">
+                      <User size={12} />
+                      {act.specialistName}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} />
+                    {act.createdAt.toLocaleString()}
+                  </span>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    act.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                    act.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {act.status.replace('_', ' ')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

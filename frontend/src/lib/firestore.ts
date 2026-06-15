@@ -1161,6 +1161,19 @@ export const activityService = {
       callback(activity.slice(0, 50));
     });
   },
+
+  subscribeToAllActivity(callback: (activity: ActivityItem[]) => void): Unsubscribe {
+    return onSnapshot(collection(db, 'activity'), (snapshot) => {
+      const activity = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt || Date.now()),
+        } as ActivityItem))
+        .sort((a: ActivityItem, b: ActivityItem) => b.createdAt.getTime() - a.createdAt.getTime());
+      callback(activity.slice(0, 200));
+    });
+  },
 };
 
 export const notificationService = {
