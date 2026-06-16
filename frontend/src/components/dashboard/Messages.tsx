@@ -1274,7 +1274,12 @@ const Messages = () => {
                           </button>
                           <hr className="my-1 border-slate-100" />
                           <button
-                            onClick={() => { setChatMenuOpen(false); setSelectedConversation(null); navigate('/dashboard'); }}
+                            onClick={() => {
+                              setChatMenuOpen(false);
+                              setSelectedConversation(null);
+                              const dashboardPath = sessionUser?.role === 'admin' ? '/admin/dashboard' : sessionUser?.role === 'specialist' ? '/specialist/dashboard' : '/portal/dashboard';
+                              navigate(dashboardPath);
+                            }}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
                           >
                             <X size={16} /> Close Chat
