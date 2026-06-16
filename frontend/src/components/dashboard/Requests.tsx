@@ -48,6 +48,7 @@ const Requests = () => {
   const [submitted, setSubmitted] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submittedSpecialistName, setSubmittedSpecialistName] = useState<string | null>(null);
   const isSpecialist = sessionUser?.role === 'specialist';
 
   const handleStatusChange = async (requestId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
@@ -75,6 +76,7 @@ const Requests = () => {
         preferredTime,
       });
       setSubmitted(true);
+      setSubmittedSpecialistName(sessionUser?.assignedSpecialistName || null);
       setTimeout(() => {
         setShowForm(false);
         setSubmitted(false);
@@ -150,7 +152,11 @@ const Requests = () => {
                 <Check size={32} className="text-emerald-600" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900">Request Submitted!</h3>
-              <p className="mt-1 text-sm text-slate-500">Your specialist will begin working on it shortly.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {submittedSpecialistName
+                  ? `Your request has been received, and ${submittedSpecialistName} will attend to you shortly.`
+                  : 'Your specialist will begin working on it shortly.'}
+              </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
