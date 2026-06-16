@@ -51,9 +51,22 @@ async function sendEmail({ from, to, subject, html }) {
 
 const app = express();
 
-// CORS for backend access
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  'https://mysyntromed.com',
+  'https://www.mysyntromed.com',
+  'http://localhost:3000',
+  'http://localhost:3001',
+].filter(Boolean);
+
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.some(o => origin === o)) {
+      return callback(null, true);
+    }
+    callback(new Error('CORS policy: Origin not allowed'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -158,8 +171,6 @@ app.post('/send-welcome', authenticateRequest, async (req, res) => {
   const roleLabel = role === 'specialist' ? 'Specialist' : 'Healthcare Professional';
   const portalUrl = role === 'specialist' ? sanitizedUrl + '/specialist' : sanitizedUrl + '/portal';
   const tempPassword = tempCode || 'N/A';
-
-  console.log('[DEBUG] tempPassword to send:', tempPassword);
 
   const htmlContent = `
 <!DOCTYPE html>

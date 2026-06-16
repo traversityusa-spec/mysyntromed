@@ -50,7 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // API Key validation
-$validApiKey = 'mysyntromed-secure-contact-api-key-2024';
+$validApiKey = getenv('CONTACT_API_KEY');
+if (!$validApiKey) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Server misconfigured']);
+    exit;
+}
 $providedKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
 if (!hash_equals($validApiKey, $providedKey)) {
     http_response_code(401);

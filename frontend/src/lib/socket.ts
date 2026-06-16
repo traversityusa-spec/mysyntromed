@@ -45,7 +45,7 @@ const ensureListeners = (userId: string) => {
     window.dispatchEvent(new CustomEvent('socket:typing', { detail: data }));
   });
 
-  socket.on('incomingCall', (data: { callerId: string; callerName: string; sessionId: string; callType: string }) => {
+  socket.on('incomingCall', (data: { callerId: string; callerName: string; sessionId: string; callType: string; meetLink?: string }) => {
     if (data.callerId === currentUserId) return;
     window.dispatchEvent(new CustomEvent('socket:callInvite', { detail: data }));
   });
@@ -98,7 +98,7 @@ export const emitMessage = (to: string, message: unknown): void => {
   socket.emit('sendMessage', { to, message });
 };
 
-export const emitCallInvite = (to: string, data: { callType: string; callerId: string; callerName: string; sessionId: string }): void => {
+export const emitCallInvite = (to: string, data: { callType: string; callerId: string; callerName: string; sessionId: string; meetLink?: string }): void => {
   if (!socket?.connected) {
     console.warn('[SOCKET] Cannot emit call invite - not connected');
     return;

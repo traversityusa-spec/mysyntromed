@@ -55,7 +55,7 @@ service cloud.firestore {
         isOwner(userId) ||
         isAdmin() ||
         (isSpecialist() && (resource.data.role == 'client' || resource.data.role == 'admin')) ||
-        (isClient() && (resource.data.role == 'specialist' || resource.data.role == 'admin'))
+        (isClient() && (resource.data.role == 'admin' || resource.data.uid == getUserData(request.auth.uid).assignedSpecialistId))
       );
       allow create: if signedIn() && request.auth.uid == userId
         && request.resource.data.displayName is string
@@ -232,7 +232,10 @@ service cloud.firestore {
     }
 
     match /group_messages/{msgId} {
-      allow read: if signedIn();
+      allow read: if signedIn() && (
+        isAdmin() ||
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.participantIds
+      );
       allow create: if signedIn() && request.resource.data.senderId == request.auth.uid;
       allow update: if signedIn() && (request.resource.data.senderId == request.auth.uid || isAdmin());
       allow delete: if isAdmin();

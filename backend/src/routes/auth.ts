@@ -142,7 +142,17 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 1. Create a Welcome Message
+    const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+
+    // Send Firebase password reset email instead of exposing password
+    try {
+      await adminAuth.generatePasswordResetLink(email);
+      console.log('[AUTH] Password reset link sent to:', email);
+    } catch (resetErr) {
+      console.error('[AUTH] Failed to send password reset:', resetErr);
+    }
+
+    // 1. Create a Welcome Message (NO password in message)
     const authedReq = req as AuthedRequest;
     const adminId = authedReq.user?.uid || 'system-admin';
     const adminName = authedReq.user?.displayName || 'MySyntroMed Admin';
@@ -153,8 +163,8 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
       senderRole: 'admin',
       receiverId: userRecord.uid,
       text: role === 'client' 
-        ? `Welcome to MySyntroMed, ${displayName}! We're excited to support your practice. Your temporary password is: ${password}. Check your email for the password and get started!`
-        : `Welcome to the MySyntroMed Specialist Team, ${displayName}! Your temporary password is: ${password}. Check your email for the password to get started!`,
+        ? `Welcome to MySyntroMed, ${displayName}! We're excited to support your practice. Please check your email for a password reset link to set up your account.`
+        : `Welcome to the MySyntroMed Specialist Team, ${displayName}! Please check your email for a password reset link to set up your account.`,
       participants: [adminId, userRecord.uid],
       read: false,
       status: 'sent',
@@ -163,7 +173,6 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
 
     // Notify recipient and admins about welcome message
     try {
-      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
       sendMessageNotification(
         admin,
         adminId,
@@ -186,15 +195,14 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
     await admin.firestore().collection('notifications').add({
       userId: userRecord.uid,
       title: 'Welcome to MySyntroMed',
-      message: 'Your account has been successfully created. Explore your dashboard to get started.',
+      message: 'Your account has been successfully created. Explore your dashboard to get started. Check your email to set your password.',
       type: 'system',
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 3. Send Welcome Email (non-blocking - don't await)
-    const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
-    sendWelcomeEmail(email, displayName, role as 'client' | 'specialist', loginUrl, password)
+    // 3. Send Welcome Email (non-blocking - don't await, no password)
+    sendWelcomeEmail(email, displayName, role as 'client' | 'specialist', loginUrl, '')
       .then(result => {
         if (!result.success) {
           console.error('[EMAIL] Failed to send welcome email:', result.error);
@@ -207,7 +215,6 @@ router.post('/admin/create-user', requireAuth, requireRole('admin'), async (req,
     res.json({ 
       success: true, 
       uid: userRecord.uid,
-      tempCode: password,
       emailSent: 'pending'
     });
   } catch (error: unknown) {

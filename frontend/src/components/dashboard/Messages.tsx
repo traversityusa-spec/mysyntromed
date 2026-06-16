@@ -1160,13 +1160,83 @@ const Messages = () => {
                   </>
                 ) : (
                   <>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
+                    <button
+                      onClick={async () => {
+                        if (!selectedConversation || !user) return;
+                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+                        const targetId = selectedConversation;
+                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
+                        window.dispatchEvent(new CustomEvent('call:start', {
+                          detail: { sessionId: roomCode, callType: 'voice', targetUserId: targetId, callerName },
+                        }));
+                        const socket = getSocket();
+                        if (socket?.connected) {
+                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode });
+                        }
+                        try {
+                          const token = await user.getIdToken();
+                          await fetch(`${API_BASE_URL}/api/notify/create`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({
+                              type: 'call', recipientIds: [targetId],
+                              title: `Voice Call`, message: `${callerName} is calling you`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice' },
+                            }),
+                          });
+                        } catch {}
+                      }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                      title="Voice call"
+                    >
                       <Phone size={20} />
                     </button>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
+                    <button
+                      onClick={async () => {
+                        if (!selectedConversation || !user) return;
+                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+                        const targetId = selectedConversation;
+                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
+                        window.dispatchEvent(new CustomEvent('call:start', {
+                          detail: { sessionId: roomCode, callType: 'video', targetUserId: targetId, callerName },
+                        }));
+                        const socket = getSocket();
+                        if (socket?.connected) {
+                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode });
+                        }
+                        try {
+                          const token = await user.getIdToken();
+                          await fetch(`${API_BASE_URL}/api/notify/create`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({
+                              type: 'call', recipientIds: [targetId],
+                              title: `Video Call`, message: `${callerName} is calling you`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video' },
+                            }),
+                          });
+                        } catch {}
+                      }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                      title="Video call"
+                    >
                       <Video size={20} />
                     </button>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition">
+                    <button
+                      onClick={async () => {
+                        if (!selectedConversation || !user) return;
+                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+                        const targetId = selectedConversation;
+                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
+                        window.dispatchEvent(new CustomEvent('call:start', {
+                          detail: { sessionId: roomCode, callType: 'video', targetUserId: targetId, callerName },
+                        }));
+                        const socket = getSocket();
+                        if (socket?.connected) {
+                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode });
+                        }
+                      }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                      title="More options"
+                    >
                       <MoreVertical size={20} />
                     </button>
                   </>

@@ -425,41 +425,23 @@ export const userService = {
     });
   },
 
-  async assignSpecialist(userId: string, specialistId: string, specialistName: string): Promise<void> {
+  async assignSpecialist(userId: string, specialistId: string, _specialistName: string): Promise<void> {
     const token = await auth.currentUser?.getIdToken();
-    if (token) {
-      const response = await fetch(`${API_BASE_URL}/api/auth/admin/assign-specialist`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ userId, specialistId }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to assign specialist');
-      }
-      return;
+    if (!token) {
+      throw new Error('Not authenticated');
     }
-
-    const clientRef = doc(db, 'users', userId);
-    await updateDoc(clientRef, {
-      assignedSpecialistId: specialistId,
-      assignedSpecialistName: specialistName,
-      updatedAt: serverTimestamp(),
+    const response = await fetch(`${API_BASE_URL}/api/auth/admin/assign-specialist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId, specialistId }),
     });
-
-    const openRequests = await getDocs(query(collection(db, 'requests'), where('userId', '==', userId)));
-    await Promise.all(openRequests.docs.map((requestDoc) => {
-      const request = requestDoc.data();
-      if (request.status === 'completed') return Promise.resolve();
-      return updateDoc(requestDoc.ref, {
-        specialistId,
-        specialistName,
-        assignedAt: serverTimestamp(),
-      });
-    }));
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to assign specialist');
+    }
   },
 
   async getAssignedClients(specialistId: string): Promise<UserProfile[]> {
@@ -812,7 +794,7 @@ export const requestService = {
         request.type,
       ).catch(e => console.error('Specialist notification failed:', e));
     }
-    notificationService.notifyClientRequestReceived(resolvedUserId).catch(e => console.error('Client notification failed:', e));
+    notificationService.notifyClientRequestReceived(resolvedUserId, request.specialistName).catch(e => console.error('Client notification failed:', e));
 
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -1235,11 +1217,13 @@ export const notificationService = {
     );
   },
 
-  async notifyClientRequestReceived(clientId: string): Promise<void> {
+  async notifyClientRequestReceived(clientId: string, specialistName?: string): Promise<void> {
     await addDoc(collection(db, 'notifications'), {
       userId: clientId,
       title: 'Request Received',
-      message: 'Your specialist request has been received. An admin will assign a specialist shortly.',
+      message: specialistName
+        ? `Your request has been received, and ${specialistName} will attend to you shortly.`
+        : 'Your specialist request has been received. An admin will assign a specialist shortly.',
       type: 'request',
       read: false,
       createdAt: serverTimestamp(),

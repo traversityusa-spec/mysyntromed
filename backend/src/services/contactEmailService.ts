@@ -10,10 +10,27 @@ interface ContactFormData {
   message: string;
 }
 
+const escapeHtml = (str: string): string => {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+};
+
 export const sendContactFormEmail = async (data: ContactFormData): Promise<{ success: boolean; error?: string }> => {
   const { fullName, practiceName, email, phone, serviceInterest, message } = data;
   const companyEmail = process.env.COMPANY_EMAIL || 'info@mysyntromed.com';
   const companyName = 'MySyntroMed';
+
+  // Sanitize all user data before inserting into HTML
+  const safeFullName = escapeHtml(fullName);
+  const safePracticeName = escapeHtml(practiceName);
+  const safeEmail = escapeHtml(email);
+  const safePhone = escapeHtml(phone);
+  const safeServiceInterest = escapeHtml(serviceInterest || '');
+  const safeMessage = escapeHtml(message || '');
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -63,45 +80,45 @@ export const sendContactFormEmail = async (data: ContactFormData): Promise<{ suc
 
       <div class="field">
         <div class="field-label">Full Name</div>
-        <div class="field-value">${fullName}</div>
+        <div class="field-value">${safeFullName}</div>
       </div>
 
       <div class="field">
         <div class="field-label">Practice / Organization</div>
-        <div class="field-value">${practiceName}</div>
+        <div class="field-value">${safePracticeName}</div>
       </div>
 
       <div class="field">
         <div class="field-label">Email Address</div>
         <div class="field-value">
-          <a href="mailto:${email}" style="color: #0d9488;">${email}</a>
+          <a href="mailto:${safeEmail}" style="color: #0d9488;">${safeEmail}</a>
         </div>
       </div>
 
       <div class="field">
         <div class="field-label">Phone Number</div>
         <div class="field-value">
-          <a href="tel:${phone}" style="color: #0d9488;">${phone}</a>
+          <a href="tel:${safePhone}" style="color: #0d9488;">${safePhone}</a>
         </div>
       </div>
 
       <div class="field">
         <div class="field-label">Service Interested In</div>
-        <div class="field-value">${serviceInterest || 'Not specified'}</div>
+        <div class="field-value">${safeServiceInterest || 'Not specified'}</div>
       </div>
 
-      ${message ? `
+      ${safeMessage ? `
       <div class="field">
         <div class="field-label">Message</div>
         <div class="message-box">
-          <p>${message}</p>
+          <p>${safeMessage}</p>
         </div>
       </div>
       ` : ''}
 
       <div style="text-align: center;">
-        <a href="mailto:${email}?subject=Re: MySyntroMed Inquiry - ${encodeURIComponent(practiceName)}" class="cta-button">
-          Reply to ${fullName}
+        <a href="mailto:${safeEmail}?subject=Re: MySyntroMed Inquiry - ${encodeURIComponent(practiceName)}" class="cta-button">
+          Reply to ${safeFullName}
         </a>
       </div>
 
@@ -123,26 +140,26 @@ Someone is interested in MySyntroMed services!
 
 CONTACT DETAILS
 ---------------
-Name:         ${fullName}
-Practice:     ${practiceName}
-Email:        ${email}
-Phone:        ${phone}
-Service:      ${serviceInterest || 'Not specified'}
-${message ? `
+Name:         ${safeFullName}
+Practice:     ${safePracticeName}
+Email:        ${safeEmail}
+Phone:        ${safePhone}
+Service:      ${safeServiceInterest || 'Not specified'}
+${safeMessage ? `
 MESSAGE
 -------
-${message}
+${safeMessage}
 ` : ''}
 ---
 Submitted: ${new Date().toLocaleString()}
-Reply directly to this email or contact them at: ${email}
+Reply directly to this email or contact them at: ${safeEmail}
 `;
 
   const mailOptions = {
     from: process.env.SMTP_FROM || `"MySyntroMed Website" <noreply@mysyntromed.com>`,
     to: companyEmail,
     replyTo: email,
-    subject: `New Inquiry from ${fullName} - ${practiceName}`,
+    subject: `New Inquiry from ${safeFullName} - ${safePracticeName}`,
     text: textContent,
     html: htmlContent,
   };
@@ -150,17 +167,17 @@ Reply directly to this email or contact them at: ${email}
   const autoReplyOptions = {
     from: process.env.SMTP_FROM || `"MySyntroMed" <noreply@mysyntromed.com>`,
     to: email,
-    subject: `Thank you for contacting MySyntroMed, ${fullName}!`,
+    subject: `Thank you for contacting MySyntroMed, ${safeFullName}!`,
     text: `
-Dear ${fullName},
+Dear ${safeFullName},
 
 Thank you for reaching out to MySyntroMed!
 
 We have received your inquiry and our team will review your message. We typically respond within 24 hours during business days.
 
 Here's a summary of your inquiry:
-- Service(s) of Interest: ${serviceInterest || 'Not specified'}
-- Practice: ${practiceName}
+- Service(s) of Interest: ${safeServiceInterest || 'Not specified'}
+- Practice: ${safePracticeName}
 
 What to expect next:
 1. Our team will review your inquiry and prepare a personalized response
@@ -182,24 +199,24 @@ This is an automated message. Please do not reply directly to this email.
       sendEmailViaServer({
         from: process.env.SMTP_FROM || `"MySyntroMed Website" <noreply@mysyntromed.com>`,
         to: companyEmail,
-        subject: `New Inquiry from ${fullName} - ${practiceName}`,
+        subject: `New Inquiry from ${safeFullName} - ${safePracticeName}`,
         html: htmlContent,
       }),
       sendEmailViaServer({
         from: process.env.SMTP_FROM || `"MySyntroMed" <noreply@mysyntromed.com>`,
         to: email,
-        subject: `Thank you for contacting MySyntroMed, ${fullName}!`,
+        subject: `Thank you for contacting MySyntroMed, ${safeFullName}!`,
         html: `<div style="font-family: 'Segoe UI', sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 20px;">
             ${getLogoHTML()}
           </div>
-          <p style="margin-bottom: 16px;">Dear ${fullName},</p>
+          <p style="margin-bottom: 16px;">Dear ${safeFullName},</p>
           <p style="margin-bottom: 16px;">Thank you for reaching out to MySyntroMed!</p>
           <p style="margin-bottom: 16px;">We have received your inquiry and our team will review your message. We typically respond within 24 hours during business days.</p>
           <p style="margin-bottom: 16px;"><strong>Here's a summary of your inquiry:</strong></p>
           <ul style="margin-bottom: 16px;">
-            <li>Service(s) of Interest: ${serviceInterest || 'Not specified'}</li>
-            <li>Practice: ${practiceName}</li>
+            <li>Service(s) of Interest: ${safeServiceInterest || 'Not specified'}</li>
+            <li>Practice: ${safePracticeName}</li>
           </ul>
           <p style="margin-bottom: 16px;"><strong>What to expect next:</strong></p>
           <ol style="margin-bottom: 16px;">

@@ -3,7 +3,7 @@ import { Room, RoomEvent, RemoteTrack, Track } from 'livekit-client';
 import { API_BASE_URL } from './firestore';
 import { getSocket } from './socket';
 
-const LIVEKIT_URL = 'wss://mysyntromed-dn34bete.livekit.cloud';
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://mysyntromed-dn34bete.livekit.cloud';
 
 export type CallStatus = 'idle' | 'connecting' | 'connected' | 'ended';
 

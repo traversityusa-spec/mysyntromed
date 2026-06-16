@@ -2,10 +2,21 @@ import { Router } from 'express';
 import { sendNewRequestEmailToAdmin, sendNewRequestEmailToSpecialist } from '../services/requestEmailService.js';
 import { sendStatusChangeEmail } from '../services/statusEmailService.js';
 import { notifyAdminsViaEmail } from '../services/emailClient.js';
+import { requireAuth, requireRole, type AuthedRequest } from '../middleware/requireAuth.js';
+
+const escapeHtml = (str: string): string => {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+};
 
 const router = Router();
 
-router.post('/notify-admin', async (req, res) => {
+router.post('/notify-admin', requireAuth, async (req: AuthedRequest, res) => {
   const { clientName, clientEmail, requestType, description, priority, loginUrl, specialistName, specialistId } = req.body;
 
   if (!clientName && !clientEmail) {
@@ -30,11 +41,11 @@ router.post('/notify-admin', async (req, res) => {
       emailPromises.push(
         sendNewRequestEmailToAdmin({
           adminEmail,
-          clientName: clientName || '',
-          clientEmail: clientEmail || '',
-          requestType: requestType || 'Support',
-          description: description || '',
-          priority: priority || 'normal',
+          clientName: escapeHtml(clientName || ''),
+          clientEmail: escapeHtml(clientEmail || ''),
+          requestType: escapeHtml(requestType || 'Support'),
+          description: escapeHtml(description || ''),
+          priority: escapeHtml(priority || 'normal'),
           loginUrl: baseUrl,
         })
       );
@@ -46,11 +57,11 @@ router.post('/notify-admin', async (req, res) => {
       emailPromises.push(
         sendNewRequestEmailToAdmin({
           adminEmail: envAdminEmail,
-          clientName: clientName || '',
-          clientEmail: clientEmail || '',
-          requestType: requestType || 'Support',
-          description: description || '',
-          priority: priority || 'normal',
+          clientName: escapeHtml(clientName || ''),
+          clientEmail: escapeHtml(clientEmail || ''),
+          requestType: escapeHtml(requestType || 'Support'),
+          description: escapeHtml(description || ''),
+          priority: escapeHtml(priority || 'normal'),
           loginUrl: baseUrl,
         })
       );
@@ -66,12 +77,12 @@ router.post('/notify-admin', async (req, res) => {
       emailPromises.push(
         sendNewRequestEmailToSpecialist({
           specialistEmail,
-          specialistName: specialistName || specialistData?.displayName || 'Specialist',
-          clientName: clientName || '',
-          clientEmail: clientEmail || '',
-          requestType: requestType || 'Support',
-          description: description || '',
-          priority: priority || 'normal',
+          specialistName: escapeHtml(specialistName || specialistData?.displayName || 'Specialist'),
+          clientName: escapeHtml(clientName || ''),
+          clientEmail: escapeHtml(clientEmail || ''),
+          requestType: escapeHtml(requestType || 'Support'),
+          description: escapeHtml(description || ''),
+          priority: escapeHtml(priority || 'normal'),
           loginUrl: baseUrl,
         })
       );
@@ -92,8 +103,10 @@ router.post('/notify-admin', async (req, res) => {
   }
 });
 
-router.post('/notify-status-change', async (req, res) => {
+router.post('/notify-status-change', requireAuth, async (req: AuthedRequest, res) => {
   const { requestId, requestType, status, changedByName, clientName, clientEmail, specialistName, specialistId, userId, loginUrl } = req.body;
+
+  const sanitizedStatus = typeof status === 'string' ? status : '';
 
   try {
     const baseUrl = loginUrl || 'https://mysyntromed.com';
@@ -107,12 +120,12 @@ router.post('/notify-status-change', async (req, res) => {
       if (userEmail && (!prefs || prefs.emailRequests !== false)) {
         await sendStatusChangeEmail({
           recipientEmail: userEmail,
-          recipientName: clientName || userData?.displayName || 'Client',
+          recipientName: escapeHtml(clientName || userData?.displayName || 'Client'),
           role: 'client',
-          requestType: requestType || 'Request',
+          requestType: escapeHtml(requestType || 'Request'),
           oldStatus: '',
-          newStatus: status,
-          changedByName: changedByName || 'System',
+          newStatus: sanitizedStatus,
+          changedByName: escapeHtml(changedByName || 'System'),
           loginUrl: baseUrl,
         });
       }
@@ -126,26 +139,26 @@ router.post('/notify-status-change', async (req, res) => {
       if (specialistEmail && (!prefs || prefs.emailRequests !== false)) {
         await sendStatusChangeEmail({
           recipientEmail: specialistEmail,
-          recipientName: specialistName || 'Specialist',
+          recipientName: escapeHtml(specialistName || 'Specialist'),
           role: 'specialist',
-          requestType: requestType || 'Request',
+          requestType: escapeHtml(requestType || 'Request'),
           oldStatus: '',
-          newStatus: status,
-          changedByName: changedByName || 'System',
+          newStatus: sanitizedStatus,
+          changedByName: escapeHtml(changedByName || 'System'),
           loginUrl: baseUrl,
         });
       }
     }
 
     // Also notify all admins about the status change
-    const statusLabel = status === 'in_progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1);
+    const statusLabel = sanitizedStatus === 'in_progress' ? 'In Progress' : sanitizedStatus.charAt(0).toUpperCase() + sanitizedStatus.slice(1);
     notifyAdminsViaEmail(
       admin,
-      `[MySyntroMed] Request Updated: ${requestType} is now ${statusLabel}`,
+      `[MySyntroMed] Request Updated: ${escapeHtml(requestType || 'Request')} is now ${escapeHtml(statusLabel)}`,
       `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #0f172a;">Request Status Updated</h2>
-        <p style="color: #475569;"><strong>${changedByName || 'Someone'}</strong> changed the status of <strong>${requestType || 'a request'}</strong> to <strong>${statusLabel}</strong>.</p>
-        <p style="color: #64748b;">Client: ${clientName || 'N/A'} | Specialist: ${specialistName || 'N/A'}</p>
+        <p style="color: #475569;"><strong>${escapeHtml(changedByName || 'Someone')}</strong> changed the status of <strong>${escapeHtml(requestType || 'a request')}</strong> to <strong>${escapeHtml(statusLabel)}</strong>.</p>
+        <p style="color: #64748b;">Client: ${escapeHtml(clientName || 'N/A')} | Specialist: ${escapeHtml(specialistName || 'N/A')}</p>
         <a href="${baseUrl}/admin/dashboard" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View in Dashboard</a>
       </div>`
     );

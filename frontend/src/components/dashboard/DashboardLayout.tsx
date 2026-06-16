@@ -118,7 +118,7 @@ const role = sessionUser?.role || 'client';
   };
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [incomingCall, setIncomingCall] = useState<{ callerName: string; sessionId: string; callerId: string; callType: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ callerName: string; sessionId: string; callerId: string; callType: string; meetLink?: string } | null>(null);
   const [activeCall, setActiveCall] = useState<{ sessionId: string; callType: string; isCaller: boolean; targetUserId: string; callerName: string } | null>(null);
 
   useEffect(() => {
@@ -166,7 +166,13 @@ const role = sessionUser?.role || 'client';
       if (newNotifs.length > 0) {
         const latest = newNotifs[0];
         if (latest.type === 'call' && latest.data?.sessionId) {
-          setIncomingCall({ callerName: latest.data.callerName as string || 'Someone', sessionId: latest.data.sessionId as string, callerId: (latest.data.callerId as string) || '', callType: (latest.data.callType as string) || 'video' });
+          setIncomingCall({
+            callerName: latest.data.callerName as string || 'Someone',
+            sessionId: latest.data.sessionId as string,
+            callerId: (latest.data.callerId as string) || '',
+            callType: (latest.data.callType as string) || 'video',
+            meetLink: (latest.data.meetLink as string) || '',
+          });
           if (soundEnabled) {
             playNotificationSound();
             setTimeout(() => playNotificationSound(), 600);
@@ -181,7 +187,13 @@ const role = sessionUser?.role || 'client';
     const handleCallInvite = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (!detail?.sessionId) return;
-      setIncomingCall({ callerName: detail.callerName || 'Someone', sessionId: detail.sessionId, callerId: detail.callerId || '', callType: detail.callType || 'video' });
+      setIncomingCall({
+        callerName: detail.callerName || 'Someone',
+        sessionId: detail.sessionId,
+        callerId: detail.callerId || '',
+        callType: detail.callType || 'video',
+        meetLink: detail.meetLink || '',
+      });
       if (soundEnabled) {
         playNotificationSound();
         setTimeout(() => playNotificationSound(), 600);
@@ -439,22 +451,35 @@ const markAllRead = () => {
                 <p className="text-sm font-semibold text-purple-900">Incoming {incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call</p>
                 <p className="text-xs text-purple-700 truncate">{incomingCall.callerName} is calling you</p>
               </div>
-              <button
-                onClick={() => {
-                  setActiveCall({
-                    sessionId: incomingCall.sessionId,
-                    callType: incomingCall.callType,
-                    isCaller: false,
-                    targetUserId: incomingCall.callerId,
-                    callerName: incomingCall.callerName,
-                  });
-                  setIncomingCall(null);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition shrink-0"
-              >
-                {incomingCall.callType === 'voice' ? <Phone size={16} /> : <Video size={16} />}
-                Join Call
-              </button>
+              {incomingCall.meetLink ? (
+                <a
+                  href={incomingCall.meetLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setIncomingCall(null)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition shrink-0"
+                >
+                  <Video size={16} />
+                  Join Google Meet
+                </a>
+              ) : (
+                <button
+                  onClick={() => {
+                    setActiveCall({
+                      sessionId: incomingCall.sessionId,
+                      callType: incomingCall.callType,
+                      isCaller: false,
+                      targetUserId: incomingCall.callerId,
+                      callerName: incomingCall.callerName,
+                    });
+                    setIncomingCall(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition shrink-0"
+                >
+                  {incomingCall.callType === 'voice' ? <Phone size={16} /> : <Video size={16} />}
+                  Join Call
+                </button>
+              )}
               <button
                 onClick={() => setIncomingCall(null)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-purple-400 hover:bg-purple-100 shrink-0"

@@ -42,7 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // API Key validation - must match backend EMAIL_SERVICE_KEY
-$validApiKey = 'mysyntromed-secure-email-api-key-2024';
+$validApiKey = getenv('EMAIL_API_KEY');
+if (!$validApiKey) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Server misconfigured']);
+    exit;
+}
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
 if (!preg_match('/^Bearer\s+' . preg_quote($validApiKey, '/') . '$/i', $authHeader)) {
     http_response_code(401);

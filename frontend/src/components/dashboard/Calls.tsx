@@ -5,6 +5,7 @@ import { API_BASE_URL, db } from '@/lib/firestore';
 import { collection, query, where, getDocs, addDoc, doc, updateDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
 import { auth } from '@/lib/firebase';
 import { getSocket } from '@/lib/socket';
+import { showToast } from '@/components/ui/Toast';
 
 type ScheduledCall = {
   id: string;
@@ -13,16 +14,23 @@ type ScheduledCall = {
   date: string;
   time: string;
   status: 'upcoming' | 'completed' | 'cancelled';
+  meetLink?: string;
 };
 
-const notifyViaApi = async (userId: string, title: string, message: string, type: string) => {
+const notifyViaApi = async (recipientIds: string[] | string, title: string, message: string, type: string, data?: any) => {
   try {
     const token = await auth.currentUser?.getIdToken();
     if (!token) return;
+    const body: any = { title, message, type, data };
+    if (Array.isArray(recipientIds)) {
+      body.recipientIds = recipientIds;
+    } else {
+      body.userId = recipientIds;
+    }
     await fetch(`${API_BASE_URL}/api/notify/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ userId, title, message, type }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     console.error('[CALLS] Failed to notify via API:', err);
@@ -57,6 +65,8 @@ const Calls = () => {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [callType, setCallType] = useState<'voice' | 'video'>('video');
+  const [meetLink, setMeetLink] = useState('');
+  const [scheduleMeetLink, setScheduleMeetLink] = useState('');
 
   useEffect(() => {
     const fetchCalls = async () => {
@@ -77,6 +87,7 @@ const Calls = () => {
             date: data.date || '',
             time: data.time || '',
             status: data.status || 'upcoming',
+            meetLink: data.meetLink || '',
           };
         });
         allCalls.sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -130,6 +141,7 @@ const Calls = () => {
       date: formattedDate,
       time: formattedTime,
       status: 'upcoming',
+      meetLink: scheduleMeetLink.trim(),
     };
     setUpcomingCalls(prev => [...prev, newCall]);
     notifyAdminOfCall('scheduled', newCall.specialist, formattedDate, formattedTime);
@@ -145,6 +157,7 @@ const Calls = () => {
         date: formattedDate,
         time: formattedTime,
         status: 'upcoming',
+        meetLink: scheduleMeetLink.trim(),
         createdAt: serverTimestamp(),
       });
       newCall.docId = docRef.id;
@@ -158,19 +171,18 @@ const Calls = () => {
       console.error('[CALLS] Failed to save scheduled call:', err);
     }
 
-    selectedUsers.forEach(uid => {
-      notifyViaApi(uid, 'Scheduled Call', `${callerName} scheduled a call with you on ${formattedDate} at ${formattedTime}`, 'system');
-    });
+    notifyViaApi(selectedUsers, 'Scheduled Call', `${callerName} scheduled a Google Meet call with you on ${formattedDate} at ${formattedTime}`, 'system', { meetLink: scheduleMeetLink.trim() });
 
     setShowSchedule(false);
     setScheduleDate('');
     setScheduleTime('');
     setSelectedUsers([]);
+    setScheduleMeetLink('');
   };
 
   const toggleUser = (uid: string) => {
     setSelectedUsers(prev =>
-      prev.includes(uid) ? [] : [uid]
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
     );
   };
 
@@ -178,36 +190,78 @@ const Calls = () => {
     setSelectedUsers([]);
     setSearchQuery('');
     setCallType('video');
+    setMeetLink('');
     setShowParticipants(true);
   };
 
-  const startCallWithParticipants = () => {
-    if (selectedUsers.length === 0) return;
-    const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
-    const targetUserId = selectedUsers[0];
-    const callerName = sessionUser?.displayName || 'User';
-    window.dispatchEvent(new CustomEvent('call:start', {
-      detail: {
-        sessionId: roomCode,
-        callType,
-        targetUserId,
-        callerName,
-      }
-    }));
-    notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
-    const socket = getSocket();
-    if (socket?.connected && user?.uid) {
-      socket.emit('callInvite', {
-        to: targetUserId,
-        callType,
-        callerId: user.uid,
-        callerName,
-        sessionId: roomCode,
-      });
+  const startCallWithParticipants = async () => {
+    const trimmedMeetLink = meetLink.trim();
+    if (selectedUsers.length === 0) {
+      alert('Please select at least one participant');
+      return;
     }
-    notifyViaApi(targetUserId, `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`, `${callerName} is calling you`, 'call');
+    if (!trimmedMeetLink) {
+      alert('Please enter a Google Meet link');
+      return;
+    }
+    if (!trimmedMeetLink.includes('meet.google.com') && !trimmedMeetLink.includes('http')) {
+      alert('Please enter a valid URL (e.g. https://meet.google.com/abc-defg-hij)');
+      return;
+    }
+
+    const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+    const callerName = sessionUser?.displayName || 'User';
+    const participantNames = selectedUsers.map(uid => availableUsers.find(u => u.uid === uid)?.displayName || uid).join(', ');
+
+    // Notify administrators of active call
+    notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
+
+    // Send socket invite to all selected users
+    selectedUsers.forEach(targetUserId => {
+      const socket = getSocket();
+      if (socket?.connected && user?.uid) {
+        socket.emit('callInvite', {
+          to: targetUserId,
+          callType: 'video',
+          callerId: user.uid,
+          callerName,
+          sessionId: roomCode,
+          meetLink: trimmedMeetLink,
+        });
+      }
+    });
+
+    notifyViaApi(
+      selectedUsers,
+      `Incoming Google Meet Call`,
+      `${callerName} is calling you via Google Meet. Click Join to connect.`,
+      'call',
+      { sessionId: roomCode, callerName, callerId: user?.uid, callType: 'video', meetLink: trimmedMeetLink }
+    );
+
+    // Save instant call to Firebase
+    try {
+      const allParticipants = [...new Set([...(sessionUser?.uid ? [sessionUser.uid] : []), ...selectedUsers])];
+      await addDoc(collection(db, 'calls'), {
+        userId: sessionUser?.uid,
+        specialist: participantNames,
+        participantIds: allParticipants,
+        date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        status: 'upcoming',
+        meetLink: trimmedMeetLink,
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('[CALLS] Failed to save instant call:', err);
+    }
+
+    // Open the meet link in a new tab for the caller
+    window.open(trimmedMeetLink, '_blank');
+
     setShowParticipants(false);
     setSelectedUsers([]);
+    setMeetLink('');
   };
 
   const handleCancel = async (call: ScheduledCall) => {

@@ -108,20 +108,6 @@ function initFirebase() {
     }
   }
 
-  // Fallback: initialize without credentials (limited functionality)
-  try {
-    if (projectId) {
-      const config: AppOptions = { projectId };
-      if (databaseURL) config.databaseURL = databaseURL;
-      admin.initializeApp(config);
-      initialized = true;
-      console.warn('[FIREBASE] Initialized without credentials - limited functionality');
-      return true;
-    }
-    } catch (err: unknown) {
-      console.error('[FIREBASE] Failed fallback init:', err instanceof Error ? err.message : String(err));
-    }
-
   console.error('[FIREBASE] All initialization methods failed. Firebase features will be unavailable.');
   return false;
 }

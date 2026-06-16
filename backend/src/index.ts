@@ -48,7 +48,7 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
-  if (req.headers['x-forwarded-proto'] === 'http') {
+  if (req.secure === false && req.headers['x-forwarded-proto'] === 'http') {
     return res.redirect(`https://${req.hostname}${req.originalUrl}`);
   }
   next();
@@ -103,7 +103,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
 app.use((req, _res, next) => {
   if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
@@ -151,12 +151,18 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'backend', timestamp: new Date().toISOString() });
 });
 
+const escapeHtml = (str: string): string => {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+};
+
 const sanitizeInput = (str: string): string => {
   if (typeof str !== 'string') return '';
-  return str
-    .replace(/[<>]/g, '')
-    .replace(/javascript:/gi, '')
-    .replace(/on\w+=/gi, '')
+  return escapeHtml(str.replace(/javascript:/gi, '').replace(/on\w+\s*=/gi, ''))
     .trim()
     .substring(0, 1000);
 };
@@ -228,7 +234,13 @@ app.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/auth/verify-otp', async (req, res) => {
+const verifyOtpLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { error: 'Too many verification attempts. Please wait.' },
+});
+
+app.post('/api/auth/verify-otp', verifyOtpLimiter, async (req, res) => {
   const { email, code } = req.body;
 
   if (!email || !code) {
@@ -264,16 +276,28 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       return res.status(400).json({ error: 'Verification code expired. Please request a new one.' });
     }
 
-    if (otpData.code !== cleanCode) {
-      await otpDoc.ref.update({ attempts: admin.firestore.FieldValue.increment(1) });
-      const remaining = MAX_OTP_ATTEMPTS - otpData.attempts - 1;
-      return res.status(400).json({
-        error: 'Invalid verification code',
-        remainingAttempts: remaining > 0 ? remaining : 0
-      });
-    }
+    // Atomic Firestore transaction to prevent race condition
+    await admin.firestore().runTransaction(async (transaction) => {
+      const freshSnap = await transaction.get(otpDoc.ref);
+      const freshData = freshSnap.data();
+      if (!freshData) throw new Error('OTP doc deleted during transaction');
 
-    await otpDoc.ref.update({ used: true });
+      if (freshData.used) {
+        throw new Error('Code already used');
+      }
+
+      if (freshData.attempts >= MAX_OTP_ATTEMPTS) {
+        transaction.delete(otpDoc.ref);
+        throw new Error('Too many attempts');
+      }
+
+      if (freshData.code !== cleanCode) {
+        transaction.update(otpDoc.ref, { attempts: admin.firestore.FieldValue.increment(1) });
+        throw new Error('Invalid code');
+      }
+
+      transaction.update(otpDoc.ref, { used: true });
+    });
 
     const userRecord = await admin.auth().getUserByEmail(normalizedEmail);
     let otpRole = userRecord.customClaims?.role;
@@ -297,6 +321,10 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
     res.json({ success: true, customToken });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Verification failed';
+    if (msg === 'Invalid code' || msg === 'Code already used' || msg === 'Too many attempts') {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
     console.error('[OTP] Verify error:', error);
     res.status(500).json({ error: 'Verification failed' });
   }
@@ -388,11 +416,15 @@ app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedReque
   }
 });
 
-app.post('/api/livekit/token', express.json(), async (req, res) => {
+app.post('/api/livekit/token', requireAuth, express.json(), async (req: AuthedRequest, res) => {
   try {
     const { roomName, participantName } = req.body;
     if (!roomName || !participantName) {
       return res.status(400).json({ error: 'roomName and participantName are required' });
+    }
+    const uid = req.user?.uid;
+    if (!uid) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
     const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
       identity: participantName,
@@ -402,11 +434,8 @@ app.post('/api/livekit/token', express.json(), async (req, res) => {
     const token = await at.toJwt();
     res.json({ token });
   } catch (err: any) {
-    console.error('[LIVEKIT] Token error:', err.message, err.stack);
-    const msg = !process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET
-      ? 'LiveKit credentials not configured on server'
-      : err.message || 'Failed to generate token';
-    res.status(500).json({ error: msg });
+    console.error('[LIVEKIT] Token error:', err.message);
+    res.status(500).json({ error: 'Failed to generate token' });
   }
 });
 
@@ -434,14 +463,23 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sendMessage', async (data: { to: string; message: unknown }) => {
-    console.log('[SOCKET] ========== SEND MESSAGE ==========');
-    console.log('[SOCKET] From socket ID:', socket.id);
-    console.log('[SOCKET] Target user ID:', data.to);
-    console.log('[SOCKET] Message:', JSON.stringify(data.message, null, 2));
-    console.log('[SOCKET] Room exists:', io.sockets.adapter.rooms.has(`user:${data.to}`));
-    io.to(`user:${data.to}`).emit('newMessage', data.message);
-    console.log('[SOCKET] Emit complete for user:', data.to);
-    console.log('[SOCKET] =================================');
+    console.log('[SOCKET] Send message to:', data.to);
+
+    // Sanitize message content server-side to prevent XSS
+    let sanitized: any;
+    if (data.message && typeof data.message === 'object') {
+      sanitized = { ...data.message as any };
+      if (typeof sanitized.text === 'string') {
+        sanitized.text = sanitizeInput(sanitized.text);
+      }
+      if (typeof sanitized.senderName === 'string') {
+        sanitized.senderName = sanitizeInput(sanitized.senderName);
+      }
+    } else {
+      sanitized = sanitizeInput(String(data.message || ''));
+    }
+
+    io.to(`user:${data.to}`).emit('newMessage', sanitized);
 
     // Send email notification to recipient and admins
     try {
@@ -489,21 +527,21 @@ io.on('connection', (socket) => {
   });
 
   socket.on('typing', (data: { to: string; isTyping: boolean; senderName?: string; senderId?: string }) => {
-    console.log('[SOCKET] Typing:', data.isTyping, 'from:', data.senderName, 'senderId:', data.senderId, 'to:', data.to);
     io.to(`user:${data.to}`).emit('userTyping', {
       isTyping: data.isTyping,
-      senderName: data.senderName || 'User',
+      senderName: sanitizeInput(data.senderName || 'User'),
       senderId: data.senderId || ''
     });
   });
 
-  socket.on('callInvite', async (data: { to: string; callType: string; callerId?: string; callerName: string; sessionId: string }) => {
+  socket.on('callInvite', async (data: { to: string; callType: string; callerId?: string; callerName: string; sessionId: string; meetLink?: string }) => {
     console.log('[SOCKET] Call invite from:', data.callerName, 'type:', data.callType, 'to:', data.to);
     io.to(`user:${data.to}`).emit('incomingCall', {
       callType: data.callType,
       callerId: data.callerId,
       callerName: data.callerName,
       sessionId: data.sessionId,
+      meetLink: data.meetLink,
     });
     
     // Send call notification emails
