@@ -292,7 +292,7 @@ export function useWebRTC({
       pc.onicecandidate = (event) => {
         if (event.candidate && !endedRef.current) {
           iceCandidateCount++;
-          if (iceCandidateCount === 1) console.log('[WEBRTC] pc.onicecandidate: first candidate');
+          if (iceCandidateCount === 1) console.log('[WEBRTC] pc.onicecandidate: first candidate type:', event.candidate.type, 'address:', event.candidate.address);
           socket!.emit('webrtc:ice-candidate', {
             to: targetUserId,
             candidate: event.candidate.toJSON(),
