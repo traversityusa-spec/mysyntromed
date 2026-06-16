@@ -9,7 +9,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, userService, notificationService, typingService, notificationSoundService, groupChatService, type Message, type GroupInfo, type GroupMessage, API_BASE_URL } from '@/lib/firestore';
 import { presenceService } from '@/lib/presence';
-import { initSocket, emitMessage, emitTyping } from '@/lib/socket';
+import { initSocket, emitMessage, emitTyping, getSocket } from '@/lib/socket';
 
 type ConversationPreview = {
   id: string;
@@ -1051,20 +1051,28 @@ const Messages = () => {
                         const gId = groupIdFromConversation(selectedConversation);
                         const group = groups.find(g => g.id === gId);
                         if (!group || !user) return;
+                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+                        const targetId = group.participantIds.find(id => id !== user.uid);
+                        if (!targetId) { alert('No other participants to call'); return; }
+                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
+                        window.dispatchEvent(new CustomEvent('call:start', {
+                          detail: { sessionId: roomCode, callType: 'voice', targetUserId: targetId, callerName },
+                        }));
+                        const socket = getSocket();
+                        if (socket?.connected) {
+                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode });
+                        }
                         try {
                           const token = await user.getIdToken();
                           await fetch(`${API_BASE_URL}/api/notify/create`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                             body: JSON.stringify({
-                              type: 'system',
-                              recipientIds: group.participantIds.filter(id => id !== user.uid),
-                              title: `Voice Call`,
-                              message: `${sessionUser?.displayName || user.email} started a voice call in ${group.name}`,
+                              type: 'call', recipientIds: group.participantIds.filter(id => id !== user.uid && id !== targetId),
+                              title: `Voice Call`, message: `${callerName} started a voice call in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice' },
                             }),
                           });
-                          alert(`Voice call initiated in ${group.name}. Participants will be notified.`);
-                        } catch { alert('Failed to start call'); }
+                        } catch {}
                       }}
                       className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
                       title="Voice call group"
@@ -1076,20 +1084,28 @@ const Messages = () => {
                         const gId = groupIdFromConversation(selectedConversation);
                         const group = groups.find(g => g.id === gId);
                         if (!group || !user) return;
+                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+                        const targetId = group.participantIds.find(id => id !== user.uid);
+                        if (!targetId) { alert('No other participants to call'); return; }
+                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
+                        window.dispatchEvent(new CustomEvent('call:start', {
+                          detail: { sessionId: roomCode, callType: 'video', targetUserId: targetId, callerName },
+                        }));
+                        const socket = getSocket();
+                        if (socket?.connected) {
+                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode });
+                        }
                         try {
                           const token = await user.getIdToken();
                           await fetch(`${API_BASE_URL}/api/notify/create`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                             body: JSON.stringify({
-                              type: 'system',
-                              recipientIds: group.participantIds.filter(id => id !== user.uid),
-                              title: `Video Call`,
-                              message: `${sessionUser?.displayName || user.email} started a video call in ${group.name}`,
+                              type: 'call', recipientIds: group.participantIds.filter(id => id !== user.uid && id !== targetId),
+                              title: `Video Call`, message: `${callerName} started a video call in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video' },
                             }),
                           });
-                          alert(`Video call initiated in ${group.name}. Participants will be notified.`);
-                        } catch { alert('Failed to start call'); }
+                        } catch {}
                       }}
                       className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
                       title="Video call group"

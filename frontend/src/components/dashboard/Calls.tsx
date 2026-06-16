@@ -12,7 +12,6 @@ type ScheduledCall = {
   specialist: string;
   date: string;
   time: string;
-  meetLink: string;
   status: 'upcoming' | 'completed' | 'cancelled';
 };
 
@@ -77,7 +76,6 @@ const Calls = () => {
             specialist: data.specialist || '',
             date: data.date || '',
             time: data.time || '',
-            meetLink: data.meetLink || '',
             status: data.status || 'upcoming',
           };
         });
@@ -131,7 +129,6 @@ const Calls = () => {
       specialist: participantNames,
       date: formattedDate,
       time: formattedTime,
-      meetLink: '',
       status: 'upcoming',
     };
     setUpcomingCalls(prev => [...prev, newCall]);
@@ -147,7 +144,6 @@ const Calls = () => {
         participantIds: allParticipants,
         date: formattedDate,
         time: formattedTime,
-        meetLink: '',
         status: 'upcoming',
         createdAt: serverTimestamp(),
       });
