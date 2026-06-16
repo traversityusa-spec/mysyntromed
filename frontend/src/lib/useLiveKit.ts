@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Room, RoomEvent, RemoteTrack } from 'livekit-client';
+import { Room, RoomEvent, RemoteTrack, Track } from 'livekit-client';
 import { API_BASE_URL } from './firestore';
 import { getSocket } from './socket';
 
@@ -57,14 +57,12 @@ export function useLiveKit({
         const room = new Room({
           adaptiveStream: true,
           dynacast: true,
-          videoCaptureDefaults: {
-            resolution: { width: 1280, height: 720 },
-          },
         });
         roomRef.current = room;
 
         room.on(RoomEvent.TrackSubscribed, (_track) => {
           const track = _track as RemoteTrack;
+          console.log('[LIVEKIT] Track subscribed:', track.kind, 'from:', track.sid);
           if (!remoteStreamRef.current) {
             remoteStreamRef.current = new MediaStream();
           }
@@ -74,13 +72,21 @@ export function useLiveKit({
 
         room.on(RoomEvent.TrackUnsubscribed, (_track) => {
           const track = _track as RemoteTrack;
+          console.log('[LIVEKIT] Track unsubscribed:', track.kind);
           remoteStreamRef.current?.removeTrack(track.mediaStreamTrack);
           if (remoteStreamRef.current) {
             setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
           }
         });
 
+        room.on(RoomEvent.LocalTrackPublished, (pub) => {
+          if (pub.track) {
+            setLocalStream(new MediaStream([pub.track.mediaStreamTrack]));
+          }
+        });
+
         room.on(RoomEvent.Disconnected, () => {
+          console.log('[LIVEKIT] Disconnected');
           if (!cancelled) {
             setStatus('ended');
           }
@@ -93,16 +99,10 @@ export function useLiveKit({
         await room.connect(LIVEKIT_URL, token);
         if (cancelled) return;
 
-        const audioPubs = Array.from(room.localParticipant.audioTrackPublications.values());
-        const videoPubs = Array.from(room.localParticipant.videoTrackPublications.values());
-        const tracks: MediaStreamTrack[] = [];
-        for (const pub of [...audioPubs, ...videoPubs]) {
-          if (pub.track) {
-            tracks.push(pub.track.mediaStreamTrack);
-          }
-        }
-        if (tracks.length > 0) {
-          setLocalStream(new MediaStream(tracks));
+        console.log('[LIVEKIT] Connected, enabling mic');
+        await room.localParticipant.setMicrophoneEnabled(true);
+        if (callType === 'video') {
+          await room.localParticipant.setCameraEnabled(true);
         }
 
         setStatus('connected');
