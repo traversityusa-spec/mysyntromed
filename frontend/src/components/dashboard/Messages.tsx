@@ -1,5 +1,5 @@
 import { type FormEvent, useState, useEffect, useRef, type ChangeEvent, useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Paperclip, Phone, Plus, Search, Send, Shield, Video, X, MessageSquare, 
   Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image,
@@ -134,6 +134,7 @@ const Messages = () => {
   const groupIdFromConversation = (id: string | null) => id?.replace('group_', '') || '';
 
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const startUid = searchParams.get('start');
 
   const chatEnabled = sessionUser?.role !== 'client' || !!sessionUser?.assignedSpecialistId;
@@ -1244,17 +1245,20 @@ const Messages = () => {
                             onClick={async () => {
                               setChatMenuOpen(false);
                               if (!selectedConversation || !user) return;
-                              if (!confirm('Clear all messages in this conversation?')) return;
+                              if (!confirm('Delete all messages in this conversation?')) return;
                               try {
                                 const q = query(
                                   collection(db, 'messages'),
-                                  where('participants', 'array-contains', user.uid),
-                                  where('senderId', 'in', [user.uid, selectedConversation]),
-                                  where('receiverId', 'in', [user.uid, selectedConversation])
+                                  where('participants', 'array-contains', user.uid)
                                 );
                                 const snapshot = await getDocs(q);
                                 const batch = writeBatch(db);
-                                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                                snapshot.docs.forEach(doc => {
+                                  const data = doc.data();
+                                  if (data.participants?.includes(selectedConversation)) {
+                                    batch.delete(doc.ref);
+                                  }
+                                });
                                 await batch.commit();
                               } catch (err) { console.error('Failed to clear chat:', err); alert('Failed to clear chat'); }
                             }}
@@ -1264,7 +1268,7 @@ const Messages = () => {
                           </button>
                           <hr className="my-1 border-slate-100" />
                           <button
-                            onClick={() => { setChatMenuOpen(false); setSelectedConversation(null); }}
+                            onClick={() => { setChatMenuOpen(false); setSelectedConversation(null); navigate('/dashboard'); }}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
                           >
                             <X size={16} /> Close Chat
