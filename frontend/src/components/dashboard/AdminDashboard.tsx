@@ -4,7 +4,7 @@ import {
   RefreshCw, ClipboardList, AlertCircle, ChevronRight, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { UserProfile, Request, Message } from '@/lib/firestore';
 import { userService, messageService } from '@/lib/firestore';
@@ -153,7 +153,7 @@ export const AdminDashboard = () => {
         setMetrics({
           clients: users.filter(u => u.role === 'client').length,
           specialists: users.filter(u => u.role === 'specialist').length,
-          requests: reqSnap.size,
+          requests: reqSnap.docs.filter(d => d.data().status === 'pending' && !d.data().specialistId).length,
           calls: callsSnap.size,
         });
 
@@ -183,6 +183,16 @@ export const AdminDashboard = () => {
       }
     };
     fetchData();
+
+    const unsubRequests = onSnapshot(
+      query(collection(db, 'requests'), where('status', '==', 'pending')),
+      (snap) => {
+        const pending = snap.docs.filter(d => !d.data().specialistId).length;
+        setMetrics(prev => ({ ...prev, requests: pending }));
+      }
+    );
+
+    return () => unsubRequests();
   }, [sessionUser?.uid]);
 
   const statCards = [
