@@ -7,6 +7,9 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:80' },
+    { urls: 'turn:openrelay.metered.ca:443' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp' },
   ],
 };
 
@@ -240,14 +243,19 @@ export function useWebRTC({
         setStatus('connected');
       };
 
+      let iceCandidateCount = 0;
       pc.onicecandidate = (event) => {
         if (event.candidate && !endedRef.current) {
+          iceCandidateCount++;
+          if (iceCandidateCount === 1) console.log('[WEBRTC] pc.onicecandidate: first candidate');
           socket!.emit('webrtc:ice-candidate', {
             to: targetUserId,
             candidate: event.candidate.toJSON(),
             sessionId,
             from: localUserId,
           });
+        } else if (!event.candidate) {
+          console.log('[WEBRTC] pc.onicecandidate: gathering complete, total:', iceCandidateCount);
         }
       };
 

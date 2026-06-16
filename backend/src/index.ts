@@ -573,7 +573,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc:ice-candidate', (data: { to: string; candidate: unknown; sessionId: string; from: string }) => {
-    io.to(`user:${data.to}`).emit('webrtc:ice-candidate', {
+    console.log('[SOCKET] WebRTC ICE candidate for session:', data.sessionId, 'to:', data.to);
+    const targetRoom = `user:${data.to}`;
+    const roomExists = io.sockets.adapter.rooms.has(targetRoom);
+    console.log('[SOCKET] Room exists:', roomExists);
+    io.to(targetRoom).emit('webrtc:ice-candidate', {
       candidate: data.candidate,
       sessionId: data.sessionId,
       from: data.from,
