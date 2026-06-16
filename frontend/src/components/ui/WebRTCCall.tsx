@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { X, Phone, Video, Mic, MicOff, VideoOff, User } from 'lucide-react';
-import { useWebRTC, type CallStatus } from '@/lib/useWebRTC';
+import { useLiveKit, type CallStatus } from '@/lib/useLiveKit';
 
 type WebRTCCallProps = {
   sessionId: string;
@@ -38,7 +38,7 @@ const WebRTCCall = ({
     toggleMute,
     toggleVideo,
     endCall,
-  } = useWebRTC({
+  } = useLiveKit({
     sessionId,
     isCaller,
     targetUserId,

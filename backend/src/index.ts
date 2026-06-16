@@ -387,6 +387,26 @@ app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedReque
   }
 });
 
+app.post('/api/livekit/token', express.json(), async (req, res) => {
+  try {
+    const { roomName, participantName } = req.body;
+    if (!roomName || !participantName) {
+      return res.status(400).json({ error: 'roomName and participantName are required' });
+    }
+    const { AccessToken } = await import('livekit-server-sdk');
+    const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
+      identity: participantName,
+      name: participantName,
+    });
+    at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+    const token = await at.toJwt();
+    res.json({ token });
+  } catch (err: any) {
+    console.error('[LIVEKIT] Token error:', err.message);
+    res.status(500).json({ error: 'Failed to generate token' });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
@@ -552,45 +572,6 @@ io.on('connection', (socket) => {
     } catch (error: any) {
       console.error('[SOCKET] callEnded notification error:', error.message);
     }
-  });
-
-  socket.on('webrtc:offer', (data: { to: string; offer: unknown; sessionId: string; from: string }) => {
-    console.log('[SOCKET] WebRTC offer for session:', data.sessionId);
-    io.to(`user:${data.to}`).emit('webrtc:offer', {
-      offer: data.offer,
-      sessionId: data.sessionId,
-      from: data.from,
-    });
-  });
-
-  socket.on('webrtc:answer', (data: { to: string; answer: unknown; sessionId: string; from: string; firstCandidate?: unknown }) => {
-    console.log('[SOCKET] WebRTC answer for session:', data.sessionId, 'firstCandidate:', !!data.firstCandidate);
-    io.to(`user:${data.to}`).emit('webrtc:answer', {
-      answer: data.answer,
-      sessionId: data.sessionId,
-      from: data.from,
-      firstCandidate: data.firstCandidate,
-    });
-  });
-
-  socket.on('webrtc:ice-candidate', (data: { to: string; candidate: unknown; sessionId: string; from: string }) => {
-    console.log('[SOCKET] WebRTC ICE candidate for session:', data.sessionId, 'to:', data.to);
-    const targetRoom = `user:${data.to}`;
-    const roomExists = io.sockets.adapter.rooms.has(targetRoom);
-    console.log('[SOCKET] Room exists:', roomExists);
-    io.to(targetRoom).emit('webrtc:ice-candidate', {
-      candidate: data.candidate,
-      sessionId: data.sessionId,
-      from: data.from,
-    });
-  });
-
-  socket.on('webrtc:ready', (data: { to: string; sessionId: string; from: string }) => {
-    console.log('[SOCKET] WebRTC ready for session:', data.sessionId);
-    io.to(`user:${data.to}`).emit('webrtc:ready', {
-      sessionId: data.sessionId,
-      from: data.from,
-    });
   });
 
   socket.on('disconnect', () => {
