@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Room, RoomEvent, RemoteTrack, Track } from 'livekit-client';
 import { API_BASE_URL } from './firestore';
 import { getSocket } from './socket';
+import { auth } from './firebase';
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://mysyntromed-dn34bete.livekit.cloud';
 
@@ -37,9 +38,15 @@ export function useLiveKit({
 
     const init = async () => {
       try {
+        const firebaseToken = await auth.currentUser?.getIdToken();
+        if (!firebaseToken) throw new Error('Not authenticated');
+
         const res = await fetch(`${API_BASE_URL}/api/livekit/token`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${firebaseToken}`,
+          },
           body: JSON.stringify({
             roomName: `call-${sessionId}`,
             participantName: localDisplayName || localUserId,
@@ -49,7 +56,7 @@ export function useLiveKit({
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || 'Failed to get LiveKit token');
         }
-        const { token } = await res.json();
+        const { token: livekitToken } = await res.json();
         if (cancelled) return;
 
         setStatus('connecting');
@@ -96,7 +103,7 @@ export function useLiveKit({
           console.log('[LIVEKIT] Connection state:', state);
         });
 
-        await room.connect(LIVEKIT_URL, token);
+        await room.connect(LIVEKIT_URL, livekitToken);
         if (cancelled) return;
 
         console.log('[LIVEKIT] Connected, enabling mic');

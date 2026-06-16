@@ -50,6 +50,14 @@ const ensureListeners = (userId: string) => {
     window.dispatchEvent(new CustomEvent('socket:callInvite', { detail: data }));
   });
 
+  socket.on('callAnswered', () => {
+    window.dispatchEvent(new CustomEvent('socket:callAnswered'));
+  });
+
+  socket.on('callRejected', (data: { sessionId?: string }) => {
+    window.dispatchEvent(new CustomEvent('socket:callRejected', { detail: data }));
+  });
+
   if (socket.connected) {
     console.log('[SOCKET] Already connected, authenticating immediately:', userId);
     socket.emit('authenticate', userId);
@@ -104,6 +112,14 @@ export const emitCallInvite = (to: string, data: { callType: string; callerId: s
     return;
   }
   socket.emit('callInvite', { to, ...data });
+};
+
+export const emitCallAccepted = (to: string, sessionId: string): void => {
+  if (!socket?.connected) {
+    console.warn('[SOCKET] Cannot emit call accepted - not connected');
+    return;
+  }
+  socket.emit('callAccepted', { to });
 };
 
 export const emitTyping = (to: string, isTyping: boolean, senderName?: string): void => {

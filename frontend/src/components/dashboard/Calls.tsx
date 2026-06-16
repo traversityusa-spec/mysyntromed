@@ -195,23 +195,39 @@ const Calls = () => {
   };
 
   const startCallWithParticipants = async () => {
-    const trimmedMeetLink = meetLink.trim();
     if (selectedUsers.length === 0) {
       alert('Please select at least one participant');
       return;
     }
-    if (!trimmedMeetLink) {
-      alert('Please enter a Google Meet link');
-      return;
-    }
-    if (!trimmedMeetLink.includes('meet.google.com') && !trimmedMeetLink.includes('http')) {
-      alert('Please enter a valid URL (e.g. https://meet.google.com/abc-defg-hij)');
-      return;
-    }
 
-    const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
     const callerName = sessionUser?.displayName || 'User';
     const participantNames = selectedUsers.map(uid => availableUsers.find(u => u.uid === uid)?.displayName || uid).join(', ');
+
+    // Generate a Jitsi Meet link via the backend API
+    let callMeetLink = meetLink.trim();
+    if (!callMeetLink) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ roomName: `${callerName}-${Date.now()}` }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          callMeetLink = data.meetLink;
+        }
+      } catch (err) {
+        console.error('[CALLS] Failed to generate meet link:', err);
+        alert('Could not generate a meeting link. Please try again.');
+        return;
+      }
+    }
+
+    const roomCode = callMeetLink.split('/').pop() || `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
 
     // Notify administrators of active call
     notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
@@ -222,21 +238,21 @@ const Calls = () => {
       if (socket?.connected && user?.uid) {
         socket.emit('callInvite', {
           to: targetUserId,
-          callType: 'video',
+          callType: callType,
           callerId: user.uid,
           callerName,
           sessionId: roomCode,
-          meetLink: trimmedMeetLink,
+          meetLink: callMeetLink,
         });
       }
     });
 
     notifyViaApi(
       selectedUsers,
-      `Incoming Google Meet Call`,
-      `${callerName} is calling you via Google Meet. Click Join to connect.`,
+      `Incoming ${callType === 'video' ? 'Video' : 'Voice'} Call`,
+      `${callerName} is calling you. Click Join to connect.`,
       'call',
-      { sessionId: roomCode, callerName, callerId: user?.uid, callType: 'video', meetLink: trimmedMeetLink }
+      { sessionId: roomCode, callerName, callerId: user?.uid, callType, meetLink: callMeetLink }
     );
 
     // Save instant call to Firebase
@@ -249,7 +265,7 @@ const Calls = () => {
         date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
         status: 'upcoming',
-        meetLink: trimmedMeetLink,
+        meetLink: callMeetLink,
         createdAt: serverTimestamp(),
       });
     } catch (err) {
@@ -257,7 +273,7 @@ const Calls = () => {
     }
 
     // Open the meet link in a new tab for the caller
-    window.open(trimmedMeetLink, '_blank');
+    window.open(callMeetLink, '_blank');
 
     setShowParticipants(false);
     setSelectedUsers([]);
@@ -551,8 +567,13 @@ const Calls = () => {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
-                    Reschedule
+                  <button
+                    onClick={() => call.meetLink && window.open(call.meetLink, '_blank')}
+                    disabled={!call.meetLink}
+                    className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-2 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-50 transition"
+                  >
+                    <Video size={14} />
+                    Join
                   </button>
                   <button
                     onClick={() => handleCancel(call)}

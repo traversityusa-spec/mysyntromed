@@ -28,7 +28,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
 import WebRTCCall from '@/components/ui/WebRTCCall';
-import { initSocket } from '@/lib/socket';
+import { initSocket, emitCallAccepted } from '@/lib/socket';
 
 type NavItem = {
   label: string;
@@ -69,6 +69,7 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
     { label: 'Dashboard', icon: Home, to: '/portal/dashboard' },
     { label: 'Messages', icon: MessageSquare, to: '/portal/messages' },
     { label: 'Requests', icon: Workflow, to: '/portal/requests' },
+    { label: 'Calls', icon: Phone, to: '/portal/calls' },
     { label: 'Specialist', icon: User, to: '/portal/specialist' },
     { label: 'Activity', icon: ChartBar, to: '/portal/activity' },
     { label: 'Settings', icon: Settings, to: '/portal/settings' },
@@ -202,9 +203,25 @@ const role = sessionUser?.role || 'client';
     };
     window.addEventListener('socket:callInvite', handleCallInvite);
 
+    const handleCallAnswered = () => {
+      console.log('[CALL] Call was answered');
+      showToast('call', 'Call Connected', 'Your call has been connected');
+    };
+    window.addEventListener('socket:callAnswered', handleCallAnswered);
+
+    const handleCallRejected = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      console.log('[CALL] Call rejected/ended:', detail);
+      setActiveCall(null);
+      showToast('call', 'Call Ended', 'The call has ended');
+    };
+    window.addEventListener('socket:callRejected', handleCallRejected);
+
     return () => {
       window.removeEventListener('call:start', handleCallStart);
       window.removeEventListener('socket:callInvite', handleCallInvite);
+      window.removeEventListener('socket:callAnswered', handleCallAnswered);
+      window.removeEventListener('socket:callRejected', handleCallRejected);
       messageUnsub();
       notificationUnsub();
     };
@@ -465,6 +482,7 @@ const markAllRead = () => {
               ) : (
                 <button
                   onClick={() => {
+                    emitCallAccepted(incomingCall.callerId, incomingCall.sessionId);
                     setActiveCall({
                       sessionId: incomingCall.sessionId,
                       callType: incomingCall.callType,
