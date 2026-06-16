@@ -7,9 +7,6 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'turn:openrelay.metered.ca:80' },
-    { urls: 'turn:openrelay.metered.ca:443' },
-    { urls: 'turn:openrelay.metered.ca:443?transport=tcp' },
   ],
 };
 
