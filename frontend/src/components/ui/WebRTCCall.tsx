@@ -25,6 +25,8 @@ const WebRTCCall = ({
 }: WebRTCCallProps) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const {
     status,
@@ -52,10 +54,15 @@ const WebRTCCall = ({
   }, [localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
+    if (!remoteStream) return;
+    if (callType === 'video' && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(() => {});
+    } else if (callType === 'voice' && remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
     }
-  }, [remoteStream]);
+  }, [remoteStream, callType]);
 
   useEffect(() => {
     if (status === 'ended') {
@@ -68,10 +75,22 @@ const WebRTCCall = ({
     onLeave();
   };
 
+  const handleContainerClick = () => {
+    if (remoteVideoRef.current && remoteVideoRef.current.paused) {
+      remoteVideoRef.current.play().catch(() => {});
+    }
+    if (remoteAudioRef.current && remoteAudioRef.current.paused) {
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  };
+
   const isConnecting = status === 'idle' || status === 'connecting';
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black">
+    <div ref={containerRef} onClick={handleContainerClick} className="fixed inset-0 z-[100] flex flex-col bg-black">
+      {remoteStream && callType === 'voice' && (
+        <audio ref={remoteAudioRef} autoPlay playsInline />
+      )}
       <div className="flex items-center justify-between bg-slate-900/90 px-4 py-3">
         <div className="flex items-center gap-2 text-white">
           {callType === 'voice' ? (
@@ -91,7 +110,7 @@ const WebRTCCall = ({
           )}
         </div>
         <button
-          onClick={handleEndCall}
+          onClick={(e) => { e.stopPropagation(); handleEndCall(); }}
           className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition"
         >
           <X size={16} />
@@ -106,7 +125,7 @@ const WebRTCCall = ({
       )}
 
       <div className="relative flex-1 flex items-center justify-center bg-slate-950 p-4">
-        {remoteStream && (callType === 'video') ? (
+        {remoteStream && callType === 'video' ? (
           <video
             ref={remoteVideoRef}
             autoPlay
@@ -174,7 +193,7 @@ const WebRTCCall = ({
 
       <div className="flex items-center justify-center gap-4 bg-slate-900/90 px-4 py-5">
         <button
-          onClick={toggleMute}
+          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
           className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
             isMuted ? 'bg-red-600 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'
           }`}
@@ -185,7 +204,7 @@ const WebRTCCall = ({
 
         {callType === 'video' && (
           <button
-            onClick={toggleVideo}
+            onClick={(e) => { e.stopPropagation(); toggleVideo(); }}
             className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
               isVideoOff ? 'bg-red-600 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'
             }`}
@@ -196,7 +215,7 @@ const WebRTCCall = ({
         )}
 
         <button
-          onClick={handleEndCall}
+          onClick={(e) => { e.stopPropagation(); handleEndCall(); }}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700 transition shadow-lg"
           title="End call"
         >

@@ -41,16 +41,95 @@ export function useWebRTC({
   const connectingRef = useRef(false);
 
   useEffect(() => {
+    const socket = getSocket();
+    if (!socket?.connected) {
+      setConnectionError('Not connected to signaling server');
+      return;
+    }
+
     let cancelled = false;
     let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    let pendingOffer: RTCSessionDescriptionInit | null = null;
+    let pendingOfferFrom = '';
+    let earlyCandidates: RTCIceCandidateInit[] = [];
 
-    async function init() {
-      const socket = getSocket();
-      if (!socket?.connected) {
-        setConnectionError('Not connected to signaling server');
+    const handleOffer = async (data: { offer: RTCSessionDescriptionInit; sessionId: string; from: string }) => {
+      if (data.sessionId !== sessionId) return;
+      if (data.from !== targetUserId) return;
+      if (isCaller) return;
+
+      const pc = pcRef.current;
+      if (!pc) {
+        pendingOffer = data.offer;
+        pendingOfferFrom = data.from;
         return;
       }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('webrtc:answer', {
+          to: data.from,
+          answer: pc.localDescription!.toJSON(),
+          sessionId,
+          from: localUserId,
+        });
+        for (const c of candidatesQueue.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+        }
+        candidatesQueue.current = [];
+      } catch (err) {
+        console.error('[WEBRTC] handleOffer error:', err);
+      }
+    };
 
+    const handleAnswer = async (data: { answer: RTCSessionDescriptionInit; sessionId: string; from: string }) => {
+      if (data.sessionId !== sessionId) return;
+      if (data.from !== targetUserId) return;
+      if (!isCaller) return;
+
+      const pc = pcRef.current;
+      if (!pc) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        for (const c of candidatesQueue.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+        }
+        candidatesQueue.current = [];
+      } catch (err) {
+        console.error('[WEBRTC] handleAnswer error:', err);
+      }
+    };
+
+    const handleCandidate = async (data: { candidate: RTCIceCandidateInit; sessionId: string }) => {
+      if (data.sessionId !== sessionId) return;
+      const pc = pcRef.current;
+      if (!pc || !pc.remoteDescription?.type) {
+        earlyCandidates.push(data.candidate);
+        return;
+      }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (err) {
+        console.error('[WEBRTC] handleCandidate error:', err);
+      }
+    };
+
+    const handleCallEnded = () => {
+      if (!endedRef.current) {
+        setConnectionError('The other party ended the call');
+        connectingRef.current = false;
+        setStatus('ended');
+        pcRef.current?.close();
+      }
+    };
+
+    socket.on('webrtc:offer', handleOffer);
+    socket.on('webrtc:answer', handleAnswer);
+    socket.on('webrtc:ice-candidate', handleCandidate);
+    socket.on('callRejected', handleCallEnded);
+
+    async function setupCall() {
       let stream: MediaStream;
       try {
         const constraints: MediaStreamConstraints = {
@@ -91,7 +170,7 @@ export function useWebRTC({
 
       pc.onicecandidate = (event) => {
         if (event.candidate && !endedRef.current) {
-          socket.emit('webrtc:ice-candidate', {
+          socket!.emit('webrtc:ice-candidate', {
             to: targetUserId,
             candidate: event.candidate.toJSON(),
             sessionId,
@@ -129,79 +208,38 @@ export function useWebRTC({
         }
       }, 30000);
 
-      const handleOffer = async (data: { offer: RTCSessionDescriptionInit; sessionId: string; from: string }) => {
-        if (data.sessionId !== sessionId) return;
-        if (data.from !== targetUserId) return;
-        if (isCaller) return;
-
+      if (pendingOffer) {
         try {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          socket.emit('webrtc:answer', {
-            to: data.from,
+          socket!.emit('webrtc:answer', {
+            to: pendingOfferFrom,
             answer: pc.localDescription!.toJSON(),
             sessionId,
             from: localUserId,
           });
-          for (const c of candidatesQueue.current) {
-            await pc.addIceCandidate(new RTCIceCandidate(c));
-          }
-          candidatesQueue.current = [];
+          pendingOffer = null;
         } catch (err) {
-          console.error('[WEBRTC] handleOffer error:', err);
+          console.error('[WEBRTC] processing pending offer error:', err);
         }
-      };
+      }
 
-      const handleAnswer = async (data: { answer: RTCSessionDescriptionInit; sessionId: string; from: string }) => {
-        if (data.sessionId !== sessionId) return;
-        if (data.from !== targetUserId) return;
-        if (!isCaller) return;
-
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-          for (const c of candidatesQueue.current) {
-            await pc.addIceCandidate(new RTCIceCandidate(c));
-          }
-          candidatesQueue.current = [];
-        } catch (err) {
-          console.error('[WEBRTC] handleAnswer error:', err);
+      for (const c of earlyCandidates) {
+        if (pc.remoteDescription?.type) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+        } else {
+          candidatesQueue.current.push(c);
         }
-      };
-
-      const handleCandidate = async (data: { candidate: RTCIceCandidateInit; sessionId: string }) => {
-        if (data.sessionId !== sessionId) return;
-        try {
-          if (pc.remoteDescription?.type) {
-            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          } else {
-            candidatesQueue.current.push(data.candidate);
-          }
-        } catch (err) {
-          console.error('[WEBRTC] handleCandidate error:', err);
-        }
-      };
-
-      const handleCallEnded = (data: { sessionId?: string; to?: string }) => {
-        if (data.sessionId && data.sessionId !== sessionId) return;
-        if (!endedRef.current) {
-          setConnectionError('The other party ended the call');
-          setStatus('ended');
-          pc.close();
-        }
-      };
-
-      socket.on('webrtc:offer', handleOffer);
-      socket.on('webrtc:answer', handleAnswer);
-      socket.on('webrtc:ice-candidate', handleCandidate);
-      socket.on('callRejected', handleCallEnded);
+      }
+      earlyCandidates = [];
 
       if (isCaller) {
         try {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           if (!cancelled) {
-            socket.emit('webrtc:offer', {
+            socket!.emit('webrtc:offer', {
               to: targetUserId,
               offer: pc.localDescription!.toJSON(),
               sessionId,
@@ -217,19 +255,16 @@ export function useWebRTC({
       }
     }
 
-    init();
+    setupCall();
 
     return () => {
       cancelled = true;
       endedRef.current = true;
       if (connectionTimeout) clearTimeout(connectionTimeout);
-      const socket = getSocket();
-      if (socket) {
-        socket.off('webrtc:offer');
-        socket.off('webrtc:answer');
-        socket.off('webrtc:ice-candidate');
-        socket.off('callRejected');
-      }
+      socket.off('webrtc:offer', handleOffer);
+      socket.off('webrtc:answer', handleAnswer);
+      socket.off('webrtc:ice-candidate', handleCandidate);
+      socket.off('callRejected', handleCallEnded);
       pcRef.current?.close();
       pcRef.current = null;
       localStreamRef.current?.getTracks().forEach(t => t.stop());
