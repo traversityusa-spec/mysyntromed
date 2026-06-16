@@ -57,10 +57,10 @@ const WebRTCCall = ({
     if (!remoteStream) return;
     if (callType === 'video' && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(() => {});
+      remoteVideoRef.current.play().catch((e) => console.warn('[MEDIA] remote video play failed:', e));
     } else if (callType === 'voice' && remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.play().catch(() => {});
+      remoteAudioRef.current.play().catch((e) => console.warn('[MEDIA] remote audio play failed:', e));
     }
   }, [remoteStream, callType]);
 
@@ -77,10 +77,10 @@ const WebRTCCall = ({
 
   const handleContainerClick = () => {
     if (remoteVideoRef.current && remoteVideoRef.current.paused) {
-      remoteVideoRef.current.play().catch(() => {});
+      remoteVideoRef.current.play().catch((e) => console.warn('[MEDIA] click-play video failed:', e));
     }
     if (remoteAudioRef.current && remoteAudioRef.current.paused) {
-      remoteAudioRef.current.play().catch(() => {});
+      remoteAudioRef.current.play().catch((e) => console.warn('[MEDIA] click-play audio failed:', e));
     }
   };
 
