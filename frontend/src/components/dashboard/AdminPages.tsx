@@ -1550,6 +1550,7 @@ const formatDuration = (ms: number): string => {
 };
 
 type HealthLevel = 'good' | 'warning' | 'critical';
+type Trend = 'up' | 'down' | 'stable';
 
 const healthConfig: Record<HealthLevel, { bg: string; border: string; text: string; icon: string; label: string }> = {
   good: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', icon: '🟢', label: 'Good' },
@@ -1557,10 +1558,25 @@ const healthConfig: Record<HealthLevel, { bg: string; border: string; text: stri
   critical: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', icon: '🔴', label: 'Critical' },
 };
 
+const trendIcon: Record<Trend, { icon: string; color: string }> = {
+  up: { icon: '↑', color: 'text-emerald-600' },
+  down: { icon: '↓', color: 'text-red-500' },
+  stable: { icon: '→', color: 'text-slate-400' },
+};
+
+const getTrend = (current: number, previous: number, higherIsBetter: boolean): Trend => {
+  if (previous === 0) return current > 0 ? 'up' : 'stable';
+  const pct = ((current - previous) / previous) * 100;
+  if (Math.abs(pct) < 5) return 'stable';
+  if (higherIsBetter) return pct > 0 ? 'up' : 'down';
+  return pct > 0 ? 'down' : 'up';
+};
+
 export const AdminAnalytics = () => {
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [specialists, setSpecialists] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
+  const [avgResponseTimeMs, setAvgResponseTimeMs] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
 
@@ -1612,9 +1628,57 @@ export const AdminAnalytics = () => {
     return () => { unsubUsers(); unsubReqs(); };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const calcResponseTime = async () => {
+      try {
+        const snap = await getDocs(
+          query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(2000))
+        );
+        if (cancelled) return;
+
+        const raw = snap.docs.map(d => ({
+          ...d.data(),
+          id: d.id,
+          createdAt: d.data().createdAt?.toDate?.() || new Date(),
+        }));
+
+        const convs = new Map<string, { role: string; time: number }[]>();
+        for (const m of raw) {
+          if (m.senderRole === 'admin' || String(m.senderId).startsWith('system_')) continue;
+          if (m.senderRole !== 'client' && m.senderRole !== 'specialist') continue;
+          const key = [m.senderId, m.receiverId].sort().join('_');
+          if (!convs.has(key)) convs.set(key, []);
+          convs.get(key)!.push({ role: m.senderRole, time: m.createdAt.getTime() });
+        }
+
+        const diffs: number[] = [];
+        for (const msgs of convs.values()) {
+          msgs.sort((a, b) => a.time - b.time);
+          for (let i = 0; i < msgs.length - 1; i++) {
+            if (msgs[i].role === 'client' && msgs[i + 1].role === 'specialist') {
+              const diff = msgs[i + 1].time - msgs[i].time;
+              if (diff > 5000 && diff < 48 * 60 * 60 * 1000) diffs.push(diff);
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setAvgResponseTimeMs(diffs.length > 0 ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null);
+        }
+      } catch (e) {
+        console.error('[ANALYTICS] Response time calc error:', e);
+      }
+    };
+    calcResponseTime();
+    return () => { cancelled = true; };
+  }, []);
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
   const activeUsersToday = clients.filter(c => {
     if (!c.lastLoginAt) return false;
@@ -1622,7 +1686,24 @@ export const AdminAnalytics = () => {
     return last >= today;
   }).length;
 
+  const activeUsersYesterday = clients.filter(c => {
+    if (!c.lastLoginAt) return false;
+    const last = c.lastLoginAt instanceof Date ? c.lastLoginAt : new Date(c.lastLoginAt);
+    return last >= yesterday && last < today;
+  }).length;
+
   const newUsersThisWeek = clients.filter(c => c.createdAt && c.createdAt > weekAgo).length;
+  const newUsersLastWeek = clients.filter(c => c.createdAt && c.createdAt > twoWeeksAgo && c.createdAt <= weekAgo).length;
+
+  const recentRequests = requests.filter(r => r.submittedAt > weekAgo);
+  const oldRequests = requests.filter(r => r.submittedAt > twoWeeksAgo && r.submittedAt <= weekAgo);
+  const recentCompleted = recentRequests.filter(r => r.status === 'completed').length;
+  const oldCompleted = oldRequests.filter(r => r.status === 'completed').length;
+  const recentTotal = recentRequests.length;
+  const oldTotal = oldRequests.length;
+  const recentRate = recentTotal > 0 ? Math.round((recentCompleted / recentTotal) * 100) : 0;
+  const oldRate = oldTotal > 0 ? Math.round((oldCompleted / oldTotal) * 100) : 0;
+
   const pendingRequests = requests.filter(r => r.status === 'pending' || r.status === 'in_progress').length;
   const completedRequests = requests.filter(r => r.status === 'completed').length;
   const totalRequests = requests.length;
@@ -1630,27 +1711,15 @@ export const AdminAnalytics = () => {
   const clientSpecialistRatio = specialists.length > 0 ? clients.length / specialists.length : 0;
   const engagementRate = clients.length > 0 ? Math.round((activeUsersToday / clients.length) * 100) : 0;
 
-  const getRequestResponseTime = (req: Request): number | null => {
-    if (req.assignedAt) return req.assignedAt.getTime() - req.submittedAt.getTime();
-    if (req.statusHistory && req.statusHistory.length > 1) {
-      const firstChange = req.statusHistory[1];
-      if (firstChange?.timestamp) {
-        const changeTime = firstChange.timestamp instanceof Date ? firstChange.timestamp : new Date(firstChange.timestamp);
-        return changeTime.getTime() - req.submittedAt.getTime();
-      }
-    }
-    return null;
-  };
-
-  const allResponseTimes = requests.map(getRequestResponseTime).filter(Boolean) as number[];
-  const avgResponseTimeMs = allResponseTimes.length > 0
-    ? allResponseTimes.reduce((a, b) => a + b, 0) / allResponseTimes.length
-    : null;
-  const avgResponseTimeFormatted = avgResponseTimeMs ? formatDuration(avgResponseTimeMs) : 'N/A';
+  const engagementTrend = getTrend(activeUsersToday, activeUsersYesterday || 1, true);
+  const completionTrend = getTrend(recentRate, oldRate || 1, true);
+  const capacityTrend = getTrend(clientSpecialistRatio, specialists.length > 0 ? (clients.length - newUsersThisWeek) / Math.max(specialists.length, 1) : 0, false);
 
   const engagementHealth: HealthLevel = engagementRate >= 30 ? 'good' : engagementRate >= 10 ? 'warning' : 'critical';
   const completionHealth: HealthLevel = completionRate >= 70 ? 'good' : completionRate >= 40 ? 'warning' : 'critical';
   const capacityHealth: HealthLevel = clientSpecialistRatio <= 5 ? 'good' : clientSpecialistRatio <= 8 ? 'warning' : 'critical';
+
+  const avgResponseTimeFormatted = avgResponseTimeMs ? formatDuration(avgResponseTimeMs) : 'N/A';
 
   if (loading) {
     return (
@@ -1662,25 +1731,34 @@ export const AdminAnalytics = () => {
 
   const healthCards = [
     {
+      key: 'Engagement',
       title: 'Engagement',
       health: engagementHealth,
       value: `${engagementRate}%`,
       detail: `${activeUsersToday} of ${clients.length} clients active today`,
       tip: 'Aim for 30%+ daily active rate',
+      trend: engagementTrend,
+      trendLabel: engagementTrend === 'up' ? 'up from yesterday' : engagementTrend === 'down' ? 'down from yesterday' : 'same as yesterday',
     },
     {
+      key: 'Completion',
       title: 'Request Completion',
       health: completionHealth,
       value: `${completionRate}%`,
       detail: `${completedRequests} of ${totalRequests} requests completed`,
       tip: 'Aim for 70%+ completion rate',
+      trend: completionTrend,
+      trendLabel: completionTrend === 'up' ? 'up from last week' : completionTrend === 'down' ? 'down from last week' : 'same as last week',
     },
     {
+      key: 'Capacity',
       title: 'Specialist Capacity',
       health: capacityHealth,
       value: `${clientSpecialistRatio > 0 ? clientSpecialistRatio.toFixed(1) : 0}:1`,
       detail: `${clients.length} clients to ${specialists.length} specialists`,
       tip: 'Aim for 5:1 ratio or lower',
+      trend: capacityTrend,
+      trendLabel: capacityTrend === 'up' ? 'ratio increasing' : capacityTrend === 'down' ? 'ratio decreasing' : 'stable',
     },
   ];
 
@@ -1722,8 +1800,9 @@ export const AdminAnalytics = () => {
       <div className="grid gap-4 md:grid-cols-3">
         {healthCards.map(card => {
           const cfg = healthConfig[card.health];
+          const tIcon = trendIcon[card.trend];
           return (
-            <div key={card.title} className={`rounded-xl border-2 ${cfg.border} ${cfg.bg} p-5 transition hover:shadow-md`}>
+            <div key={card.key} className={`rounded-xl border-2 ${cfg.border} ${cfg.bg} p-5 transition hover:shadow-md`}>
               <div className="flex items-start justify-between mb-2">
                 <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>
                   {cfg.icon} {cfg.label}
@@ -1732,7 +1811,11 @@ export const AdminAnalytics = () => {
               </div>
               <p className="text-sm font-semibold text-navy-900">{card.title}</p>
               <p className="text-xs text-slate-500 mt-1">{card.detail}</p>
-              <p className="text-[10px] text-slate-400 mt-2">{card.tip}</p>
+              <div className="flex items-center gap-1 mt-2">
+                <span className={`text-sm font-bold ${tIcon.color}`}>{tIcon.icon}</span>
+                <span className="text-[10px] text-slate-400">{card.trendLabel}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">{card.tip}</p>
             </div>
           );
         })}
@@ -1742,22 +1825,27 @@ export const AdminAnalytics = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Total Clients</p>
           <p className="mt-1 text-2xl font-bold text-navy-900">{clients.length}</p>
+          <p className="text-[10px] text-slate-400 mt-1">{newUsersThisWeek} new this week</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Specialists</p>
           <p className="mt-1 text-2xl font-bold text-navy-900">{specialists.length}</p>
+          <p className="text-[10px] text-slate-400 mt-1">On the platform</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Pending</p>
           <p className={`mt-1 text-2xl font-bold ${pendingRequests > 10 ? 'text-amber-600' : 'text-navy-900'}`}>{pendingRequests}</p>
+          <p className="text-[10px] text-slate-400 mt-1">Awaiting completion</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Completed</p>
           <p className="mt-1 text-2xl font-bold text-emerald-600">{completedRequests}</p>
+          <p className="text-[10px] text-slate-400 mt-1">{completionRate}% rate</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Avg Response</p>
           <p className="mt-1 text-2xl font-bold text-purple-600">{avgResponseTimeFormatted}</p>
+          <p className="text-[10px] text-slate-400 mt-1">From message timestamps</p>
         </div>
       </div>
 
@@ -1850,7 +1938,7 @@ export const AdminAnalytics = () => {
           {healthCards.map(card => {
             const cfg = healthConfig[card.health];
             return (
-              <div key={card.title} className={`rounded-lg p-4 ${cfg.bg} border ${cfg.border}`}>
+              <div key={card.key} className={`rounded-lg p-4 ${cfg.bg} border ${cfg.border}`}>
                 <p className={`font-medium ${cfg.text}`}>{card.title}</p>
                 <p className={`text-sm mt-1 ${cfg.text}`}>{card.detail}</p>
               </div>
