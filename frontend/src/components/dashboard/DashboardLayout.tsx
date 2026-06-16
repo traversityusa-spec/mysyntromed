@@ -276,8 +276,9 @@ const markAllRead = () => {
     const Icon = item.icon;
 
     const handleClick = () => {
-      if (item.to.includes('conversations') && pendingAssignments > 0) {
-        setPendingAssignments(0);
+      if (item.to.includes('conversations')) {
+        if (pendingAssignments > 0) setPendingAssignments(0);
+        if (user?.uid) notificationService.markAllRead(user.uid).catch(() => {});
       }
     };
 
@@ -367,7 +368,12 @@ const markAllRead = () => {
           <div className="flex items-center gap-2">
             <div className="relative">
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications && user?.uid) {
+                    notificationService.markAllRead(user.uid).catch(() => {});
+                  }
+                }}
                 className="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100"
               >
                 <Bell size={20} />
