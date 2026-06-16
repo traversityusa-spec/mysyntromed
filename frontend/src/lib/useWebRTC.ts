@@ -52,6 +52,16 @@ export function useWebRTC({
     let pendingOffer: RTCSessionDescriptionInit | null = null;
     let pendingOfferFrom = '';
     let earlyCandidates: RTCIceCandidateInit[] = [];
+    let readyReceived = false;
+
+    const handleReady = (data: { sessionId: string; from: string }) => {
+      if (data.sessionId !== sessionId) return;
+      if (!isCaller) return;
+      readyReceived = true;
+      if (pcRef.current) {
+        createAndSendOffer();
+      }
+    };
 
     const handleOffer = async (data: { offer: RTCSessionDescriptionInit; sessionId: string; from: string }) => {
       if (data.sessionId !== sessionId) return;
@@ -68,7 +78,7 @@ export function useWebRTC({
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit('webrtc:answer', {
+        socket!.emit('webrtc:answer', {
           to: data.from,
           answer: pc.localDescription!.toJSON(),
           sessionId,
@@ -127,7 +137,30 @@ export function useWebRTC({
     socket.on('webrtc:offer', handleOffer);
     socket.on('webrtc:answer', handleAnswer);
     socket.on('webrtc:ice-candidate', handleCandidate);
+    socket.on('webrtc:ready', handleReady);
     socket.on('callRejected', handleCallEnded);
+
+    async function createAndSendOffer() {
+      const pc = pcRef.current;
+      if (!pc || cancelled) return;
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        if (!cancelled) {
+          socket!.emit('webrtc:offer', {
+            to: targetUserId,
+            offer: pc.localDescription!.toJSON(),
+            sessionId,
+            from: localUserId,
+          });
+        }
+      } catch (err) {
+        console.error('[WEBRTC] createOffer error:', err);
+        if (!cancelled) {
+          setConnectionError('Failed to start call');
+        }
+      }
+    }
 
     async function setupCall() {
       let stream: MediaStream;
@@ -206,7 +239,7 @@ export function useWebRTC({
           setConnectionError('Call timed out. The other party may be unavailable.');
           setStatus('ended');
         }
-      }, 30000);
+      }, 45000);
 
       if (pendingOffer) {
         try {
@@ -234,24 +267,16 @@ export function useWebRTC({
       }
       earlyCandidates = [];
 
-      if (isCaller) {
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          if (!cancelled) {
-            socket!.emit('webrtc:offer', {
-              to: targetUserId,
-              offer: pc.localDescription!.toJSON(),
-              sessionId,
-              from: localUserId,
-            });
-          }
-        } catch (err) {
-          console.error('[WEBRTC] createOffer error:', err);
-          if (!cancelled) {
-            setConnectionError('Failed to start call');
-          }
-        }
+      if (!isCaller) {
+        socket!.emit('webrtc:ready', {
+          to: targetUserId,
+          sessionId,
+          from: localUserId,
+        });
+      }
+
+      if (isCaller && readyReceived) {
+        await createAndSendOffer();
       }
     }
 
@@ -264,6 +289,7 @@ export function useWebRTC({
       socket.off('webrtc:offer', handleOffer);
       socket.off('webrtc:answer', handleAnswer);
       socket.off('webrtc:ice-candidate', handleCandidate);
+      socket.off('webrtc:ready', handleReady);
       socket.off('callRejected', handleCallEnded);
       pcRef.current?.close();
       pcRef.current = null;

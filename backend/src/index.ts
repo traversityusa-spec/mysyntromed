@@ -580,6 +580,14 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('webrtc:ready', (data: { to: string; sessionId: string; from: string }) => {
+    console.log('[SOCKET] WebRTC ready for session:', data.sessionId);
+    io.to(`user:${data.to}`).emit('webrtc:ready', {
+      sessionId: data.sessionId,
+      from: data.from,
+    });
+  });
+
   socket.on('disconnect', () => {
     for (const [userId, sockId] of userSockets.entries()) {
       if (sockId === socket.id) {
