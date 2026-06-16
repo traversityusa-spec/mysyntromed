@@ -563,12 +563,13 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('webrtc:answer', (data: { to: string; answer: unknown; sessionId: string; from: string }) => {
-    console.log('[SOCKET] WebRTC answer for session:', data.sessionId);
+  socket.on('webrtc:answer', (data: { to: string; answer: unknown; sessionId: string; from: string; firstCandidate?: unknown }) => {
+    console.log('[SOCKET] WebRTC answer for session:', data.sessionId, 'firstCandidate:', !!data.firstCandidate);
     io.to(`user:${data.to}`).emit('webrtc:answer', {
       answer: data.answer,
       sessionId: data.sessionId,
       from: data.from,
+      firstCandidate: data.firstCandidate,
     });
   });
 

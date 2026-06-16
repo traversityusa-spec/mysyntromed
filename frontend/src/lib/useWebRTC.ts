@@ -84,12 +84,39 @@ export function useWebRTC({
         console.log('[WEBRTC] handleOffer: remote description set, creating answer');
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        console.log('[WEBRTC] handleOffer: answer created and set locally, emitting webrtc:answer');
+        console.log('[WEBRTC] handleOffer: answer created and set locally, waiting for first ICE candidate');
+
+        // Wait for first ICE candidate so we can inline it with the answer
+        // (prevents caller ICE failing before any candidates arrive)
+        let firstCandidate: RTCIceCandidateInit | null = null;
+        const origIceHandler = pc.onicecandidate;
+        if (pc.iceGatheringState === 'new' || pc.iceGatheringState === 'gathering') {
+          firstCandidate = await new Promise(resolve => {
+            const interceptor = (event: RTCPeerConnectionIceEvent) => {
+              if (event.candidate) {
+                pc.onicecandidate = origIceHandler;
+                resolve(event.candidate.toJSON());
+              } else if (!event.candidate) {
+                resolve(null);
+              }
+            };
+            pc.onicecandidate = interceptor;
+            setTimeout(() => {
+              if (pc.onicecandidate === interceptor) {
+                pc.onicecandidate = origIceHandler;
+                resolve(null);
+              }
+            }, 500);
+          });
+        }
+
+        console.log('[WEBRTC] handleOffer: emitting webrtc:answer, firstCandidate:', !!firstCandidate);
         socket!.emit('webrtc:answer', {
           to: data.from,
           answer: pc.localDescription!.toJSON(),
           sessionId,
           from: localUserId,
+          firstCandidate,
         });
         console.log('[WEBRTC] handleOffer: flushed candidatesQueue, count:', candidatesQueue.current.length);
         for (const c of candidatesQueue.current) {
@@ -101,7 +128,7 @@ export function useWebRTC({
       }
     };
 
-    const handleAnswer = async (data: { answer: RTCSessionDescriptionInit; sessionId: string; from: string }) => {
+    const handleAnswer = async (data: { answer: RTCSessionDescriptionInit; sessionId: string; from: string; firstCandidate?: RTCIceCandidateInit | null }) => {
       console.log('[WEBRTC] handleAnswer called', 'from:', data.from, 'sessionId:', data.sessionId, 'targetUserId:', targetUserId, 'isCaller:', isCaller);
       if (data.sessionId !== sessionId) return;
       if (data.from !== targetUserId) return;
@@ -115,6 +142,12 @@ export function useWebRTC({
       console.log('[WEBRTC] handleAnswer: setting remote description');
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        if (data.firstCandidate) {
+          console.log('[WEBRTC] handleAnswer: adding firstCandidate inline');
+          try { await pc.addIceCandidate(new RTCIceCandidate(data.firstCandidate)); } catch (e) {
+            console.warn('[WEBRTC] handleAnswer: firstCandidate add failed:', e);
+          }
+        }
         console.log('[WEBRTC] handleAnswer: remote description set, flushing candidatesQueue, count:', candidatesQueue.current.length);
         for (const c of candidatesQueue.current) {
           try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
@@ -293,11 +326,31 @@ export function useWebRTC({
           await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          let firstCandidate: RTCIceCandidateInit | null = null;
+          const origHandler = pc.onicecandidate;
+          if (pc.iceGatheringState === 'new' || pc.iceGatheringState === 'gathering') {
+            firstCandidate = await new Promise(resolve => {
+              const interceptor = (event: RTCPeerConnectionIceEvent) => {
+                if (event.candidate) {
+                  pc.onicecandidate = origHandler;
+                  resolve(event.candidate.toJSON());
+                }
+              };
+              pc.onicecandidate = interceptor;
+              setTimeout(() => {
+                if (pc.onicecandidate === interceptor) {
+                  pc.onicecandidate = origHandler;
+                  resolve(null);
+                }
+              }, 500);
+            });
+          }
           socket!.emit('webrtc:answer', {
             to: pendingOfferFrom,
             answer: pc.localDescription!.toJSON(),
             sessionId,
             from: localUserId,
+            firstCandidate,
           });
           pendingOffer = null;
         } catch (err) {
