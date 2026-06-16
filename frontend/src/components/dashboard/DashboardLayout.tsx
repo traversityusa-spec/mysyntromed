@@ -27,7 +27,7 @@ import { messageService, notificationService, type AppNotification } from '@/lib
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
-import JitsiCall from '@/components/ui/JitsiCall';
+import WebRTCCall from '@/components/ui/WebRTCCall';
 import { initSocket } from '@/lib/socket';
 
 type NavItem = {
@@ -118,8 +118,8 @@ const role = sessionUser?.role || 'client';
   };
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [incomingCall, setIncomingCall] = useState<{ callerName: string; meetingLink: string; callerId: string; callType: string } | null>(null);
-  const [activeCall, setActiveCall] = useState<{ roomName: string; meetingLink: string; callType: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ callerName: string; sessionId: string; callerId: string; callType: string } | null>(null);
+  const [activeCall, setActiveCall] = useState<{ sessionId: string; callType: string; isCaller: boolean; targetUserId: string; callerName: string } | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -128,8 +128,14 @@ const role = sessionUser?.role || 'client';
 
     const handleCallStart = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (!detail?.meetingLink) return;
-      setActiveCall({ roomName: detail.roomName || '', meetingLink: detail.meetingLink, callType: detail.callType || 'video' });
+      if (!detail?.sessionId) return;
+      setActiveCall({
+        sessionId: detail.sessionId,
+        callType: detail.callType || 'video',
+        isCaller: true,
+        targetUserId: detail.targetUserId || '',
+        callerName: detail.callerName || 'User',
+      });
     };
     window.addEventListener('call:start', handleCallStart);
 
@@ -159,8 +165,8 @@ const role = sessionUser?.role || 'client';
       const newNotifs = items.filter(n => !n.read);
       if (newNotifs.length > 0) {
         const latest = newNotifs[0];
-        if (latest.type === 'call' && latest.data?.meetingLink) {
-          setIncomingCall({ callerName: latest.data.callerName as string || 'Someone', meetingLink: latest.data.meetingLink as string, callerId: (latest.data.callerId as string) || '', callType: (latest.data.callType as string) || 'video' });
+        if (latest.type === 'call' && latest.data?.sessionId) {
+          setIncomingCall({ callerName: latest.data.callerName as string || 'Someone', sessionId: latest.data.sessionId as string, callerId: (latest.data.callerId as string) || '', callType: (latest.data.callType as string) || 'video' });
           if (soundEnabled) {
             playNotificationSound();
             setTimeout(() => playNotificationSound(), 600);
@@ -174,8 +180,8 @@ const role = sessionUser?.role || 'client';
 
     const handleCallInvite = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (!detail?.meetingLink) return;
-      setIncomingCall({ callerName: detail.callerName || 'Someone', meetingLink: detail.meetingLink, callerId: detail.callerId, callType: detail.callType || 'video' });
+      if (!detail?.sessionId) return;
+      setIncomingCall({ callerName: detail.callerName || 'Someone', sessionId: detail.sessionId, callerId: detail.callerId || '', callType: detail.callType || 'video' });
       if (soundEnabled) {
         playNotificationSound();
         setTimeout(() => playNotificationSound(), 600);
@@ -435,7 +441,13 @@ const markAllRead = () => {
               </div>
               <button
                 onClick={() => {
-                  setActiveCall({ roomName: incomingCall.meetingLink.split('/').pop() || '', meetingLink: incomingCall.meetingLink, callType: incomingCall.callType });
+                  setActiveCall({
+                    sessionId: incomingCall.sessionId,
+                    callType: incomingCall.callType,
+                    isCaller: false,
+                    targetUserId: incomingCall.callerId,
+                    callerName: incomingCall.callerName,
+                  });
                   setIncomingCall(null);
                 }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition shrink-0"
@@ -455,10 +467,14 @@ const markAllRead = () => {
         </main>
       </div>
       {activeCall && (
-        <JitsiCall
-          roomName={activeCall.roomName}
+        <WebRTCCall
+          sessionId={activeCall.sessionId}
           callType={activeCall.callType as 'voice' | 'video'}
-          displayName={sessionUser?.displayName || sessionUser?.email?.split('@')[0] || 'User'}
+          isCaller={activeCall.isCaller}
+          targetUserId={activeCall.targetUserId}
+          localUserId={user?.uid || ''}
+          localDisplayName={sessionUser?.displayName || sessionUser?.email?.split('@')[0] || 'User'}
+          remoteDisplayName={activeCall.callerName}
           onLeave={() => setActiveCall(null)}
         />
       )}

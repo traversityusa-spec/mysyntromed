@@ -474,13 +474,12 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('callInvite', async (data: { to: string; callType: string; callerId?: string; callerName: string; meetingLink: string; sessionId?: string }) => {
+  socket.on('callInvite', async (data: { to: string; callType: string; callerId?: string; callerName: string; sessionId: string }) => {
     console.log('[SOCKET] Call invite from:', data.callerName, 'type:', data.callType, 'to:', data.to);
     io.to(`user:${data.to}`).emit('incomingCall', {
       callType: data.callType,
       callerId: data.callerId,
       callerName: data.callerName,
-      meetingLink: data.meetingLink,
       sessionId: data.sessionId,
     });
     
@@ -503,7 +502,7 @@ io.on('connection', (socket) => {
         receiverData.displayName || 'User',
         receiverData.email,
         data.callType,
-        data.meetingLink,
+        loginUrl,
         loginUrl
       );
     } catch (error: any) {
@@ -533,9 +532,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('callEnded', (data: { to: string }) => {
+  socket.on('callEnded', (data: { to: string; sessionId?: string }) => {
     console.log('[SOCKET] Call ended, notifying:', data.to);
-    io.to(`user:${data.to}`).emit('callRejected', {});
+    io.to(`user:${data.to}`).emit('callRejected', { sessionId: data.sessionId });
     
     // Notify admins for immediate follow-up
     try {
@@ -553,6 +552,32 @@ io.on('connection', (socket) => {
     } catch (error: any) {
       console.error('[SOCKET] callEnded notification error:', error.message);
     }
+  });
+
+  socket.on('webrtc:offer', (data: { to: string; offer: unknown; sessionId: string; from: string }) => {
+    console.log('[SOCKET] WebRTC offer for session:', data.sessionId);
+    io.to(`user:${data.to}`).emit('webrtc:offer', {
+      offer: data.offer,
+      sessionId: data.sessionId,
+      from: data.from,
+    });
+  });
+
+  socket.on('webrtc:answer', (data: { to: string; answer: unknown; sessionId: string; from: string }) => {
+    console.log('[SOCKET] WebRTC answer for session:', data.sessionId);
+    io.to(`user:${data.to}`).emit('webrtc:answer', {
+      answer: data.answer,
+      sessionId: data.sessionId,
+      from: data.from,
+    });
+  });
+
+  socket.on('webrtc:ice-candidate', (data: { to: string; candidate: unknown; sessionId: string; from: string }) => {
+    io.to(`user:${data.to}`).emit('webrtc:ice-candidate', {
+      candidate: data.candidate,
+      sessionId: data.sessionId,
+      from: data.from,
+    });
   });
 
   socket.on('disconnect', () => {

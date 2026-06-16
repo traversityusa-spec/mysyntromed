@@ -174,7 +174,7 @@ const Calls = () => {
 
   const toggleUser = (uid: string) => {
     setSelectedUsers(prev =>
-      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+      prev.includes(uid) ? [] : [uid]
     );
   };
 
@@ -188,24 +188,28 @@ const Calls = () => {
   const startCallWithParticipants = () => {
     if (selectedUsers.length === 0) return;
     const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
-    const meetUrl = `https://meet.jit.si/${roomCode}`;
-    window.dispatchEvent(new CustomEvent('call:start', { detail: { roomName: roomCode, meetingLink: meetUrl, callType } }));
-    notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
+    const targetUserId = selectedUsers[0];
     const callerName = sessionUser?.displayName || 'User';
-    const socket = getSocket();
-    selectedUsers.forEach(targetId => {
-      if (socket?.connected && user?.uid) {
-        socket.emit('callInvite', {
-          to: targetId,
-          callType,
-          callerId: user.uid,
-          callerName,
-          meetingLink: meetUrl,
-          sessionId: roomCode,
-        });
+    window.dispatchEvent(new CustomEvent('call:start', {
+      detail: {
+        sessionId: roomCode,
+        callType,
+        targetUserId,
+        callerName,
       }
-      notifyViaApi(targetId, `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`, `${callerName} is calling you`, 'call');
-    });
+    }));
+    notifyAdminOfCall('instant', sessionUser?.displayName || sessionUser?.assignedSpecialistName || 'User');
+    const socket = getSocket();
+    if (socket?.connected && user?.uid) {
+      socket.emit('callInvite', {
+        to: targetUserId,
+        callType,
+        callerId: user.uid,
+        callerName,
+        sessionId: roomCode,
+      });
+    }
+    notifyViaApi(targetUserId, `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`, `${callerName} is calling you`, 'call');
     setShowParticipants(false);
     setSelectedUsers([]);
   };
@@ -356,7 +360,7 @@ const Calls = () => {
               </button>
             </div>
             <div className="p-4">
-              <p className="mb-3 text-sm text-slate-600">Select who you want to call:</p>
+              <p className="mb-3 text-sm text-slate-600">Select who you want to call (1 participant):</p>
               <div className="relative mb-3">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -446,11 +450,11 @@ const Calls = () => {
               )}
             </div>
             <div className="border-t border-slate-100 p-4 flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                {selectedUsers.length > 0
-                  ? `${selectedUsers.length} participant${selectedUsers.length > 1 ? 's' : ''} selected`
-                  : 'Select at least one participant'}
-              </p>
+                <p className="text-xs text-slate-500">
+                  {selectedUsers.length > 0
+                    ? `${selectedUsers.length} participant${selectedUsers.length > 1 ? 's' : ''} selected`
+                    : 'Select a participant'}
+                </p>
               <button
                 onClick={startCallWithParticipants}
                 disabled={selectedUsers.length === 0}
@@ -497,15 +501,6 @@ const Calls = () => {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <a
-                    href={call.meetLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-xs font-medium text-white hover:bg-teal-700 transition"
-                  >
-                    <Video size={14} />
-                    Join
-                  </a>
                   <button className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
                     Reschedule
                   </button>
