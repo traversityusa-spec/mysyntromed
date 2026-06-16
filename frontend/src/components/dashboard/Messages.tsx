@@ -8,6 +8,8 @@ import {
 
 import { useAuth } from '@/lib/AuthContext';
 import { messageService, userService, notificationService, typingService, notificationSoundService, groupChatService, type Message, type GroupInfo, type GroupMessage, API_BASE_URL } from '@/lib/firestore';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { presenceService } from '@/lib/presence';
 import { initSocket, emitMessage, emitTyping, getSocket } from '@/lib/socket';
 
@@ -120,6 +122,8 @@ const Messages = () => {
   const [selectedGroupParticipants, setSelectedGroupParticipants] = useState<string[]>([]);
   const [usersError, setUsersError] = useState('');
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  const [showContactInfo, setShowContactInfo] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [showRenameGroup, setShowRenameGroup] = useState(false);
@@ -1220,25 +1224,54 @@ const Messages = () => {
                     >
                       <Video size={20} />
                     </button>
-                    <button
-                      onClick={async () => {
-                        if (!selectedConversation || !user) return;
-                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
-                        const targetId = selectedConversation;
-                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        window.dispatchEvent(new CustomEvent('call:start', {
-                          detail: { sessionId: roomCode, callType: 'video', targetUserId: targetId, callerName },
-                        }));
-                        const socket = getSocket();
-                        if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode });
-                        }
-                      }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
-                      title="More options"
-                    >
-                      <MoreVertical size={20} />
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setChatMenuOpen(!chatMenuOpen)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+                        title="More options"
+                      >
+                        <MoreVertical size={20} />
+                      </button>
+                      {chatMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-lg py-1">
+                          <button
+                            onClick={() => { setChatMenuOpen(false); setShowContactInfo(true); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <User size={16} /> Contact Info
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setChatMenuOpen(false);
+                              if (!selectedConversation || !user) return;
+                              if (!confirm('Clear all messages in this conversation?')) return;
+                              try {
+                                const q = query(
+                                  collection(db, 'messages'),
+                                  where('participants', 'array-contains', user.uid),
+                                  where('senderId', 'in', [user.uid, selectedConversation]),
+                                  where('receiverId', 'in', [user.uid, selectedConversation])
+                                );
+                                const snapshot = await getDocs(q);
+                                const batch = writeBatch(db);
+                                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                                await batch.commit();
+                              } catch (err) { console.error('Failed to clear chat:', err); alert('Failed to clear chat'); }
+                            }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <X size={16} /> Clear Chat
+                          </button>
+                          <hr className="my-1 border-slate-100" />
+                          <button
+                            onClick={() => { setChatMenuOpen(false); setSelectedConversation(null); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+                          >
+                            <X size={16} /> Close Chat
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -1764,6 +1797,38 @@ const Messages = () => {
                   );
                 });
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contact Info Modal */}
+      {showContactInfo && currentConversation && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16" onClick={() => setShowContactInfo(false)}>
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold text-navy-900">Contact Info</h3>
+              <button onClick={() => setShowContactInfo(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="p-6 flex flex-col items-center text-center">
+              {currentConversation.photoURL ? (
+                <img src={currentConversation.photoURL} alt={currentConversation.name} className="h-20 w-20 rounded-full object-cover mb-4" />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-2xl font-bold text-white mb-4">
+                  {currentConversation.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <h4 className="text-xl font-bold text-slate-900">{currentConversation.name}</h4>
+              <span className={`mt-1 inline-block rounded-full px-3 py-0.5 text-xs font-medium ${
+                currentConversation.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
+                currentConversation.role === 'admin' ? 'bg-teal-100 text-teal-700' :
+                'bg-blue-100 text-blue-700'
+              }`}>
+                {currentConversation.role}
+              </span>
+              {currentConversation.online && (
+                <span className="mt-2 text-xs text-green-600 font-medium">● Online</span>
+              )}
             </div>
           </div>
         </div>
