@@ -615,6 +615,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('statusUpdate', (data: {
+    requestId: string;
+    status: string;
+    userId: string;
+    specialistId?: string;
+    changedByName?: string;
+    type?: string;
+  }) => {
+    io.to(`user:${data.userId}`).emit('statusUpdated', data);
+    if (data.specialistId && data.specialistId !== data.userId) {
+      io.to(`user:${data.specialistId}`).emit('statusUpdated', data);
+    }
+  });
+
+  socket.on('workflowUpdate', (data: {
+    specialistId: string;
+    clientId: string;
+    field: string;
+    value: string;
+    specialistName?: string;
+  }) => {
+    io.to(`user:${data.clientId}`).emit('workflowUpdated', data);
+  });
+
   socket.on('disconnect', () => {
     for (const [userId, sockId] of userSockets.entries()) {
       if (sockId === socket.id) {

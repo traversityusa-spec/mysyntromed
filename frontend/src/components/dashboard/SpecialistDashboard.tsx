@@ -7,6 +7,7 @@ import { auth, db } from '@/lib/firebase';
 import { workflowService, API_BASE_URL, userService, requestService } from '@/lib/firestore';
 import type { Request, UserProfile, WorkflowStatus, Message } from '@/lib/firestore';
 import { messageService } from '@/lib/firestore';
+import { getSocket } from '@/lib/socket';
 import { DateTimeDisplay } from '@/lib/datetime';
 
 export const SpecialistDashboard = () => {
@@ -126,6 +127,18 @@ export const SpecialistDashboard = () => {
       console.error('[WORKFLOW] Failed to update:', e);
       return;
     }
+
+    const socket = getSocket();
+    if (socket?.connected) {
+      socket.emit('workflowUpdate', {
+        specialistId: sessionUser.uid,
+        clientId,
+        field,
+        value,
+        specialistName: sessionUser.displayName || 'Specialist',
+      });
+    }
+
     try {
       const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
       const adminEmails = adminSnap.docs.map(d => d.data().email).filter(Boolean);

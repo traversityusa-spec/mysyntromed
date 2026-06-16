@@ -58,6 +58,14 @@ const ensureListeners = (userId: string) => {
     window.dispatchEvent(new CustomEvent('socket:callRejected', { detail: data }));
   });
 
+  socket.on('statusUpdated', (data: unknown) => {
+    window.dispatchEvent(new CustomEvent('socket:statusUpdated', { detail: data }));
+  });
+
+  socket.on('workflowUpdated', (data: unknown) => {
+    window.dispatchEvent(new CustomEvent('socket:workflowUpdated', { detail: data }));
+  });
+
   if (socket.connected) {
     console.log('[SOCKET] Already connected, authenticating immediately:', userId);
     socket.emit('authenticate', userId);
@@ -120,6 +128,35 @@ export const emitCallAccepted = (to: string, sessionId: string): void => {
     return;
   }
   socket.emit('callAccepted', { to });
+};
+
+export const emitStatusUpdate = (data: {
+  requestId: string;
+  status: string;
+  userId: string;
+  specialistId?: string;
+  changedByName?: string;
+  type?: string;
+}): void => {
+  if (!socket?.connected) {
+    console.warn('[SOCKET] Cannot emit status update - not connected');
+    return;
+  }
+  socket.emit('statusUpdate', data);
+};
+
+export const emitWorkflowUpdate = (data: {
+  specialistId: string;
+  clientId: string;
+  field: string;
+  value: string;
+  specialistName?: string;
+}): void => {
+  if (!socket?.connected) {
+    console.warn('[SOCKET] Cannot emit workflow update - not connected');
+    return;
+  }
+  socket.emit('workflowUpdate', data);
 };
 
 export const emitTyping = (to: string, isTyping: boolean, senderName?: string): void => {

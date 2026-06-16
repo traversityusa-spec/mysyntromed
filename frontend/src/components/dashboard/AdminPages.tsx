@@ -1538,64 +1538,119 @@ export const AdminConversations = () => {
   );
 };
 
+const formatDuration = (ms: number): string => {
+  if (ms < 0) return '-';
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours < 24) return `${hours}h ${mins}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+};
+
+type HealthLevel = 'good' | 'warning' | 'critical';
+
+const healthConfig: Record<HealthLevel, { bg: string; border: string; text: string; icon: string; label: string }> = {
+  good: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', icon: '🟢', label: 'Good' },
+  warning: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', icon: '🟡', label: 'Needs Attention' },
+  critical: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', icon: '🔴', label: 'Critical' },
+};
+
 export const AdminAnalytics = () => {
-  const { user: authUser } = useAuth();
-  const [stats, setStats] = useState({
-    totalClients: 0,
-    totalSpecialists: 0,
-    totalMessages: 0,
-    totalRequests: 0,
-    pendingRequests: 0,
-    completedRequests: 0,
-    activeUsersToday: 0,
-    newUsersThisWeek: 0,
-  });
+  const [clients, setClients] = useState<UserProfile[]>([]);
+  const [specialists, setSpecialists] = useState<UserProfile[]>([]);
+  const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const idToken = await authUser?.getIdToken();
-        if (!idToken) return;
-
-        const [usersRes, allRequests, allMessages] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/auth/admin/users`, {
-            headers: { 'Authorization': `Bearer ${idToken}` }
-          }),
-          getDocs(collection(db, 'requests')),
-          getDocs(collection(db, 'messages')),
-        ]);
-
-        const data = await usersRes.json();
-
-        if (data.users) {
-          const clients = data.users.filter((u: any) => u.role === 'client');
-          const specialists = data.users.filter((u: any) => u.role === 'specialist');
-          const now = new Date();
-          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          const weekAgo = new Date();
-          weekAgo.setDate(weekAgo.getDate() - 7);
-
-          setStats({
-            totalClients: clients.length,
-            totalSpecialists: specialists.length,
-            totalMessages: allMessages.size,
-            totalRequests: allRequests.size,
-            pendingRequests: allRequests.docs.filter(d => d.data().status === 'pending' || d.data().status === 'in_progress').length,
-            completedRequests: allRequests.docs.filter(d => d.data().status === 'completed').length,
-            activeUsersToday: clients.filter((c: any) => c.lastLoginAt && new Date(c.lastLoginAt) >= today).length,
-            newUsersThisWeek: clients.filter((c: any) => c.createdAt && new Date(c.createdAt) > weekAgo).length,
-          });
-        }
-      } catch (e) {
-        console.error('Error fetching analytics:', e);
-      } finally {
+    const unsubUsers = onSnapshot(
+      query(collection(db, 'users')),
+      (snap) => {
+        const all = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            uid: d.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+            updatedAt: data.updatedAt?.toDate?.() || new Date(),
+          } as UserProfile;
+        });
+        setClients(all.filter(u => u.role === 'client'));
+        setSpecialists(all.filter(u => u.role === 'specialist'));
+        setLoading(false);
+      },
+      (err) => {
+        console.error('[ANALYTICS] Users subscription error:', err);
         setLoading(false);
       }
-    };
+    );
 
-    fetchStats();
-  }, [authUser]);
+    const unsubReqs = onSnapshot(
+      query(collection(db, 'requests')),
+      (snap) => {
+        const reqs = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            submittedAt: data.submittedAt?.toDate?.() || new Date(),
+            completedAt: data.completedAt?.toDate?.(),
+            assignedAt: data.assignedAt?.toDate?.(),
+            statusHistory: (data.statusHistory || []).map((e: any) => ({
+              ...e,
+              timestamp: e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp || Date.now()),
+            })),
+          } as Request;
+        });
+        setRequests(reqs);
+      },
+      (err) => console.error('[ANALYTICS] Requests subscription error:', err)
+    );
+
+    return () => { unsubUsers(); unsubReqs(); };
+  }, []);
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const activeUsersToday = clients.filter(c => {
+    if (!c.lastLoginAt) return false;
+    const last = c.lastLoginAt instanceof Date ? c.lastLoginAt : new Date(c.lastLoginAt);
+    return last >= today;
+  }).length;
+
+  const newUsersThisWeek = clients.filter(c => c.createdAt && c.createdAt > weekAgo).length;
+  const pendingRequests = requests.filter(r => r.status === 'pending' || r.status === 'in_progress').length;
+  const completedRequests = requests.filter(r => r.status === 'completed').length;
+  const totalRequests = requests.length;
+  const completionRate = totalRequests > 0 ? Math.round((completedRequests / totalRequests) * 100) : 0;
+  const clientSpecialistRatio = specialists.length > 0 ? clients.length / specialists.length : 0;
+  const engagementRate = clients.length > 0 ? Math.round((activeUsersToday / clients.length) * 100) : 0;
+
+  const getRequestResponseTime = (req: Request): number | null => {
+    if (req.assignedAt) return req.assignedAt.getTime() - req.submittedAt.getTime();
+    if (req.statusHistory && req.statusHistory.length > 1) {
+      const firstChange = req.statusHistory[1];
+      if (firstChange?.timestamp) {
+        const changeTime = firstChange.timestamp instanceof Date ? firstChange.timestamp : new Date(firstChange.timestamp);
+        return changeTime.getTime() - req.submittedAt.getTime();
+      }
+    }
+    return null;
+  };
+
+  const allResponseTimes = requests.map(getRequestResponseTime).filter(Boolean) as number[];
+  const avgResponseTimeMs = allResponseTimes.length > 0
+    ? allResponseTimes.reduce((a, b) => a + b, 0) / allResponseTimes.length
+    : null;
+  const avgResponseTimeFormatted = avgResponseTimeMs ? formatDuration(avgResponseTimeMs) : 'N/A';
+
+  const engagementHealth: HealthLevel = engagementRate >= 30 ? 'good' : engagementRate >= 10 ? 'warning' : 'critical';
+  const completionHealth: HealthLevel = completionRate >= 70 ? 'good' : completionRate >= 40 ? 'warning' : 'critical';
+  const capacityHealth: HealthLevel = clientSpecialistRatio <= 5 ? 'good' : clientSpecialistRatio <= 8 ? 'warning' : 'critical';
 
   if (loading) {
     return (
@@ -1605,94 +1660,104 @@ export const AdminAnalytics = () => {
     );
   }
 
-  const completionRate = stats.totalRequests > 0 
-    ? Math.round((stats.completedRequests / stats.totalRequests) * 100) 
-    : 0;
+  const healthCards = [
+    {
+      title: 'Engagement',
+      health: engagementHealth,
+      value: `${engagementRate}%`,
+      detail: `${activeUsersToday} of ${clients.length} clients active today`,
+      tip: 'Aim for 30%+ daily active rate',
+    },
+    {
+      title: 'Request Completion',
+      health: completionHealth,
+      value: `${completionRate}%`,
+      detail: `${completedRequests} of ${totalRequests} requests completed`,
+      tip: 'Aim for 70%+ completion rate',
+    },
+    {
+      title: 'Specialist Capacity',
+      health: capacityHealth,
+      value: `${clientSpecialistRatio > 0 ? clientSpecialistRatio.toFixed(1) : 0}:1`,
+      detail: `${clients.length} clients to ${specialists.length} specialists`,
+      tip: 'Aim for 5:1 ratio or lower',
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy-900">Analytics Dashboard</h1>
-        <p className="mt-1 text-slate-600">Monitor platform health, user activity, and service performance</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Platform Health</h1>
+          <p className="mt-1 text-slate-600">Real-time health of your platform at a glance</p>
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition"
+            title="How to read these metrics"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+          </button>
+          {showGuide && (
+            <div className="absolute right-0 top-12 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
+              <h3 className="text-sm font-semibold text-navy-900 mb-2">Health Indicators</h3>
+              <ul className="space-y-2 text-xs text-slate-600">
+                <li><span className="font-medium text-emerald-600">🟢 Good</span> — Everything is healthy</li>
+                <li><span className="font-medium text-amber-600">🟡 Needs Attention</span> — Monitor closely</li>
+                <li><span className="font-medium text-red-600">🔴 Critical</span> — Take action soon</li>
+              </ul>
+              <hr className="my-2 border-slate-100" />
+              <ul className="space-y-1.5 text-xs text-slate-500">
+                <li><strong className="text-slate-700">Engagement:</strong> % of clients active today. Higher = healthier.</li>
+                <li><strong className="text-slate-700">Completion:</strong> % of requests completed. Shows productivity.</li>
+                <li><strong className="text-slate-700">Capacity:</strong> Client-to-specialist ratio. 5:1 or lower is ideal.</li>
+              </ul>
+              <button onClick={() => setShowGuide(false)} className="mt-3 w-full rounded-lg bg-slate-100 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200">Got it</button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-teal-50 to-blue-50 p-6">
-        <h2 className="text-lg font-semibold text-navy-900 mb-3">How to Read These Metrics</h2>
-        <ul className="space-y-2 text-sm text-slate-600">
-          <li><span className="font-medium text-teal-600">Total Clients/Specialists:</span> Your user base. Balance is key for service quality.</li>
-          <li><span className="font-medium text-teal-600">Pending Requests:</span> Unassigned or in-progress requests. High numbers may indicate need for more specialists.</li>
-          <li><span className="font-medium text-teal-600">Completed Requests:</span> Successfully fulfilled requests. Shows platform productivity.</li>
-          <li><span className="font-medium text-teal-600">Active Users:</span> Users who logged in today. Higher = better engagement.</li>
-          <li><span className="font-medium text-teal-600">Client to Specialist Ratio:</span> Recommended 5:1 or lower for quality care.</li>
-          <li><span className="font-medium text-teal-600">New Users This Week:</span> Platform growth indicator. Healthy platforms grow steadily.</li>
-          <li><span className="font-medium text-teal-600">Avg Response Time:</span> How fast specialists respond. Aim for under 1 hour for quality service.</li>
-        </ul>
+      <div className="grid gap-4 md:grid-cols-3">
+        {healthCards.map(card => {
+          const cfg = healthConfig[card.health];
+          return (
+            <div key={card.title} className={`rounded-xl border-2 ${cfg.border} ${cfg.bg} p-5 transition hover:shadow-md`}>
+              <div className="flex items-start justify-between mb-2">
+                <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>
+                  {cfg.icon} {cfg.label}
+                </span>
+                <span className="text-2xl font-bold text-navy-900">{card.value}</span>
+              </div>
+              <p className="text-sm font-semibold text-navy-900">{card.title}</p>
+              <p className="text-xs text-slate-500 mt-1">{card.detail}</p>
+              <p className="text-[10px] text-slate-400 mt-2">{card.tip}</p>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="grid gap-6 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Total Clients</p>
-              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.totalClients}</p>
-              <p className="mt-1 text-xs text-slate-400">Patients registered on platform</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-teal-600">
-              <Users size={24} />
-            </div>
-          </div>
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium text-slate-500">Total Clients</p>
+          <p className="mt-1 text-2xl font-bold text-navy-900">{clients.length}</p>
         </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Total Specialists</p>
-              <p className="mt-2 text-3xl font-bold text-navy-900">{stats.totalSpecialists}</p>
-              <p className="mt-1 text-xs text-slate-400">Medical professionals available</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-              <Stethoscope size={24} />
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium text-slate-500">Specialists</p>
+          <p className="mt-1 text-2xl font-bold text-navy-900">{specialists.length}</p>
         </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Pending Requests</p>
-              <p className="mt-2 text-3xl font-bold text-amber-600">{stats.pendingRequests}</p>
-              <p className="mt-1 text-xs text-slate-400">Awaiting assignment or completion</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-              <Clock size={24} />
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium text-slate-500">Pending</p>
+          <p className={`mt-1 text-2xl font-bold ${pendingRequests > 10 ? 'text-amber-600' : 'text-navy-900'}`}>{pendingRequests}</p>
         </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Completed Requests</p>
-              <p className="mt-2 text-3xl font-bold text-emerald-600">{stats.completedRequests}</p>
-              <p className="mt-1 text-xs text-slate-400">{completionRate}% completion rate</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-              <CheckCircle size={24} />
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium text-slate-500">Completed</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-600">{completedRequests}</p>
         </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Avg Response Time</p>
-              <p className="mt-2 text-3xl font-bold text-purple-600">&lt; 1h</p>
-              <p className="mt-1 text-xs text-slate-400">Specialist response time</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 text-purple-600">
-              <Clock size={24} />
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium text-slate-500">Avg Response</p>
+          <p className="mt-1 text-2xl font-bold text-purple-600">{avgResponseTimeFormatted}</p>
         </div>
       </div>
 
@@ -1705,17 +1770,17 @@ export const AdminAnalytics = () => {
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="text-sm text-slate-600">Active Users Today</span>
-                  <p className="text-xs text-slate-400">Users who logged in within 24 hours</p>
+                  <p className="text-xs text-slate-400">Users who logged in today</p>
                 </div>
-                <span className="font-semibold text-emerald-600">{stats.activeUsersToday}</span>
+                <span className="font-semibold text-emerald-600">{activeUsersToday}</span>
               </div>
               <div className="h-3 w-full rounded-full bg-slate-100">
-                <div 
-                  className="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all" 
-                  style={{ width: `${stats.totalClients > 0 ? Math.min((stats.activeUsersToday / stats.totalClients) * 100, 100) : 0}%` }} 
+                <div
+                  className="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
+                  style={{ width: `${clients.length > 0 ? Math.min((activeUsersToday / clients.length) * 100, 100) : 0}%` }}
                 />
               </div>
-              <p className="text-xs text-slate-400 mt-1">{stats.totalClients > 0 ? Math.round((stats.activeUsersToday / stats.totalClients) * 100) : 0}% of total clients</p>
+              <p className="text-xs text-slate-400 mt-1">{engagementRate}% of total clients</p>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -1723,15 +1788,15 @@ export const AdminAnalytics = () => {
                   <span className="text-sm text-slate-600">New Users This Week</span>
                   <p className="text-xs text-slate-400">Users registered in last 7 days</p>
                 </div>
-                <span className="font-semibold text-blue-600">{stats.newUsersThisWeek}</span>
+                <span className="font-semibold text-blue-600">{newUsersThisWeek}</span>
               </div>
               <div className="h-3 w-full rounded-full bg-slate-100">
-                <div 
-                  className="h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all" 
-                  style={{ width: `${stats.totalClients > 0 ? Math.min((stats.newUsersThisWeek / stats.totalClients) * 100, 100) : 0}%` }} 
+                <div
+                  className="h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all"
+                  style={{ width: `${clients.length > 0 ? Math.min((newUsersThisWeek / clients.length) * 100, 100) : 0}%` }}
                 />
               </div>
-              <p className="text-xs text-slate-400 mt-1">{stats.totalClients > 0 ? Math.round((stats.newUsersThisWeek / stats.totalClients) * 100) : 0}% of total clients</p>
+              <p className="text-xs text-slate-400 mt-1">{clients.length > 0 ? Math.round((newUsersThisWeek / clients.length) * 100) : 0}% of total clients</p>
             </div>
           </div>
         </div>
@@ -1744,16 +1809,16 @@ export const AdminAnalytics = () => {
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="text-sm text-slate-600">Client to Specialist Ratio</span>
-                  <p className="text-xs text-slate-400">Lower is generally better (5:1 recommended)</p>
+                  <p className="text-xs text-slate-400">Lower is better (5:1 recommended)</p>
                 </div>
                 <span className="font-semibold text-navy-900">
-                  {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0}:1
+                  {specialists.length > 0 ? (clients.length / specialists.length).toFixed(1) : 0}:1
                 </span>
               </div>
               <div className="h-3 w-full rounded-full bg-slate-100">
-                <div 
-                  className={`h-3 rounded-full transition-all ${stats.totalSpecialists > 0 && stats.totalClients / stats.totalSpecialists <= 5 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                  style={{ width: `${Math.min((stats.totalClients / (stats.totalSpecialists * 5)) * 100, 100)}%` }} 
+                <div
+                  className={`h-3 rounded-full transition-all ${specialists.length > 0 && clientSpecialistRatio <= 5 ? 'bg-emerald-500' : clientSpecialistRatio <= 8 ? 'bg-amber-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min((clientSpecialistRatio / 5) * 100, 100)}%` }}
                 />
               </div>
             </div>
@@ -1763,7 +1828,7 @@ export const AdminAnalytics = () => {
                 <p className="text-xs text-slate-500">Clients per specialist</p>
               </div>
               <span className="text-2xl font-bold text-purple-600">
-                {stats.totalSpecialists > 0 ? Math.round(stats.totalClients / stats.totalSpecialists) : 0}
+                {specialists.length > 0 ? (clients.length / specialists.length).toFixed(1) : 0}
               </span>
             </div>
             <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
@@ -1772,7 +1837,7 @@ export const AdminAnalytics = () => {
                 <p className="text-xs text-slate-500">Max clients at 5:1 ratio</p>
               </div>
               <span className="text-2xl font-bold text-teal-600">
-                {stats.totalSpecialists * 5}
+                {specialists.length * 5}
               </span>
             </div>
           </div>
@@ -1782,26 +1847,15 @@ export const AdminAnalytics = () => {
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="text-lg font-semibold text-navy-900">Platform Health Summary</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className={`p-4 rounded-lg ${stats.activeUsersToday > 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'}`}>
-            <p className="font-medium text-emerald-700">Engagement Status</p>
-            <p className="text-sm text-emerald-600 mt-1">
-              {stats.activeUsersToday > 0 ? `${Math.round((stats.activeUsersToday / stats.totalClients) * 100)}% of users are active` : 'No users logged in today'}
-            </p>
-          </div>
-          <div className={`p-4 rounded-lg ${stats.pendingRequests < stats.totalRequests * 0.3 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-            <p className="font-medium text-amber-700">Request Status</p>
-            <p className="text-sm text-amber-600 mt-1">
-              {completionRate > 70 ? `${completionRate}% completion rate - healthy` : 'Request completion needs attention'}
-            </p>
-          </div>
-          <div className={`p-4 rounded-lg ${stats.totalSpecialists > 0 && stats.totalClients / stats.totalSpecialists <= 5 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-            <p className="font-medium text-teal-700">Capacity Status</p>
-            <p className="text-sm text-teal-600 mt-1">
-              {stats.totalSpecialists > 0 && stats.totalClients / stats.totalSpecialists <= 5 
-                ? 'Good specialist coverage' 
-                : 'Consider adding more specialists'}
-            </p>
-          </div>
+          {healthCards.map(card => {
+            const cfg = healthConfig[card.health];
+            return (
+              <div key={card.title} className={`rounded-lg p-4 ${cfg.bg} border ${cfg.border}`}>
+                <p className={`font-medium ${cfg.text}`}>{card.title}</p>
+                <p className={`text-sm mt-1 ${cfg.text}`}>{card.detail}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

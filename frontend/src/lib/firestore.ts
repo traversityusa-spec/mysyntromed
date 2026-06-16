@@ -896,6 +896,25 @@ export const requestService = {
     });
 
     try {
+      const { getSocket } = await import('./socket');
+      const socket = getSocket();
+      if (socket?.connected) {
+        const requestSnap = await getDoc(doc(db, 'requests', requestId));
+        const request = requestSnap.data();
+        socket.emit('statusUpdate', {
+          requestId,
+          status,
+          userId: request?.userId || '',
+          specialistId: request?.specialistId || '',
+          changedByName: changedByName || 'System',
+          type: request?.type || '',
+        });
+      }
+    } catch (e) {
+      console.warn('[SOCKET] Failed to emit status update:', e);
+    }
+
+    try {
       const requestSnap = await getDoc(doc(db, 'requests', requestId));
       const request = requestSnap.data();
       if (request) {

@@ -147,7 +147,20 @@ const ClientDashboardContent = () => {
         setPostClinicStatus(wf.postClinicStatus);
       }
     }, sessionUser.uid);
-    return () => { cancelled = true; unsub(); };
+
+    const handleWorkflowUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.clientId === sessionUser.uid || detail?.clientId === sessionUser.assignedSpecialistId) {
+        if (detail.field === 'morningPrepStatus') {
+          setMorningPrepStatus(detail.value);
+        } else if (detail.field === 'postClinicStatus') {
+          setPostClinicStatus(detail.value);
+        }
+      }
+    };
+    window.addEventListener('socket:workflowUpdated', handleWorkflowUpdated);
+
+    return () => { cancelled = true; unsub(); window.removeEventListener('socket:workflowUpdated', handleWorkflowUpdated); };
   }, [sessionUser?.assignedSpecialistId]);
 
   const greeting = useMemo(() => {

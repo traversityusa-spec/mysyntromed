@@ -126,7 +126,16 @@ export const useRequests = () => {
       unsubscribe = requestService.subscribeToRequests(user.uid, callback);
     }
 
-    return () => unsubscribe();
+    const handleSocketStatusUpdate = () => {
+      refreshRequests();
+    };
+
+    window.addEventListener('socket:statusUpdated', handleSocketStatusUpdate);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('socket:statusUpdated', handleSocketStatusUpdate);
+    };
   }, [user?.uid, sessionUser?.role]);
 
   const createRequest = async (requestData: {
