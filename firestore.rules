@@ -107,7 +107,7 @@ service cloud.firestore {
         request.auth.uid == resource.data.receiverId ||
         isAdmin()
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid in resource.data.participants);
     }
 
     match /requests/{requestId} {

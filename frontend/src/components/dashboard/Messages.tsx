@@ -1253,14 +1253,20 @@ const Messages = () => {
                                 );
                                 const snapshot = await getDocs(q);
                                 const batch = writeBatch(db);
+                                let count = 0;
                                 snapshot.docs.forEach(doc => {
                                   const data = doc.data();
                                   if (data.participants?.includes(selectedConversation)) {
                                     batch.delete(doc.ref);
+                                    count++;
                                   }
                                 });
+                                if (count === 0) { alert('No messages to clear.'); return; }
                                 await batch.commit();
-                              } catch (err) { console.error('Failed to clear chat:', err); alert('Failed to clear chat'); }
+                              } catch (err) {
+                                console.error('Failed to clear chat:', err);
+                                alert('Failed to clear chat. Check console for details.');
+                              }
                             }}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
                           >
