@@ -17,6 +17,7 @@ import notifyRoutes from './routes/notify.js';
 import workflowRoutes from './routes/workflow.js';
 import callsRoutes from './routes/calls.js';
 import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from './services/emailClient.js';
+import { AccessToken } from 'livekit-server-sdk';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
@@ -393,7 +394,6 @@ app.post('/api/livekit/token', express.json(), async (req, res) => {
     if (!roomName || !participantName) {
       return res.status(400).json({ error: 'roomName and participantName are required' });
     }
-    const { AccessToken } = await import('livekit-server-sdk');
     const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
       identity: participantName,
       name: participantName,
@@ -402,8 +402,11 @@ app.post('/api/livekit/token', express.json(), async (req, res) => {
     const token = await at.toJwt();
     res.json({ token });
   } catch (err: any) {
-    console.error('[LIVEKIT] Token error:', err.message);
-    res.status(500).json({ error: 'Failed to generate token' });
+    console.error('[LIVEKIT] Token error:', err.message, err.stack);
+    const msg = !process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET
+      ? 'LiveKit credentials not configured on server'
+      : err.message || 'Failed to generate token';
+    res.status(500).json({ error: msg });
   }
 });
 
