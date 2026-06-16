@@ -31,6 +31,32 @@ router.post('/call', requireAuth, async (req: AuthedRequest, res) => {
     </div>`;
 
     await notifyAdminsViaEmail(admin, subject, html);
+
+    // Also create in-app notifications for all admins
+    const adminSnap = await admin.firestore().collection('users').where('role', '==', 'admin').get();
+    await Promise.all(adminSnap.docs.map(async (adoc) => {
+      await admin.firestore().collection('notifications').add({
+        userId: adoc.id,
+        title: `${isScheduled ? 'Call Scheduled' : 'Instant Call Started'}`,
+        message: `${clientName} ${isScheduled ? 'scheduled a call with' : 'started an instant call with'} ${specialistName || 'a specialist'}.`,
+        type: 'call',
+        read: false,
+        data: { type: 'call', callerName: clientName },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }));
+
+    // Log to activity
+    await admin.firestore().collection('activity').add({
+      title: `${isScheduled ? 'Call Scheduled' : 'Instant Call Started'} - ${clientName}${specialistName ? ` & ${specialistName}` : ''}`,
+      type: 'Call',
+      userId: req.user!.uid,
+      specialistId: specialistId || '',
+      specialistName: specialistName || '',
+      status: 'completed',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     res.json({ success: true });
   } catch (error: any) {
     console.error('[NOTIFY CALL] Error:', error.message);
