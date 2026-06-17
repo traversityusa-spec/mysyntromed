@@ -1637,11 +1637,15 @@ export const AdminAnalytics = () => {
         );
         if (cancelled) return;
 
-        const raw = snap.docs.map(d => ({
-          ...d.data(),
-          id: d.id,
-          createdAt: d.data().createdAt?.toDate?.() || new Date(),
-        }));
+        const raw = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            senderRole: data.senderRole as string,
+            senderId: data.senderId as string,
+            receiverId: data.receiverId as string,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+          };
+        });
 
         const convs = new Map<string, { role: string; time: number }[]>();
         for (const m of raw) {
