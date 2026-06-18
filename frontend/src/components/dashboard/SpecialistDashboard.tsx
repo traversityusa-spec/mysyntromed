@@ -384,15 +384,15 @@ export const SpecialistDashboard = () => {
                             <div className="mt-3 grid grid-cols-3 gap-2">
                               <div className="rounded-lg bg-slate-50 px-2 py-2 text-center">
                                 <p className="text-base font-bold text-navy-900">{openRequests.length}</p>
-                                <p className="text-[10px] font-medium text-slate-500">Open</p>
+                                <p className="text-xs font-medium text-slate-500">Open</p>
                               </div>
                               <div className="rounded-lg bg-slate-50 px-2 py-2 text-center">
                                 <p className="text-base font-bold text-navy-900">{clientRequests.length}</p>
-                                <p className="text-[10px] font-medium text-slate-500">Total</p>
+                                <p className="text-xs font-medium text-slate-500">Total</p>
                               </div>
                               <div className={`rounded-lg px-2 py-2 text-center ${urgentRequests.length ? 'bg-red-50' : 'bg-slate-50'}`}>
                                 <p className={`text-base font-bold ${urgentRequests.length ? 'text-red-700' : 'text-navy-900'}`}>{urgentRequests.length}</p>
-                                <p className={`text-[10px] font-medium ${urgentRequests.length ? 'text-red-600' : 'text-slate-500'}`}>Urgent</p>
+                                <p className={`text-xs font-medium ${urgentRequests.length ? 'text-red-600' : 'text-slate-500'}`}>Urgent</p>
                               </div>
                             </div>
                           </div>
@@ -564,7 +564,7 @@ export const SpecialistDashboard = () => {
                             <select
                               value={req.status}
                               onChange={(e) => handleClientRequestStatusChange(req.id, e.target.value as 'pending' | 'in_progress' | 'completed')}
-                              className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                              className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
                                 req.status === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
                                 req.status === 'in_progress' ? 'border-blue-200 bg-blue-50 text-blue-700' :
                                 'border-slate-200 bg-slate-50 text-slate-600'
@@ -581,7 +581,7 @@ export const SpecialistDashboard = () => {
                               req.priority === 'high' ? 'bg-amber-100 text-amber-700' :
                               'bg-teal-100 text-teal-700'
                             }`}>{req.priority}</span>
-                            <span className="text-[10px] text-slate-400">{req.submittedAt.toLocaleDateString()}</span>
+                            <span className="text-xs text-slate-400">{req.submittedAt.toLocaleDateString()}</span>
                           </div>
                         </div>
                       ))}
@@ -611,7 +611,7 @@ export const SpecialistDashboard = () => {
                           }`}>
                             <p className="text-xs font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
                             <p>{msg.text}</p>
-                            <p className="text-[10px] mt-0.5 opacity-60">
+                            <p className="text-xs mt-0.5 opacity-60">
                               {msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>

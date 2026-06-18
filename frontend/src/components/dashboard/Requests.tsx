@@ -357,7 +357,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                             e.stopPropagation();
                             handleStatusChange(request.id, e.target.value as 'pending' | 'in_progress' | 'completed');
                           }}
-                          className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
                             request.status === 'completed'
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                               : request.status === 'in_progress'
@@ -384,7 +384,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                       <div className="flex flex-col gap-1">
                         <span>{request.specialistName || 'Unassigned'}</span>
                         {request.seen && (
-                          <span className="inline-flex max-w-fit items-center gap-1 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">
+                          <span className="inline-flex max-w-fit items-center gap-1 rounded bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700">
                             <Eye size={10} />
                             Viewed
                           </span>
@@ -419,7 +419,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                           e.stopPropagation();
                           handleStatusChange(request.id, e.target.value as 'pending' | 'in_progress' | 'completed');
                         }}
-                        className={`rounded-lg border px-2 py-1 text-[10px] font-medium outline-none ${
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
                           request.status === 'completed'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : request.status === 'in_progress'
@@ -432,7 +432,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                         <option value="completed">Completed</option>
                       </select>
                     ) : (
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[reqStatus as keyof typeof statusColors] || statusColors.pending}`}>
                         {getStatusIcon(reqStatus)}
                         {reqStatus === 'in_progress' ? 'In Progress' : reqStatus.charAt(0).toUpperCase() + reqStatus.slice(1)}
                       </span>
@@ -442,7 +442,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                   <div className="flex items-center justify-between text-xs text-slate-400">
                     <span>{formatDate(request.submittedAt)}</span>
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${priorityColors[reqPriority as keyof typeof priorityColors] || priorityColors.normal}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${priorityColors[reqPriority as keyof typeof priorityColors] || priorityColors.normal}`}>
                         {reqPriority === 'urgent' && <AlertTriangle size={10} />}
                         {reqPriority.charAt(0).toUpperCase() + reqPriority.slice(1)}
                       </span>
@@ -610,7 +610,7 @@ const reqStatus = typeof request.status === 'string' ? request.status.toLowerCas
                     {selectedRequest.statusHistory.map((entry, i) => (
                       <div key={i} className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
                             entry.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
                             entry.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
                             'bg-slate-100 text-slate-600'

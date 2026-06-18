@@ -27,8 +27,7 @@ import { messageService, notificationService, type AppNotification } from '@/lib
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/ui/Toast';
-import WebRTCCall from '@/components/ui/WebRTCCall';
-import { initSocket, emitCallAccepted } from '@/lib/socket';
+import { initSocket } from '@/lib/socket';
 
 type NavItem = {
   label: string;
@@ -120,25 +119,11 @@ const role = sessionUser?.role || 'client';
 
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [incomingCall, setIncomingCall] = useState<{ callerName: string; sessionId: string; callerId: string; callType: string; meetLink?: string } | null>(null);
-  const [activeCall, setActiveCall] = useState<{ sessionId: string; callType: string; isCaller: boolean; targetUserId: string; callerName: string } | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
 
     initSocket(user.uid);
-
-    const handleCallStart = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail?.sessionId) return;
-      setActiveCall({
-        sessionId: detail.sessionId,
-        callType: detail.callType || 'video',
-        isCaller: true,
-        targetUserId: detail.targetUserId || '',
-        callerName: detail.callerName || 'User',
-      });
-    };
-    window.addEventListener('call:start', handleCallStart);
 
     const messageUnsub = messageService.subscribeToUserMessages(user.uid, (messages) => {
       try {
@@ -212,13 +197,12 @@ const role = sessionUser?.role || 'client';
     const handleCallRejected = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       console.log('[CALL] Call rejected/ended:', detail);
-      setActiveCall(null);
+      setIncomingCall(null);
       showToast('call', 'Call Ended', 'The call has ended');
     };
     window.addEventListener('socket:callRejected', handleCallRejected);
 
     return () => {
-      window.removeEventListener('call:start', handleCallStart);
       window.removeEventListener('socket:callInvite', handleCallInvite);
       window.removeEventListener('socket:callAnswered', handleCallAnswered);
       window.removeEventListener('socket:callRejected', handleCallRejected);
@@ -390,7 +374,7 @@ const markAllRead = () => {
                     className="fixed inset-0 z-40"
                     onClick={() => setShowNotifications(false)}
                   />
-                  <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-1rem)] rounded-xl border border-slate-200 bg-white shadow-lg">
                     <div className="flex items-center justify-between border-b border-slate-200 p-4">
                       <h3 className="font-semibold text-navy-900">Notifications</h3>
                       {unreadCount > 0 && (
@@ -413,8 +397,8 @@ const markAllRead = () => {
                             }`}
                           >
                             <div className="flex items-start gap-3">
-                              <div className={`mt-1 flex h-8 w-8 items-center justify-center rounded-full ${notification.type === 'request' ? 'bg-amber-100' : notification.type === 'system' ? 'bg-blue-100' : 'bg-teal-100'}`}>
-                                {notification.type === 'request' ? <ClipboardList size={14} className="text-amber-600" /> : notification.type === 'system' ? <Bell size={14} className="text-blue-600" /> : <Bell size={14} className="text-teal-600" />}
+                              <div className={`mt-1 flex h-10 w-10 items-center justify-center rounded-full ${notification.type === 'request' ? 'bg-amber-100' : notification.type === 'system' ? 'bg-blue-100' : 'bg-teal-100'}`}>
+                                {notification.type === 'request' ? <ClipboardList size={16} className="text-amber-600" /> : notification.type === 'system' ? <Bell size={16} className="text-blue-600" /> : <Bell size={16} className="text-teal-600" />}
                               </div>
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-slate-900">{notification.title}</p>
@@ -452,7 +436,7 @@ const markAllRead = () => {
               to={`${basePath}/settings`}
               className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
-              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-teal-100 text-teal-700">
+              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-teal-100 text-teal-700">
                 {sessionUser?.photoURL ? (
                   <img src={sessionUser.photoURL} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
@@ -474,59 +458,28 @@ const markAllRead = () => {
                 <p className="text-sm font-semibold text-purple-900">Incoming {incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call</p>
                 <p className="text-xs text-purple-700 truncate">{incomingCall.callerName} is calling you</p>
               </div>
-              {incomingCall.meetLink ? (
-                <a
-                  href={incomingCall.meetLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setIncomingCall(null)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition shrink-0"
-                >
-                  <Video size={16} />
-                  Join Google Meet
-                </a>
-              ) : (
-                <button
-                  onClick={() => {
-                    emitCallAccepted(incomingCall.callerId, incomingCall.sessionId);
-                    setActiveCall({
-                      sessionId: incomingCall.sessionId,
-                      callType: incomingCall.callType,
-                      isCaller: false,
-                      targetUserId: incomingCall.callerId,
-                      callerName: incomingCall.callerName,
-                    });
-                    setIncomingCall(null);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition shrink-0"
-                >
-                  {incomingCall.callType === 'voice' ? <Phone size={16} /> : <Video size={16} />}
-                  Join Call
-                </button>
-              )}
+              <a
+                href={incomingCall.meetLink || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIncomingCall(null)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition shrink-0"
+              >
+                <Video size={16} />
+                Join Google Meet
+              </a>
               <button
                 onClick={() => setIncomingCall(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-purple-400 hover:bg-purple-100 shrink-0"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-purple-400 hover:bg-purple-100 shrink-0"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
           )}
           {children}
         </main>
       </div>
-      {activeCall && (
-        <WebRTCCall
-          sessionId={activeCall.sessionId}
-          callType={activeCall.callType as 'voice' | 'video'}
-          isCaller={activeCall.isCaller}
-          targetUserId={activeCall.targetUserId}
-          localUserId={user?.uid || ''}
-          localDisplayName={sessionUser?.displayName || sessionUser?.email?.split('@')[0] || 'User'}
-          remoteDisplayName={activeCall.callerName}
-          onLeave={() => setActiveCall(null)}
-        />
-      )}
+
     </div>
   );
 };

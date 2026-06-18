@@ -335,7 +335,7 @@ const ClientDashboardContent = () => {
             <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-slate-500">{card.label}</p>
-                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${card.color}`}>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${card.color}`}>
                   <Icon size={16} />
                 </div>
               </div>
@@ -487,8 +487,8 @@ const ClientDashboardContent = () => {
               <div className="space-y-3">
                 {filteredActivity.slice(0, 5).map((item) => (
                   <div key={item.id} className="flex items-start gap-3 rounded-lg border border-slate-100 p-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-50">
-                      <ClipboardList size={14} className="text-teal-600" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-50">
+                      <ClipboardList size={16} className="text-teal-600" />
                     </div>
                     <div className="flex-1">
                       <p className="font-medium text-slate-900">{item.title}</p>

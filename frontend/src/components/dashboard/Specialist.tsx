@@ -277,9 +277,9 @@ const Specialist = () => {
                     key={i}
                     type="button"
                     onClick={() => setRatingValue(i + 1)}
-                    className="text-amber-400"
+                    className="p-2 text-amber-400 min-h-10 min-w-10"
                   >
-                    <Star size={20} className={i < ratingValue ? 'fill-amber-400 text-amber-400' : 'text-slate-300'} />
+                    <Star size={22} className={i < ratingValue ? 'fill-amber-400 text-amber-400' : 'text-slate-300'} />
                   </button>
                 ))}
                 <span className="text-xs text-slate-500">{ratingValue ? `${ratingValue}/5` : 'Select a rating'}</span>
@@ -310,7 +310,7 @@ const Specialist = () => {
                     setSubmitting(false);
                   }
                 }}
-                className="mt-3 w-full rounded-lg bg-teal-600 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                className="mt-3 w-full rounded-lg bg-teal-600 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
               >
                 {submitting ? 'Submitting...' : 'Submit Rating'}
               </button>

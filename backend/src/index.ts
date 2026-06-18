@@ -17,7 +17,6 @@ import notifyRoutes from './routes/notify.js';
 import workflowRoutes from './routes/workflow.js';
 import callsRoutes from './routes/calls.js';
 import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from './services/emailClient.js';
-import { AccessToken } from 'livekit-server-sdk';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
@@ -63,7 +62,7 @@ app.use(helmet({
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
       connectSrc: ["'self'", 'https://*.firebaseio.com', 'https://*.googleapis.com'],
-      frameSrc: ["'self'", 'https://meet.jit.si'],
+      frameSrc: ["'self'", 'https://meet.google.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
@@ -413,29 +412,6 @@ app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedReque
   } catch (error) {
     console.error('[SUBSCRIPTION] Error sending reminder:', error);
     return res.status(500).json({ error: 'Failed to send subscription reminder' });
-  }
-});
-
-app.post('/api/livekit/token', requireAuth, express.json(), async (req: AuthedRequest, res) => {
-  try {
-    const { roomName, participantName } = req.body;
-    if (!roomName || !participantName) {
-      return res.status(400).json({ error: 'roomName and participantName are required' });
-    }
-    const uid = req.user?.uid;
-    if (!uid) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
-      identity: participantName,
-      name: participantName,
-    });
-    at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
-    const token = await at.toJwt();
-    res.json({ token });
-  } catch (err: any) {
-    console.error('[LIVEKIT] Token error:', err.message);
-    res.status(500).json({ error: 'Failed to generate token' });
   }
 });
 

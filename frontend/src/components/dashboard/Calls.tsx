@@ -135,19 +135,39 @@ const Calls = () => {
     const formattedDate = new Date(scheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const formattedTime = new Date(`2000-01-01T${scheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const participantNames = selectedUsers.map(uid => availableUsers.find(u => u.uid === uid)?.displayName || uid).join(', ');
+    const callerName = sessionUser?.displayName || 'Someone';
+    const allParticipants = [...new Set([...(sessionUser?.uid ? [sessionUser.uid] : []), ...selectedUsers])];
+
+    let meetLink = scheduleMeetLink.trim();
+    if (!meetLink) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const start = new Date(`${scheduleDate}T${scheduleTime}`);
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+          body: JSON.stringify({ roomName: `MySyntroMed - ${callerName} & ${participantNames}`, startTime: start.toISOString(), endTime: end.toISOString() }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          meetLink = data.meetLink;
+        }
+      } catch (err) {
+        console.error('[CALLS] Failed to generate meet link for schedule:', err);
+      }
+    }
+
     const newCall: ScheduledCall = {
       id: Date.now().toString(),
       specialist: participantNames,
       date: formattedDate,
       time: formattedTime,
       status: 'upcoming',
-      meetLink: scheduleMeetLink.trim(),
+      meetLink,
     };
     setUpcomingCalls(prev => [...prev, newCall]);
     notifyAdminOfCall('scheduled', newCall.specialist, formattedDate, formattedTime);
-
-    const callerName = sessionUser?.displayName || 'Someone';
-    const allParticipants = [...new Set([...(sessionUser?.uid ? [sessionUser.uid] : []), ...selectedUsers])];
 
     try {
       const docRef = await addDoc(collection(db, 'calls'), {
@@ -157,7 +177,7 @@ const Calls = () => {
         date: formattedDate,
         time: formattedTime,
         status: 'upcoming',
-        meetLink: scheduleMeetLink.trim(),
+        meetLink,
         createdAt: serverTimestamp(),
       });
       newCall.docId = docRef.id;
@@ -171,7 +191,7 @@ const Calls = () => {
       console.error('[CALLS] Failed to save scheduled call:', err);
     }
 
-    notifyViaApi(selectedUsers, 'Scheduled Call', `${callerName} scheduled a Google Meet call with you on ${formattedDate} at ${formattedTime}`, 'system', { meetLink: scheduleMeetLink.trim() });
+    notifyViaApi(selectedUsers, 'Scheduled Google Meet', `${callerName} scheduled a Google Meet with you on ${formattedDate} at ${formattedTime}`, 'system', { meetLink });
 
     setShowSchedule(false);
     setScheduleDate('');
@@ -203,7 +223,7 @@ const Calls = () => {
     const callerName = sessionUser?.displayName || 'User';
     const participantNames = selectedUsers.map(uid => availableUsers.find(u => u.uid === uid)?.displayName || uid).join(', ');
 
-    // Generate a Jitsi Meet link via the backend API
+    // Generate a Google Meet link via the backend API
     let callMeetLink = meetLink.trim();
     if (!callMeetLink) {
       try {
@@ -325,7 +345,7 @@ const Calls = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-navy-900">Schedule a Call</h2>
-            <button onClick={() => { setShowSchedule(false); setSearchQuery(''); setScheduleDate(''); setScheduleTime(''); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+              <button onClick={() => { setShowSchedule(false); setSearchQuery(''); setScheduleDate(''); setScheduleTime(''); }} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 min-h-10 min-w-10">
               <X size={20} />
             </button>
           </div>
@@ -348,7 +368,7 @@ const Calls = () => {
                   <button
                     key={u.uid}
                     onClick={() => toggleUser(u.uid)}
-                    className={`flex w-full items-center gap-3 px-3 py-2 text-left transition border-b border-slate-50 last:border-0 ${
+                      className={`flex w-full items-center gap-3 px-4 py-3 text-left transition border-b border-slate-50 last:border-0 ${
                       isSelected ? 'bg-teal-50' : 'hover:bg-slate-50'
                     }`}
                   >
@@ -357,13 +377,13 @@ const Calls = () => {
                     }`}>
                       {isSelected && <Check size={12} className="text-white" />}
                     </div>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-sm font-bold text-white shrink-0">
                       {u.displayName.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="truncate text-sm font-medium text-slate-900">{u.displayName}</p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
                       u.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
                       u.role === 'admin' ? 'bg-teal-100 text-teal-700' :
                       'bg-blue-100 text-blue-700'
@@ -399,7 +419,7 @@ const Calls = () => {
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
             <ExternalLink size={16} />
-            <span>Video link will be available at call time</span>
+            <span>A Google Meet link will be generated and shared with participants</span>
           </div>
           <button
             onClick={handleSchedule}
@@ -420,7 +440,7 @@ const Calls = () => {
               <h3 className="text-lg font-bold text-navy-900">Start a Call</h3>
               <button
                 onClick={() => { setShowParticipants(false); setSelectedUsers([]); setSearchQuery(''); }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
               >
                 <X size={18} />
               </button>
@@ -492,7 +512,7 @@ const Calls = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="truncate font-semibold text-slate-900">{u.displayName}</p>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
                             u.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
                             u.role === 'admin' ? 'bg-teal-100 text-teal-700' :
                             'bg-blue-100 text-blue-700'

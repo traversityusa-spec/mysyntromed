@@ -122,14 +122,6 @@ export const emitCallInvite = (to: string, data: { callType: string; callerId: s
   socket.emit('callInvite', { to, ...data });
 };
 
-export const emitCallAccepted = (to: string, sessionId: string): void => {
-  if (!socket?.connected) {
-    console.warn('[SOCKET] Cannot emit call accepted - not connected');
-    return;
-  }
-  socket.emit('callAccepted', { to });
-};
-
 export const emitStatusUpdate = (data: {
   requestId: string;
   status: string;

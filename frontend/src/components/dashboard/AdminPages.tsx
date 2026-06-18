@@ -531,15 +531,15 @@ export const AdminClients = () => {
                       </td>
                       <td className="px-6 py-4">
                         {client.disabled ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-red-600 ring-1 ring-inset ring-red-600/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold uppercase text-red-600 ring-1 ring-inset ring-red-600/20">
                             Expired / Disabled
                           </span>
                         ) : client.isNewUser ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-blue-600 ring-1 ring-inset ring-blue-600/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold uppercase text-blue-600 ring-1 ring-inset ring-blue-600/20">
                             Awaiting Payment
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-600 ring-1 ring-inset ring-emerald-600/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase text-emerald-600 ring-1 ring-inset ring-emerald-600/20">
                             Active Paid
                           </span>
                         )}
@@ -550,7 +550,7 @@ export const AdminClients = () => {
                             value={client.assignedSpecialistId || ''}
                             disabled={client.disabled}
                             onChange={(e) => handleAssign(client.uid, e.target.value)}
-                            className="rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-teal-500 disabled:opacity-50"
+                            className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-500 disabled:opacity-50"
                           >
                             <option value="">Assign Specialist</option>
                             {specialists.map(s => (
@@ -559,7 +559,7 @@ export const AdminClients = () => {
                           </select>
                           <Link
                             to={`/admin/messages?start=${client.uid}`}
-                            className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors"
+                            className="p-2 min-h-10 min-w-10 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors inline-flex items-center justify-center"
                             title="Message Client"
                           >
                             <MessageSquare size={18} />
@@ -567,7 +567,7 @@ export const AdminClients = () => {
                           <button
                             onClick={() => handleToggleStatus(client.uid, !!client.disabled)}
                             disabled={actionLoading === client.uid}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`p-2 min-h-10 min-w-10 rounded-lg transition-colors inline-flex items-center justify-center ${
                               client.disabled 
                                 ? 'text-emerald-600 hover:bg-emerald-50' 
                                 : 'text-red-600 hover:bg-red-50'
@@ -583,7 +583,7 @@ export const AdminClients = () => {
                           <button
                             onClick={() => { setDeletingUser({ uid: client.uid, name: client.displayName || client.email || 'User' }); setDeleteModalOpen(true); }}
                             disabled={actionLoading === client.uid}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            className="p-2 min-h-10 min-w-10 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors inline-flex items-center justify-center"
                             title="Delete account"
                           >
                             <Trash2 size={18} />
@@ -615,7 +615,7 @@ export const AdminClients = () => {
                         <p className="text-xs text-slate-500">{client.email}</p>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${client.disabled ? 'bg-red-50 text-red-600' : client.isNewUser ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold uppercase ${client.disabled ? 'bg-red-50 text-red-600' : client.isNewUser ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
                       {client.disabled ? 'Disabled' : client.isNewUser ? 'Pending' : 'Active'}
                     </span>
                   </div>
@@ -1026,15 +1026,15 @@ export const AdminSpecialists = () => {
                       </td>
                       <td className="px-6 py-4">
                         {specialist.disabled ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-red-600 ring-1 ring-inset ring-red-600/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold uppercase text-red-600 ring-1 ring-inset ring-red-600/20">
                             Deactivated
                           </span>
                         ) : specialist.isNewUser ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-blue-600 ring-1 ring-inset ring-blue-600/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold uppercase text-blue-600 ring-1 ring-inset ring-blue-600/20">
                             Awaiting Setup
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-600 ring-1 ring-inset ring-emerald-600/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase text-emerald-600 ring-1 ring-inset ring-emerald-600/20">
                             Active
                           </span>
                         )}
@@ -1043,7 +1043,7 @@ export const AdminSpecialists = () => {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleToggleStatus(specialist.uid, !!specialist.disabled)}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`p-2 min-h-10 min-w-10 rounded-lg transition-colors inline-flex items-center justify-center ${
                               specialist.disabled 
                                 ? 'text-emerald-600 hover:bg-emerald-50' 
                                 : 'text-red-600 hover:bg-red-50'
@@ -1053,21 +1053,21 @@ export const AdminSpecialists = () => {
                           </button>
                           <Link
                             to={`/admin/messages?start=${specialist.uid}`}
-                            className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors"
+                            className="p-2 min-h-10 min-w-10 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors inline-flex items-center justify-center"
                             title="Message Specialist"
                           >
                             <MessageSquare size={18} />
                           </Link>
                           <button
                             onClick={() => setViewingWorkFor(specialist)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-2 min-h-10 min-w-10 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors inline-flex items-center justify-center"
                             title="View Work Logs"
                           >
                             <ClipboardList size={18} />
                           </button>
                           <button
                             onClick={() => { setDeletingUser({ uid: specialist.uid, name: specialist.displayName || specialist.email || 'User' }); setDeleteModalOpen(true); }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            className="p-2 min-h-10 min-w-10 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors inline-flex items-center justify-center"
                             title="Delete account"
                           >
                             <Trash2 size={18} />
@@ -1099,7 +1099,7 @@ export const AdminSpecialists = () => {
                         <p className="text-xs text-slate-500">{specialist.email}</p>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${specialist.disabled ? 'bg-red-50 text-red-600' : specialist.isNewUser ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold uppercase ${specialist.disabled ? 'bg-red-50 text-red-600' : specialist.isNewUser ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
                       {specialist.disabled ? 'Deactivated' : specialist.isNewUser ? 'Pending' : 'Active'}
                     </span>
                   </div>
@@ -1479,7 +1479,7 @@ export const AdminConversations = () => {
           <>
             <div className="border-b border-slate-100 p-4">
               <div className="flex items-center gap-3">
-                <button onClick={() => setMobileView('list')} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" title="Back to conversations">
+                <button onClick={() => setMobileView('list')} className="rounded-lg p-2 min-h-10 min-w-10 text-slate-400 hover:bg-slate-100 lg:hidden" title="Back to conversations">
                   <X size={20} />
                 </button>
                 <div className="h-10 w-10 overflow-hidden rounded-full bg-gradient-to-br from-teal-400 to-teal-600">
@@ -1519,7 +1519,7 @@ export const AdminConversations = () => {
                     }`}>
                       <p className="text-xs font-semibold mb-1">{msg.senderName || 'Unknown'}</p>
                       <p className="text-sm">{msg.text || ''}</p>
-                      <p className={`text-[10px] mt-1 ${isOwn ? 'text-teal-200' : 'text-slate-400'}`}>
+                      <p className={`text-xs mt-1 ${isOwn ? 'text-teal-200' : 'text-slate-400'}`}>
                         {formatTime(msg.createdAt || new Date())}
                       </p>
                     </div>
@@ -1795,7 +1795,7 @@ export const AdminAnalytics = () => {
                 <li><strong className="text-slate-700">Completion:</strong> % of requests completed. Shows productivity.</li>
                 <li><strong className="text-slate-700">Capacity:</strong> Client-to-specialist ratio. 5:1 or lower is ideal.</li>
               </ul>
-              <button onClick={() => setShowGuide(false)} className="mt-3 w-full rounded-lg bg-slate-100 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200">Got it</button>
+              <button onClick={() => setShowGuide(false)} className="mt-3 w-full rounded-lg bg-slate-100 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-200">Got it</button>
             </div>
           )}
         </div>
@@ -1817,9 +1817,9 @@ export const AdminAnalytics = () => {
               <p className="text-xs text-slate-500 mt-1">{card.detail}</p>
               <div className="flex items-center gap-1 mt-2">
                 <span className={`text-sm font-bold ${tIcon.color}`}>{tIcon.icon}</span>
-                <span className="text-[10px] text-slate-400">{card.trendLabel}</span>
+                <span className="text-xs text-slate-400">{card.trendLabel}</span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">{card.tip}</p>
+              <p className="text-xs text-slate-400 mt-1">{card.tip}</p>
             </div>
           );
         })}
@@ -1829,27 +1829,27 @@ export const AdminAnalytics = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Total Clients</p>
           <p className="mt-1 text-2xl font-bold text-navy-900">{clients.length}</p>
-          <p className="text-[10px] text-slate-400 mt-1">{newUsersThisWeek} new this week</p>
+          <p className="text-xs text-slate-400 mt-1">{newUsersThisWeek} new this week</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Specialists</p>
           <p className="mt-1 text-2xl font-bold text-navy-900">{specialists.length}</p>
-          <p className="text-[10px] text-slate-400 mt-1">On the platform</p>
+          <p className="text-xs text-slate-400 mt-1">On the platform</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Pending</p>
           <p className={`mt-1 text-2xl font-bold ${pendingRequests > 10 ? 'text-amber-600' : 'text-navy-900'}`}>{pendingRequests}</p>
-          <p className="text-[10px] text-slate-400 mt-1">Awaiting completion</p>
+          <p className="text-xs text-slate-400 mt-1">Awaiting completion</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Completed</p>
           <p className="mt-1 text-2xl font-bold text-emerald-600">{completedRequests}</p>
-          <p className="text-[10px] text-slate-400 mt-1">{completionRate}% rate</p>
+          <p className="text-xs text-slate-400 mt-1">{completionRate}% rate</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Avg Response</p>
           <p className="mt-1 text-2xl font-bold text-purple-600">{avgResponseTimeFormatted}</p>
-          <p className="text-[10px] text-slate-400 mt-1">From message timestamps</p>
+          <p className="text-xs text-slate-400 mt-1">From message timestamps</p>
         </div>
       </div>
 
@@ -2056,7 +2056,7 @@ export const AdminActivity = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-slate-900">{act.title}</p>
-                  <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[10px] font-medium text-slate-500 border border-slate-200">
+                  <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-medium text-slate-500 border border-slate-200">
                     {act.type}
                   </span>
                 </div>
@@ -2071,7 +2071,7 @@ export const AdminActivity = () => {
                     <Clock size={12} />
                     {act.createdAt.toLocaleString()}
                   </span>
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
                     act.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
                     act.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                   }`}>

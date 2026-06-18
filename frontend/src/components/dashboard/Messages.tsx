@@ -873,25 +873,25 @@ const Messages = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setShowCreateGroupModal(true); setSearchUserQuery(''); setUsersError(''); }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600 transition"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600 transition"
                   title="New Group"
                 >
-                  <Users size={16} />
+                  <Users size={18} />
                 </button>
                 <button
                   onClick={() => setShowNewMessageModal(true)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
                   title="New Message"
                 >
-                  <Plus size={18} />
+                  <Plus size={20} />
                 </button>
               </div>
             ) : (
               <Link
                 to="/portal/specialist"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 transition"
               >
-                <Plus size={18} />
+                <Plus size={20} />
               </Link>
             )}
           </div>
@@ -953,7 +953,7 @@ const Messages = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-slate-900">{conv.name}</p>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                         conv.role === 'Group' ? 'bg-amber-100 text-amber-700' :
                         conv.role === 'specialist' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                       }`}>
@@ -1027,7 +1027,7 @@ const Messages = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-slate-900">{currentConversation.name}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                       currentConversation.role === 'Group' ? 'bg-amber-100 text-amber-700' :
                       currentConversation.role === 'specialist' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                     }`}>
@@ -1056,16 +1056,28 @@ const Messages = () => {
                         const gId = groupIdFromConversation(selectedConversation);
                         const group = groups.find(g => g.id === gId);
                         if (!group || !user) return;
-                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
                         const targetId = group.participantIds.find(id => id !== user.uid);
                         if (!targetId) { alert('No other participants to call'); return; }
                         const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        window.dispatchEvent(new CustomEvent('call:start', {
-                          detail: { sessionId: roomCode, callType: 'voice', targetUserId: targetId, callerName },
-                        }));
+                        let meetLink = '';
+                        try {
+                          const token = await user.getIdToken();
+                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ roomName: `MySyntroMed Group Voice - ${group.name}` }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            meetLink = data.meetLink;
+                          }
+                        } catch {}
+                        if (!meetLink) return;
+                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
+                        window.open(meetLink, '_blank');
                         const socket = getSocket();
                         if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode });
+                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
                         }
                         try {
                           const token = await user.getIdToken();
@@ -1074,7 +1086,7 @@ const Messages = () => {
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                             body: JSON.stringify({
                               type: 'call', recipientIds: group.participantIds.filter(id => id !== user.uid && id !== targetId),
-                              title: `Voice Call`, message: `${callerName} started a voice call in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice' },
+                              title: `Voice Call`, message: `${callerName} started a Google Meet in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice', meetLink },
                             }),
                           });
                         } catch {}
@@ -1089,16 +1101,28 @@ const Messages = () => {
                         const gId = groupIdFromConversation(selectedConversation);
                         const group = groups.find(g => g.id === gId);
                         if (!group || !user) return;
-                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
                         const targetId = group.participantIds.find(id => id !== user.uid);
                         if (!targetId) { alert('No other participants to call'); return; }
                         const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        window.dispatchEvent(new CustomEvent('call:start', {
-                          detail: { sessionId: roomCode, callType: 'video', targetUserId: targetId, callerName },
-                        }));
+                        let meetLink = '';
+                        try {
+                          const token = await user.getIdToken();
+                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ roomName: `MySyntroMed Group Video - ${group.name}` }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            meetLink = data.meetLink;
+                          }
+                        } catch {}
+                        if (!meetLink) return;
+                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
+                        window.open(meetLink, '_blank');
                         const socket = getSocket();
                         if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode });
+                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
                         }
                         try {
                           const token = await user.getIdToken();
@@ -1107,7 +1131,7 @@ const Messages = () => {
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                             body: JSON.stringify({
                               type: 'call', recipientIds: group.participantIds.filter(id => id !== user.uid && id !== targetId),
-                              title: `Video Call`, message: `${callerName} started a video call in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video' },
+                              title: `Video Call`, message: `${callerName} started a Google Meet in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video', meetLink },
                             }),
                           });
                         } catch {}
@@ -1168,15 +1192,27 @@ const Messages = () => {
                     <button
                       onClick={async () => {
                         if (!selectedConversation || !user) return;
-                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
                         const targetId = selectedConversation;
                         const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        window.dispatchEvent(new CustomEvent('call:start', {
-                          detail: { sessionId: roomCode, callType: 'voice', targetUserId: targetId, callerName },
-                        }));
+                        let meetLink = '';
+                        try {
+                          const token = await user.getIdToken();
+                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ roomName: `MySyntroMed Voice - ${callerName}` }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            meetLink = data.meetLink;
+                          }
+                        } catch {}
+                        if (!meetLink) return;
+                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
+                        window.open(meetLink, '_blank');
                         const socket = getSocket();
                         if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode });
+                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
                         }
                         try {
                           const token = await user.getIdToken();
@@ -1185,7 +1221,7 @@ const Messages = () => {
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                             body: JSON.stringify({
                               type: 'call', recipientIds: [targetId],
-                              title: `Voice Call`, message: `${callerName} is calling you`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice' },
+                              title: `Voice Call`, message: `${callerName} invited you to a Google Meet`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice', meetLink },
                             }),
                           });
                         } catch {}
@@ -1198,15 +1234,27 @@ const Messages = () => {
                     <button
                       onClick={async () => {
                         if (!selectedConversation || !user) return;
-                        const roomCode = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
                         const targetId = selectedConversation;
                         const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        window.dispatchEvent(new CustomEvent('call:start', {
-                          detail: { sessionId: roomCode, callType: 'video', targetUserId: targetId, callerName },
-                        }));
+                        let meetLink = '';
+                        try {
+                          const token = await user.getIdToken();
+                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ roomName: `MySyntroMed Video - ${callerName}` }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            meetLink = data.meetLink;
+                          }
+                        } catch {}
+                        if (!meetLink) return;
+                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
+                        window.open(meetLink, '_blank');
                         const socket = getSocket();
                         if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode });
+                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
                         }
                         try {
                           const token = await user.getIdToken();
@@ -1215,7 +1263,7 @@ const Messages = () => {
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                             body: JSON.stringify({
                               type: 'call', recipientIds: [targetId],
-                              title: `Video Call`, message: `${callerName} is calling you`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video' },
+                              title: `Video Call`, message: `${callerName} invited you to a Google Meet`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video', meetLink },
                             }),
                           });
                         } catch {}
@@ -1325,10 +1373,10 @@ const Messages = () => {
                                   <img 
                                     src={senderPhotoURL} 
                                     alt={msg.senderName} 
-                                    className="h-8 w-8 rounded-full object-cover border border-slate-200" 
+                                    className="h-10 w-10 rounded-full object-cover border border-slate-200" 
                                   />
                                 ) : (
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-400 to-slate-500 text-[10px] font-bold text-white uppercase">
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slate-400 to-slate-500 text-xs font-bold text-white uppercase">
                                     {msg.senderName.charAt(0)}
                                   </div>
                                 )}
@@ -1419,10 +1467,10 @@ const Messages = () => {
                                   <img 
                                     src={currentUserPhotoURL} 
                                     alt="You" 
-                                    className="h-8 w-8 rounded-full object-cover border border-slate-200 shadow-sm" 
+                                    className="h-10 w-10 rounded-full object-cover border border-slate-200 shadow-sm" 
                                   />
                                 ) : (
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-[10px] font-bold text-white uppercase shadow-sm">
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-xs font-bold text-white uppercase shadow-sm">
                                     {sessionUser?.displayName?.charAt(0) || 'U'}
                                   </div>
                                 )}
@@ -1442,10 +1490,10 @@ const Messages = () => {
                         <img 
                           src={currentConversationPhotoURL} 
                           alt={currentConversation.name} 
-                          className="h-8 w-8 rounded-full object-cover border border-slate-100 shadow-sm" 
+                          className="h-10 w-10 rounded-full object-cover border border-slate-100 shadow-sm" 
                         />
                       ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400 uppercase border border-slate-200">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-400 uppercase border border-slate-200">
                           {currentConversation.name.charAt(0)}
                         </div>
                       )}
@@ -1467,7 +1515,7 @@ const Messages = () => {
               </div>
             </div>
 
-            <div className="border-t border-slate-100 bg-amber-50 px-4 py-2 text-center text-[10px] font-medium text-amber-700">
+            <div className="border-t border-slate-100 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-700">
               Patient-specific data must remain inside your EHR system.
             </div>
             {/* Input Area */}
@@ -1542,7 +1590,7 @@ const Messages = () => {
               <h3 className="text-lg font-bold text-navy-900">Create Group</h3>
               <button
                 onClick={() => { setShowCreateGroupModal(false); setNewGroupName(''); setSelectedGroupParticipants([]); }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+                className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
               >
                 <X size={18} />
               </button>
@@ -1603,16 +1651,16 @@ const Messages = () => {
                           </div>
                           <div className="relative">
                             {u.photoURL ? (
-                              <img src={u.photoURL} alt={u.displayName} className="h-9 w-9 rounded-full object-cover" />
+                              <img src={u.photoURL} alt={u.displayName} className="h-10 w-10 rounded-full object-cover" />
                             ) : (
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-xs font-bold text-white">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-sm font-bold text-white">
                                 {u.displayName.charAt(0).toUpperCase()}
                               </div>
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="truncate font-semibold text-slate-900">{u.displayName}</p>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                               u.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
                               u.role === 'admin' ? 'bg-teal-100 text-teal-700' :
                               'bg-blue-100 text-blue-700'
@@ -1664,7 +1712,7 @@ const Messages = () => {
           <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
               <h3 className="text-lg font-bold text-navy-900">Rename Group</h3>
-              <button onClick={() => setShowRenameGroup(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+              <button onClick={() => setShowRenameGroup(false)} className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
             <div className="p-4 space-y-4">
               <input
@@ -1699,7 +1747,7 @@ const Messages = () => {
           <div className="mx-4 w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
               <h3 className="text-lg font-bold text-navy-900">Add Members</h3>
-              <button onClick={() => setShowAddMembers(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+              <button onClick={() => setShowAddMembers(false)} className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
             <div className="p-4">
               <div className="relative mb-2">
@@ -1762,7 +1810,7 @@ const Messages = () => {
           <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
               <h3 className="text-lg font-bold text-navy-900">{currentConversation?.name || 'Group Info'}</h3>
-              <button onClick={() => setShowGroupInfo(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+              <button onClick={() => setShowGroupInfo(false)} className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
             <div className="p-4 border-b border-slate-100">
               <p className="text-sm text-slate-500">
@@ -1802,7 +1850,7 @@ const Messages = () => {
                               await groupChatService.removeParticipantsFromGroup(gId, [pId]);
                             } catch { alert('Failed to remove member'); }
                           }}
-                          className="flex h-8 w-8 items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition"
+                          className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition"
                           title="Remove from group"
                         >
                           <X size={16} />
@@ -1823,7 +1871,7 @@ const Messages = () => {
           <div className="mx-4 w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
               <h3 className="text-lg font-bold text-navy-900">Contact Info</h3>
-              <button onClick={() => setShowContactInfo(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+              <button onClick={() => setShowContactInfo(false)} className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
             <div className="p-6 flex flex-col items-center text-center">
               {currentConversation.photoURL ? (
@@ -1857,7 +1905,7 @@ const Messages = () => {
               <h3 className="text-lg font-bold text-navy-900">New Message</h3>
               <button
                 onClick={() => { setShowNewMessageModal(false); setSearchUserQuery(''); }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+                className="flex min-h-10 min-w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
               >
                 <X size={18} />
               </button>
@@ -1900,7 +1948,7 @@ const Messages = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-semibold text-slate-900">{user.displayName}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
                           user.role === 'specialist' ? 'bg-purple-100 text-purple-700' :
                           user.role === 'admin' ? 'bg-teal-100 text-teal-700' :
                           'bg-blue-100 text-blue-700'

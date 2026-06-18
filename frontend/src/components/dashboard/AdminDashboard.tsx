@@ -126,6 +126,7 @@ export const AdminDashboard = () => {
   const [requests, setRequests] = useState<Request[]>([]);
   const [selectedClient, setSelectedClient] = useState<UserProfile | null>(null);
   const [viewingClient, setViewingClient] = useState<UserProfile | null>(null);
+  const [showClientDetail, setShowClientDetail] = useState(false);
   const [clientRequests, setClientRequests] = useState<Request[]>([]);
   const [clientMessages, setClientMessages] = useState<Message[]>([]);
   const [loadingClientData, setLoadingClientData] = useState(false);
@@ -204,6 +205,7 @@ export const AdminDashboard = () => {
 
   const handleViewClient = async (client: UserProfile) => {
     setViewingClient(client);
+    setShowClientDetail(true);
     setLoadingClientData(true);
     setClientRequests(requests.filter(r => r.userId === client.uid));
     if (client.assignedSpecialistId) {
@@ -290,8 +292,12 @@ export const AdminDashboard = () => {
         ) : clients.length === 0 ? (
           <div className="p-12 text-center text-slate-400">No clients yet</div>
         ) : (
-          <div className="flex">
-            <div className="w-72 shrink-0 border-r border-slate-200 divide-y divide-slate-100 overflow-y-auto max-h-[600px]">
+          <div className="flex flex-col md:flex-row">
+            <div className={`w-full md:w-72 md:shrink-0 border-r border-slate-200 divide-y divide-slate-100 overflow-y-auto max-h-[600px] ${showClientDetail ? 'hidden md:block' : ''}`}>
+              <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                <span className="text-sm font-semibold text-slate-700">Select a client</span>
+                <span className="text-xs text-slate-500">{clients.length} total</span>
+              </div>
               {clients.map(client => (
                 <button
                   key={client.uid}
@@ -301,7 +307,7 @@ export const AdminDashboard = () => {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xs font-bold shrink-0">
+                    <div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-sm font-bold shrink-0">
                       {client.displayName?.[0]?.toUpperCase() || 'C'}
                     </div>
                     <div className="min-w-0">
@@ -314,117 +320,126 @@ export const AdminDashboard = () => {
                 </button>
               ))}
             </div>
-            <div className="flex-1 p-6">
+            <div className={`flex-1 p-6 ${!showClientDetail ? 'hidden md:block' : ''}`}>
               {viewingClient ? (
-                loadingClientData ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-14 w-14 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xl font-bold">
-                          {viewingClient.displayName?.[0]?.toUpperCase() || 'C'}
+                <>
+                  <button
+                    onClick={() => setShowClientDetail(false)}
+                    className="md:hidden mb-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    Back to list
+                  </button>
+                  {loadingClientData ? (
+                    <div className="flex items-center justify-center h-64">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="h-14 w-14 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xl font-bold">
+                            {viewingClient.displayName?.[0]?.toUpperCase() || 'C'}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-lg font-semibold text-slate-900 truncate">{viewingClient.displayName || 'Client'}</h3>
+                            <p className="text-sm text-slate-500 truncate">{viewingClient.email}</p>
+                            <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Stethoscope size={12} />
+                              {viewingClient.assignedSpecialistName || 'No specialist assigned'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-slate-900">{viewingClient.displayName || 'Client'}</h3>
-                          <p className="text-sm text-slate-500">{viewingClient.email}</p>
-                          <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Stethoscope size={12} />
-                            {viewingClient.assignedSpecialistName || 'No specialist assigned'}
-                          </p>
-                        </div>
+                        <span className={`shrink-0 inline-flex px-3 py-1.5 text-xs font-semibold rounded-full ${
+                          viewingClient.disabled ? 'bg-red-100 text-red-700' :
+                          viewingClient.isNewUser ? 'bg-blue-100 text-blue-700' :
+                          'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {viewingClient.disabled ? 'Inactive' : viewingClient.isNewUser ? 'Pending' : 'Active'}
+                        </span>
                       </div>
-                      <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
-                        viewingClient.disabled ? 'bg-red-100 text-red-700' :
-                        viewingClient.isNewUser ? 'bg-blue-100 text-blue-700' :
-                        'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {viewingClient.disabled ? 'Inactive' : viewingClient.isNewUser ? 'Pending' : 'Active'}
-                      </span>
-                    </div>
 
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                        <ClipboardList size={16} />
-                        Requests ({clientRequests.length})
-                      </h4>
-                      {clientRequests.length === 0 ? (
-                        <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg">No requests from this client</p>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border border-slate-200">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b border-slate-100 bg-slate-50">
-                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Type</th>
-                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Priority</th>
-                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Status</th>
-                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Open</th>
-                                <th className="text-left p-2.5 font-semibold text-slate-600 text-xs">Response</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {clientRequests.map(req => (
-                                <tr key={req.id} className="hover:bg-slate-50">
-                                  <td className="p-2.5 text-slate-800">{req.type}</td>
-                                  <td className="p-2.5">
-                                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-                                      req.priority === 'urgent' ? 'bg-red-100 text-red-700' :
-                                      req.priority === 'high' ? 'bg-amber-100 text-amber-700' :
-                                      'bg-teal-100 text-teal-700'
-                                    }`}>{req.priority}</span>
-                                  </td>
-                                  <td className="p-2.5">
-                                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${statusColors[req.status]}`}>
-                                      {statusLabels[req.status]}
-                                    </span>
-                                  </td>
-                                  <td className="p-2.5 text-xs text-slate-500">{req.submittedAt.toLocaleDateString()}</td>
-                                  <td className="p-2.5 text-xs">
-                                    <span className={`font-medium ${getResponseTime(req) === 'Waiting' ? 'text-amber-600' : 'text-slate-600'}`}>
-                                      {getResponseTime(req)}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-
-                    {viewingClient.assignedSpecialistId && (
                       <div>
                         <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                          <MessageSquare size={16} />
-                          Recent Messages
+                          <ClipboardList size={16} />
+                          Requests ({clientRequests.length})
                         </h4>
-                        {clientMessages.length === 0 ? (
-                          <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg">No messages yet</p>
+                        {clientRequests.length === 0 ? (
+                          <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg">No requests from this client</p>
                         ) : (
-                          <div className="space-y-2 max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
-                            {clientMessages.slice(-10).map(msg => (
-                              <div key={msg.id} className={`flex ${msg.senderId === viewingClient.uid ? 'justify-start' : 'justify-end'}`}>
-                                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
-                                  msg.senderId === viewingClient.uid
-                                    ? 'bg-slate-100 text-slate-800 rounded-bl-sm'
-                                    : 'bg-teal-500 text-white rounded-br-sm'
-                                }`}>
-                                  <p className="text-xs font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
-                                  <p>{msg.text}</p>
-                                  <p className={`text-[10px] mt-0.5 opacity-60`}>
-                                    {msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                          <div className="overflow-x-auto rounded-lg border border-slate-200">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-slate-100 bg-slate-50">
+                                  <th className="text-left p-3 font-semibold text-slate-600 text-xs">Type</th>
+                                  <th className="text-left p-3 font-semibold text-slate-600 text-xs">Priority</th>
+                                  <th className="text-left p-3 font-semibold text-slate-600 text-xs">Status</th>
+                                  <th className="text-left p-3 font-semibold text-slate-600 text-xs">Open</th>
+                                  <th className="text-left p-3 font-semibold text-slate-600 text-xs">Response</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {clientRequests.map(req => (
+                                  <tr key={req.id} className="hover:bg-slate-50">
+                                    <td className="p-3 text-slate-800 whitespace-nowrap">{req.type}</td>
+                                    <td className="p-3">
+                                      <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
+                                        req.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                                        req.priority === 'high' ? 'bg-amber-100 text-amber-700' :
+                                        'bg-teal-100 text-teal-700'
+                                      }`}>{req.priority}</span>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${statusColors[req.status]}`}>
+                                        {statusLabels[req.status]}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-xs text-slate-500 whitespace-nowrap">{req.submittedAt.toLocaleDateString()}</td>
+                                    <td className="p-3 text-xs">
+                                      <span className={`font-medium ${getResponseTime(req) === 'Waiting' ? 'text-amber-600' : 'text-slate-600'}`}>
+                                        {getResponseTime(req)}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                )
+
+                      {viewingClient.assignedSpecialistId && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <MessageSquare size={16} />
+                            Recent Messages
+                          </h4>
+                          {clientMessages.length === 0 ? (
+                            <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg">No messages yet</p>
+                          ) : (
+                            <div className="space-y-2 max-h-60 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                              {clientMessages.slice(-10).map(msg => (
+                                <div key={msg.id} className={`flex ${msg.senderId === viewingClient.uid ? 'justify-start' : 'justify-end'}`}>
+                                  <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
+                                    msg.senderId === viewingClient.uid
+                                      ? 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                                      : 'bg-teal-500 text-white rounded-br-sm'
+                                  }`}>
+                                    <p className="text-xs font-semibold mb-0.5 opacity-70">{msg.senderName}</p>
+                                    <p>{msg.text}</p>
+                                    <p className="text-xs mt-0.5 opacity-60">
+                                      {msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 text-slate-400">
                   <Users size={48} className="mb-3 text-slate-300" />

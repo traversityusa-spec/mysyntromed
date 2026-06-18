@@ -70,7 +70,7 @@ export const Navbar = () => {
         {/* Mobile Toggle */}
         <button 
           className={cn(
-            "md:hidden transition-colors duration-300",
+            "md:hidden p-2 min-h-11 min-w-11 transition-colors duration-300",
             isScrolled || !isHomePage ? "text-navy-900" : "text-white"
           )} 
           onClick={() => setIsMenuOpen(!isMenuOpen)}
