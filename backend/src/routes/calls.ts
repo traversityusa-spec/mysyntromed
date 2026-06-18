@@ -14,7 +14,7 @@ router.post('/create-meet', requireAuth, async (req: AuthedRequest, res) => {
       endTime ? new Date(endTime) : undefined,
     );
 
-    return res.json({ meetLink: result.meetLink, eventId: result.eventId, roomName });
+    return res.json({ meetLink: result.meetLink, spaceName: result.spaceName, roomName });
   } catch (err: any) {
     console.error('[CALLS] Failed to create Google Meet link:', err.message);
     return res.status(500).json({ error: err.message || 'Failed to create Google Meet link' });
