@@ -75,8 +75,9 @@ router.post('/create', requireAuth, async (req: AuthedRequest, res) => {
     const ids = recipientIds ? (Array.isArray(recipientIds) ? recipientIds : [recipientIds]) : [userId];
 
     // Only admins can create notifications for other users
+    // Exception: any user can send call-type notifications (calls, Google Meet invites)
     const allForSelf = ids.every((id: string) => id === currentUid);
-    if (!allForSelf && currentRole !== 'admin') {
+    if (!allForSelf && currentRole !== 'admin' && type !== 'call') {
       return res.status(403).json({ error: 'Forbidden: can only create notifications for yourself' });
     }
 
