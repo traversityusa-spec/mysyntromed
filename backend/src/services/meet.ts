@@ -8,6 +8,17 @@ type MeetResult = {
   eventId?: string;
 };
 
+async function getAccessToken(scopes: string[]): Promise<string> {
+  const { google } = await import('googleapis');
+  const auth = new google.auth.JWT({
+    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: GOOGLE_SERVICE_ACCOUNT_KEY!.replace(/\\n/g, '\n'),
+    scopes,
+  });
+  const tokens = await auth.authorize();
+  return tokens.access_token!;
+}
+
 export async function createGoogleMeetLink(
   title: string,
   startTime?: Date,
@@ -17,42 +28,27 @@ export async function createGoogleMeetLink(
     throw new Error('Google Meet is not configured. Please set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_KEY.');
   }
 
-  const { google } = await import('googleapis');
-  const auth = new google.auth.JWT({
-    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: GOOGLE_SERVICE_ACCOUNT_KEY.replace(/\\n/g, '\n'),
-    scopes: ['https://www.googleapis.com/auth/calendar'],
-  });
+  const token = await getAccessToken(['https://www.googleapis.com/auth/meetings']);
 
-  const calendar = google.calendar({ version: 'v3', auth });
-
-  const eventBody: any = {
-    summary: title,
-    conferenceData: {
-      createRequest: {
-        requestId: crypto.randomUUID(),
-        conferenceSolutionKey: { type: 'hangoutsMeet' },
-      },
+  const resp = await fetch('https://meet.googleapis.com/v2/spaces', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
-  };
-
-  if (startTime && endTime) {
-    eventBody.start = { dateTime: startTime.toISOString() };
-    eventBody.end = { dateTime: endTime.toISOString() };
-  }
-
-  const res = await (calendar.events as any).create({
-    calendarId: 'primary',
-    conferenceDataVersion: 1,
-    requestBody: eventBody,
+    body: JSON.stringify({}),
   });
 
-  if (!res.data.hangoutLink) {
-    throw new Error('Google Meet returned no hangout link.');
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    throw new Error(`Google Meet API error: ${data.error?.message || JSON.stringify(data)}`);
   }
+
+  const meetLink = data.meetingUri || `https://meet.google.com/${data.meetingCode}`;
 
   return {
-    meetLink: res.data.hangoutLink,
-    eventId: res.data.id || undefined,
+    meetLink,
+    eventId: data.name || undefined,
   };
 }

@@ -45,6 +45,9 @@ server/serviceAccountKey.json
 # Email server keys
 email-server-config.json
 
+# Google service account JSON keys
+api/*.json
+
 # Database backups
 *.sql
 *.dump
