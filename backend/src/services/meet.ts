@@ -41,7 +41,7 @@ export async function createGoogleMeetLink(
     eventBody.end = { dateTime: endTime.toISOString() };
   }
 
-  const res = await calendar.events.create({
+  const res = await (calendar.events as any).create({
     calendarId: 'primary',
     conferenceDataVersion: 1,
     requestBody: eventBody,
