@@ -253,15 +253,6 @@ export const SpecialistDashboard = () => {
         </div>
         <div className="flex items-center gap-4">
           <DateTimeDisplay />
-          <div className="flex gap-3">
-            <button
-              onClick={refreshAssignedClients}
-              className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              <RefreshCw size={18} />
-              Refresh
-            </button>
-          </div>
         </div>
       </div>
 

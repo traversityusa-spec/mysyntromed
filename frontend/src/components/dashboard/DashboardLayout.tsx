@@ -152,17 +152,20 @@ const role = sessionUser?.role || 'client';
       if (newNotifs.length > 0) {
         const latest = newNotifs[0];
         if (latest.type === 'call' && latest.data?.sessionId) {
-          setIncomingCall({
-            callerName: latest.data.callerName as string || 'Someone',
-            sessionId: latest.data.sessionId as string,
-            callerId: (latest.data.callerId as string) || '',
-            callType: (latest.data.callType as string) || 'video',
-            meetLink: (latest.data.meetLink as string) || '',
-          });
-          if (soundEnabled) {
-            playNotificationSound();
-            setTimeout(() => playNotificationSound(), 600);
-            setTimeout(() => playNotificationSound(), 1200);
+          const isRecent = Date.now() - latest.createdAt.getTime() < 30000;
+          if (isRecent) {
+            setIncomingCall({
+              callerName: latest.data.callerName as string || 'Someone',
+              sessionId: latest.data.sessionId as string,
+              callerId: (latest.data.callerId as string) || '',
+              callType: (latest.data.callType as string) || 'video',
+              meetLink: (latest.data.meetLink as string) || '',
+            });
+            if (soundEnabled) {
+              playNotificationSound();
+              setTimeout(() => playNotificationSound(), 600);
+              setTimeout(() => playNotificationSound(), 1200);
+            }
           }
         } else {
           showToast(latest.type, latest.title, latest.message);
