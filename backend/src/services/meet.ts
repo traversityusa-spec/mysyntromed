@@ -69,13 +69,6 @@ function getGoogleCredentials(): { email: string; key: string } | null {
   return { email, key };
 }
 
-function generateRandomMeetCode(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz';
-  const segment = (len: number) =>
-    Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `${segment(3)}-${segment(4)}-${segment(3)}`;
-}
-
 export async function createGoogleMeetLink(
   title: string,
   startTime?: Date,
@@ -108,20 +101,23 @@ export async function createGoogleMeetLink(
       if (resp.ok) {
         const meetLink = data.meetingUri || `https://meet.google.com/${data.meetingCode}`;
         const spaceName = data.name || undefined;
-        console.log('[MEET] Created space:', spaceName, meetLink);
+        console.log('[MEET] Created Google Meet space:', spaceName, meetLink);
         return { meetLink, spaceName };
       }
 
-      console.warn('[MEET] API error, falling back to random code:', data.error?.message || JSON.stringify(data));
+      console.warn('[MEET] API error, falling back to Jitsi:', data.error?.message || JSON.stringify(data));
     } catch (err: any) {
-      console.warn('[MEET] Exception, falling back to random code:', err.message);
+      console.warn('[MEET] Exception, falling back to Jitsi:', err.message);
     }
   } else {
-    console.warn('[MEET] No credentials configured, using random Meet code');
+    console.warn('[MEET] No credentials configured, using Jitsi fallback');
   }
 
-  const code = generateRandomMeetCode();
-  const meetLink = `https://meet.google.com/${code}`;
-  console.log('[MEET] Generated fallback link:', meetLink);
+  const roomId = title
+    ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36)
+    : 'mysyntromed-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8);
+
+  const meetLink = `https://meet.jit.si/${roomId}`;
+  console.log('[MEET] Generated Jitsi link:', meetLink);
   return { meetLink };
 }
