@@ -451,7 +451,8 @@ export const userService = {
 
     const q = query(
       collection(db, 'users'),
-      where('assignedSpecialistId', '==', specialistId)
+      where('assignedSpecialistId', '==', specialistId),
+      where('role', '==', 'client')
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => {
@@ -490,7 +491,8 @@ export const userService = {
   subscribeToAssignedClients(specialistId: string, callback: (clients: UserProfile[]) => void): Unsubscribe {
     const q = query(
       collection(db, 'users'),
-      where('assignedSpecialistId', '==', specialistId)
+      where('assignedSpecialistId', '==', specialistId),
+      where('role', '==', 'client')
     );
     return onSnapshot(q, (snap) => {
       const clients = snap.docs.map((d) => {

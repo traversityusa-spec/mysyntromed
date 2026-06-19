@@ -88,7 +88,7 @@ export const SpecialistDashboard = () => {
           chunks.push(clients.slice(index, index + 10));
         }
         const snaps = await Promise.all(
-          chunks.map((chunk) => getDocs(query(collection(db, 'requests'), where('userId', 'in', chunk.map(client => client.uid)))))
+          chunks.map((chunk) => getDocs(query(collection(db, 'requests'), where('userId', 'in', chunk.map(client => client.uid)), where('specialistId', '==', sessionUser?.uid))))
         );
         if (!cancelled) {
           setAssignedClientRequests(snaps.flatMap(snap => snap.docs.map(d => mapRequestDoc(d.id, d.data()))));
