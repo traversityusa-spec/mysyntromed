@@ -11,22 +11,80 @@ process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled rejection:', reason);
 });
 
-async function sendEmail({ from, to, subject, html }) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const RESEND_SEND_INTERVAL_MS = parsePositiveInt(process.env.RESEND_SEND_INTERVAL_MS, 250);
+const RESEND_MAX_RETRIES = parsePositiveInt(process.env.RESEND_MAX_RETRIES, 3);
+
+let emailQueue = Promise.resolve();
+let lastProviderSendAt = 0;
+
+async function waitForResendSlot() {
+  const elapsed = Date.now() - lastProviderSendAt;
+  const waitMs = Math.max(0, RESEND_SEND_INTERVAL_MS - elapsed);
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+  lastProviderSendAt = Date.now();
+}
+
+function enqueueEmail(task) {
+  const run = emailQueue.then(task, task);
+  emailQueue = run.catch(() => {});
+  return run;
+}
+
+function retryDelayFromHeaders(headers, attempt) {
+  const retryAfter = headers.get('retry-after');
+  if (retryAfter) {
+    const seconds = Number.parseFloat(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.ceil(seconds * 1000);
+    }
+
+    const retryAt = Date.parse(retryAfter);
+    if (!Number.isNaN(retryAt)) {
+      return Math.max(0, retryAt - Date.now());
+    }
+  }
+
+  return Math.min(1000 * 2 ** attempt, 8000);
+}
+
+async function sendEmailDirect({ from, to, subject, html }) {
   if (process.env.RESEND_API_KEY) {
     console.log('[EMAIL] Using Resend API (HTTP)');
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ from, to, subject, html }),
-    });
-    if (!res.ok) {
+
+    for (let attempt = 0; attempt <= RESEND_MAX_RETRIES; attempt++) {
+      await waitForResendSlot();
+
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from, to, subject, html }),
+      });
+
+      if (res.ok) {
+        return { previewUrl: null };
+      }
+
       const err = await res.text();
-      throw new Error(`Resend API error (${res.status}): ${err}`);
+      if (res.status !== 429 || attempt >= RESEND_MAX_RETRIES) {
+        throw new Error(`Resend API error (${res.status}): ${err}`);
+      }
+
+      const delayMs = retryDelayFromHeaders(res.headers, attempt);
+      console.warn(`[EMAIL] Resend rate limited send to ${to}; retrying in ${delayMs}ms`);
+      await sleep(delayMs);
     }
-    return { previewUrl: null };
   }
 
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
@@ -47,6 +105,14 @@ async function sendEmail({ from, to, subject, html }) {
   }
 
   throw new Error('No email provider configured. Set RESEND_API_KEY in .env or configure SMTP credentials.');
+}
+
+async function sendEmail(params) {
+  if (process.env.RESEND_API_KEY) {
+    return enqueueEmail(() => sendEmailDirect(params));
+  }
+
+  return sendEmailDirect(params);
 }
 
 const app = express();
