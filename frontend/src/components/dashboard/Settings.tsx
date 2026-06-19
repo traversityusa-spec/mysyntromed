@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserProfile } from '@/lib/dashboard';
-import { userService } from '@/lib/firestore';
+import { userService, type UserProfile } from '@/lib/firestore';
+import { showToast } from '@/components/ui/Toast';
 import { passwordValidation } from '@/lib/security';
 
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
@@ -120,7 +121,7 @@ const Settings = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(sessionUser?.twoFactorEnabled ?? false);
   const [saving, setSaving] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -569,7 +570,18 @@ const Settings = () => {
                 <p className="text-sm text-slate-500">Verification code sent to your email</p>
               </div>
             </div>
-            <Toggle checked={twoFactor} onChange={setTwoFactor} />
+            <Toggle checked={twoFactor} onChange={async (val) => {
+              setTwoFactor(val);
+              if (user?.uid) {
+                try {
+                  await userService.updateProfile(user.uid, { twoFactorEnabled: val } as Partial<UserProfile>);
+                  showToast('system', 'Two-Factor Authentication', val ? 'Enabled' : 'Disabled');
+                } catch {
+                  setTwoFactor(!val);
+                  showToast('system', 'Error', 'Failed to update 2FA setting');
+                }
+              }
+            }} />
           </div>
         </div>
       </div>

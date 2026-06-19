@@ -199,16 +199,25 @@ const Specialist = () => {
               </div>
 
                <div className="flex flex-wrap gap-2">
-                 <Link
-                   to="/portal/messages"
-                   className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
-                     hasAssignment ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                   }`}
-                 >
-                   <MessageSquare size={16} />
-                   Message
-                 </Link>
-               </div>
+                  <Link
+                    to="/portal/messages"
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
+                      hasAssignment ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <MessageSquare size={16} />
+                    Message
+                  </Link>
+                  <Link
+                    to="/portal/calls"
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
+                      hasAssignment ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Calendar size={16} />
+                    Schedule Call
+                  </Link>
+                </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-4">

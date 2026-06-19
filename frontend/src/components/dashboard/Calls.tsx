@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check, XCircle } from 'lucide-react';
+import { Phone, Video, Calendar, Clock, Plus, History, ExternalLink, X, Search, Users, Check, XCircle, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { API_BASE_URL, db } from '@/lib/firestore';
 import { collection, query, where, getDocs, addDoc, doc, updateDoc, serverTimestamp, type DocumentData } from 'firebase/firestore';
@@ -311,6 +311,25 @@ const Calls = () => {
     }
   };
 
+  const [rescheduleTarget, setRescheduleTarget] = useState<ScheduledCall | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('');
+
+  const handleReschedule = async () => {
+    if (!rescheduleTarget?.docId || !rescheduleDate || !rescheduleTime) return;
+    const formattedDate = new Date(rescheduleDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const formattedTime = new Date(`2000-01-01T${rescheduleTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    try {
+      await updateDoc(doc(db, 'calls', rescheduleTarget.docId), { date: formattedDate, time: formattedTime });
+      setUpcomingCalls(prev => prev.map(c => c.id === rescheduleTarget.id ? { ...c, date: formattedDate, time: formattedTime } : c));
+      setRescheduleTarget(null);
+      showToast('system', 'Call Rescheduled', `Moved to ${formattedDate} at ${formattedTime}`);
+    } catch (err) {
+      console.error('[CALLS] Failed to reschedule call:', err);
+      showToast('system', 'Error', 'Failed to reschedule call');
+    }
+  };
+
   const filteredUsers = availableUsers.filter(u =>
     u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -596,6 +615,17 @@ const Calls = () => {
                     Join
                   </button>
                   <button
+                    onClick={() => {
+                      setRescheduleTarget(call);
+                      setRescheduleDate('');
+                      setRescheduleTime('');
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    <CalendarDays size={14} />
+                    Reschedule
+                  </button>
+                  <button
                     onClick={() => handleCancel(call)}
                     className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition"
                   >
@@ -644,6 +674,49 @@ const Calls = () => {
           </div>
         )}
       </div>
+
+      {rescheduleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setRescheduleTarget(null)}>
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-navy-900">Reschedule Call</h3>
+              <button onClick={() => setRescheduleTarget(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 mb-4">
+              <span className="font-medium">{rescheduleTarget.specialist}</span> &mdash; currently {rescheduleTarget.date} at {rescheduleTarget.time}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">New Date</label>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  onChange={e => setRescheduleDate(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">New Time</label>
+                <input
+                  type="time"
+                  value={rescheduleTime}
+                  onChange={e => setRescheduleTime(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <button
+                onClick={handleReschedule}
+                disabled={!rescheduleDate || !rescheduleTime}
+                className="w-full rounded-lg bg-teal-600 py-2.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
+              >
+                Confirm Reschedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

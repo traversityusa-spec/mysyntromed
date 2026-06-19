@@ -38,6 +38,7 @@ export type SessionUser = {
   subscriptionActive?: boolean;
   subscriptionEndDate?: Date;
   subscriptionReminderSent?: boolean;
+  twoFactorEnabled?: boolean;
   notificationPreferences?: {
     emailRequests: boolean;
     emailMessages: boolean;

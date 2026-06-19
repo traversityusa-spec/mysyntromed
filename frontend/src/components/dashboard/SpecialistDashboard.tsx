@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, FileText, ListTodo, MessageSquare, RefreshCw, Users, Stethoscope, X, Phone, Building } from 'lucide-react';
+import { Calendar, Check, CheckCircle, ChevronRight, ClipboardList, Clock, FileText, ListTodo, MessageSquare, RefreshCw, Users, Stethoscope, X, Phone, Building, Video } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -16,6 +16,7 @@ export const SpecialistDashboard = () => {
   const [assignedClientRequests, setAssignedClientRequests] = useState<Request[]>([]);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [upcomingCalls, setUpcomingCalls] = useState<{ id: string; specialist: string; date: string; time: string; meetLink?: string }[]>([]);
 
   // Per-client workflow state: keyed by clientId
   const [clientWorkflows, setClientWorkflows] = useState<Record<string, WorkflowStatus | null>>({});
@@ -101,6 +102,29 @@ export const SpecialistDashboard = () => {
     loadClientRequests();
     return () => { cancelled = true; };
   }, [clients]);
+
+  // Fetch upcoming calls
+  useEffect(() => {
+    if (!sessionUser?.uid) return;
+    const q = query(
+      collection(db, 'calls'),
+      where('participantIds', 'array-contains', sessionUser.uid),
+      where('status', '==', 'upcoming')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setUpcomingCalls(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          specialist: data.specialist || 'Someone',
+          date: data.date || '',
+          time: data.time || '',
+          meetLink: data.meetLink || '',
+        };
+      }));
+    });
+    return unsub;
+  }, [sessionUser?.uid]);
 
   // Subscribe to the currently selected client's workflow
   useEffect(() => {
@@ -689,20 +713,45 @@ export const SpecialistDashboard = () => {
             </Link>
           </div>
 
-          <Link to="/specialist/calls" className="block rounded-xl border border-slate-200 bg-gradient-to-r from-purple-50 to-blue-50 p-4 hover:shadow-sm transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-purple-50 to-blue-50 p-4">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-600">
                   <Calendar size={18} />
                 </div>
                 <div>
                   <p className="font-semibold text-navy-900">Upcoming Calls</p>
-                  <p className="text-xs text-slate-500">View and manage scheduled meetings</p>
+                  <p className="text-xs text-slate-500">Scheduled meetings</p>
                 </div>
               </div>
-              <ChevronRight size={18} className="text-slate-400" />
+              <Link to="/specialist/calls" className="text-xs font-medium text-purple-600 hover:text-purple-700">View all</Link>
             </div>
-          </Link>
+            {upcomingCalls.length === 0 ? (
+              <p className="text-sm text-slate-500">No upcoming calls</p>
+            ) : (
+              <div className="space-y-2">
+                {upcomingCalls.slice(0, 3).map((call) => (
+                  <div key={call.id} className="flex items-center justify-between rounded-lg bg-white/70 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{call.specialist}</p>
+                      <p className="text-xs text-slate-500">{call.date} at {call.time}</p>
+                    </div>
+                    {call.meetLink && (
+                      <a
+                        href={call.meetLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700"
+                      >
+                        <Video size={12} />
+                        Join
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

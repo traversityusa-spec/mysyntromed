@@ -74,6 +74,7 @@ export type UserProfile = {
   subscriptionEndDate?: Date;
   subscriptionReminderSent?: boolean;
   lastLoginAt?: Date;
+  twoFactorEnabled?: boolean;
   notificationPreferences?: {
     emailRequests: boolean;
     emailMessages: boolean;
