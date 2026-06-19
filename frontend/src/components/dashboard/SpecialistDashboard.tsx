@@ -291,9 +291,15 @@ export const SpecialistDashboard = () => {
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {(sessionUser?.specialties?.length ? sessionUser.specialties : ['Add specialties in Settings']).map((item) => (
-            <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
-              {item}
-            </span>
+            item === 'Add specialties in Settings' ? (
+              <Link key={item} to="/specialist/settings" className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600 hover:bg-teal-50 hover:text-teal-700 transition">
+                {item}
+              </Link>
+            ) : (
+              <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
+                {item}
+              </span>
+            )
           ))}
         </div>
       </div>
