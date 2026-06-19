@@ -70,54 +70,47 @@ function getGoogleCredentials(): { email: string; key: string } | null {
 }
 
 export async function createGoogleMeetLink(
-  title: string,
-  startTime?: Date,
-  endTime?: Date,
+  _title: string,
+  _startTime?: Date,
+  _endTime?: Date,
 ): Promise<MeetResult> {
   const credentials = getGoogleCredentials();
 
-  if (credentials) {
-    try {
-      const { google } = await import('googleapis');
-      const auth = new google.auth.JWT({
-        email: credentials.email,
-        key: credentials.key,
-        scopes: ['https://www.googleapis.com/auth/meetings'],
-      });
-
-      const tokens = await auth.authorize();
-
-      const resp = await fetch('https://meet.googleapis.com/v2/spaces', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${tokens.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
-
-      const data = await resp.json();
-
-      if (resp.ok) {
-        const meetLink = data.meetingUri || `https://meet.google.com/${data.meetingCode}`;
-        const spaceName = data.name || undefined;
-        console.log('[MEET] Created Google Meet space:', spaceName, meetLink);
-        return { meetLink, spaceName };
-      }
-
-      console.warn('[MEET] API error, falling back to Jitsi:', data.error?.message || JSON.stringify(data));
-    } catch (err: any) {
-      console.warn('[MEET] Exception, falling back to Jitsi:', err.message);
-    }
-  } else {
-    console.warn('[MEET] No credentials configured, using Jitsi fallback');
+  if (!credentials) {
+    throw new Error('Google Meet is not configured. Please set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_KEY in your Railway environment variables, or provide SERVICE_ACCOUNT_KEY JSON.');
   }
 
-  const roomId = title
-    ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36)
-    : 'mysyntromed-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8);
+  const { google } = await import('googleapis');
+  const auth = new google.auth.JWT({
+    email: credentials.email,
+    key: credentials.key,
+    scopes: ['https://www.googleapis.com/auth/meetings'],
+  });
 
-  const meetLink = `https://meet.jit.si/${roomId}`;
-  console.log('[MEET] Generated Jitsi link:', meetLink);
-  return { meetLink };
+  const tokens = await auth.authorize();
+
+  if (!tokens.access_token) {
+    throw new Error('Google Meet: Failed to obtain access token from service account');
+  }
+
+  const resp = await fetch('https://meet.googleapis.com/v2/spaces', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${tokens.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    throw new Error(`Google Meet API error: ${data.error?.message || JSON.stringify(data)}`);
+  }
+
+  const meetLink = data.meetingUri || `https://meet.google.com/${data.meetingCode}`;
+  const spaceName = data.name || undefined;
+
+  console.log('[MEET] Created Google Meet space:', spaceName, meetLink);
+  return { meetLink, spaceName };
 }
