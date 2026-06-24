@@ -94,7 +94,7 @@ export const sendWelcomeEmail = async ({
           <li>Complete your profile with clinic information</li>
           <li>Submit support requests for assistance</li>
           <li>Message your assigned specialist directly</li>
-          <li>Schedule consultation calls</li>
+          <li>Review your support requests</li>
         ` : `
           <li>Complete your specialist profile</li>
           <li>Review assigned client requests</li>
@@ -137,7 +137,7 @@ ${role === 'client' ? `
 • Complete your profile with clinic information
 • Submit support requests for assistance
 • Message your assigned specialist directly
-• Schedule consultation calls
+• Review your support requests
 ` : `
 • Complete your specialist profile
 • Review assigned client requests

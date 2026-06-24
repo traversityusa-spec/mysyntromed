@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Activity, ArrowUpRight, CheckCircle, Clock, Inbox, Shield, Stethoscope, Users, X, Mail, Phone, Building,
+  ArrowUpRight, CheckCircle, Clock, Inbox, Shield, Stethoscope, Users, X, Mail, Phone, Building,
   RefreshCw, ClipboardList, AlertCircle, ChevronRight, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
@@ -120,7 +120,7 @@ const statusLabels: Record<string, string> = {
 
 export const AdminDashboard = () => {
   const { sessionUser, showWelcomeBack, welcomeBackData, clearWelcomeBack } = useAuth();
-  const [metrics, setMetrics] = useState({ clients: 0, specialists: 0, requests: 0, calls: 0 });
+  const [metrics, setMetrics] = useState({ clients: 0, specialists: 0, requests: 0 });
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
@@ -135,10 +135,9 @@ export const AdminDashboard = () => {
     const fetchData = async () => {
       setMetricsLoading(true);
       try {
-        const [usersSnap, reqSnap, callsSnap] = await Promise.all([
+        const [usersSnap, reqSnap] = await Promise.all([
           getDocs(query(collection(db, 'users'))),
           getDocs(query(collection(db, 'requests'), orderBy('submittedAt', 'desc'))),
-          getDocs(query(collection(db, 'calls'))),
         ]);
 
         const users = usersSnap.docs.map(d => {
@@ -155,7 +154,6 @@ export const AdminDashboard = () => {
           clients: users.filter(u => u.role === 'client').length,
           specialists: users.filter(u => u.role === 'specialist').length,
           requests: reqSnap.docs.filter(d => d.data().status === 'pending' && !d.data().specialistId).length,
-          calls: callsSnap.size,
         });
 
         const clientUsers = users.filter(u => u.role === 'client');
@@ -200,7 +198,6 @@ export const AdminDashboard = () => {
     { title: 'Total Clients', value: metrics.clients, icon: Users, color: 'bg-blue-50 text-blue-600', trend: 'Active accounts' },
     { title: 'Specialists', value: metrics.specialists, icon: Stethoscope, color: 'bg-indigo-50 text-indigo-600', trend: 'On platform' },
     { title: 'Total Requests', value: metrics.requests, icon: Inbox, color: 'bg-amber-50 text-amber-600', trend: 'All time' },
-    { title: 'Consultations', value: metrics.calls, icon: Activity, color: 'bg-emerald-50 text-emerald-600', trend: 'Scheduled' },
   ];
 
   const handleViewClient = async (client: UserProfile) => {

@@ -15,8 +15,7 @@ import messageRoutes from './routes/messages.js';
 import requestRoutes from './routes/requests.js';
 import notifyRoutes from './routes/notify.js';
 import workflowRoutes from './routes/workflow.js';
-import callsRoutes from './routes/calls.js';
-import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from './services/emailClient.js';
+import { sendMessageNotification, notifyAdminsViaEmail } from './services/emailClient.js';
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development', tracesSampleRate: 0.2 });
@@ -62,7 +61,7 @@ app.use(helmet({
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
       connectSrc: ["'self'", 'https://*.firebaseio.com', 'https://*.googleapis.com'],
-      frameSrc: ["'self'", 'https://meet.google.com'],
+      frameSrc: ["'self'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
@@ -335,7 +334,6 @@ app.use('/api/messages', authLimiter, messageRoutes);
 app.use('/api/requests', authLimiter, requestRoutes);
 app.use('/api/notify', authLimiter, notifyRoutes);
 app.use('/api/workflow', authLimiter, workflowRoutes);
-app.use('/api/calls', authLimiter, callsRoutes);
 
 // Subscription management endpoint
 app.post('/api/subscription/send-reminder', requireAuth, async (req: AuthedRequest, res) => {
@@ -508,87 +506,6 @@ io.on('connection', (socket) => {
       senderName: sanitizeInput(data.senderName || 'User'),
       senderId: data.senderId || ''
     });
-  });
-
-  socket.on('callInvite', async (data: { to: string; callType: string; callerId?: string; callerName: string; sessionId: string; meetLink?: string }) => {
-    console.log('[SOCKET] Call invite from:', data.callerName, 'type:', data.callType, 'to:', data.to);
-    io.to(`user:${data.to}`).emit('incomingCall', {
-      callType: data.callType,
-      callerId: data.callerId,
-      callerName: data.callerName,
-      sessionId: data.sessionId,
-      meetLink: data.meetLink,
-    });
-    
-    // Send call notification emails
-    try {
-      const firestore = admin.firestore();
-      const receiverDoc = await firestore.collection('users').doc(data.to).get();
-      const receiverData = receiverDoc.data();
-      
-      if (!receiverData) {
-        console.warn('[SOCKET] callInvite: Could not find receiver data');
-        return;
-      }
-      
-      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
-      
-      await sendCallNotification(
-        admin,
-        data.callerName,
-        receiverData.displayName || 'User',
-        receiverData.email,
-        data.callType,
-        loginUrl,
-        loginUrl
-      );
-    } catch (error: any) {
-      console.error('[SOCKET] callInvite email notification error:', error.message);
-    }
-  });
-
-  socket.on('callAccepted', (data: { to: string }) => {
-    console.log('[SOCKET] Call accepted, notifying:', data.to);
-    io.to(`user:${data.to}`).emit('callAnswered', {});
-    
-    // Notify admins for follow-up
-    try {
-      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
-      const dashboardLink = `${loginUrl.replace(/\/+/, '')}/admin/conversations`;
-      notifyAdminsViaEmail(
-        admin,
-        '[MySyntroMed] Call Accepted',
-        `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #0f172a;">Call Accepted</h2>
-          <p style="color: #475569;">A call has been accepted. Please monitor for proper follow up.</p>
-          <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Messages</a>
-        </div>`
-      );
-    } catch (error: any) {
-      console.error('[SOCKET] callAccepted notification error:', error.message);
-    }
-  });
-
-  socket.on('callEnded', (data: { to: string; sessionId?: string }) => {
-    console.log('[SOCKET] Call ended, notifying:', data.to);
-    io.to(`user:${data.to}`).emit('callRejected', { sessionId: data.sessionId });
-    
-    // Notify admins for immediate follow-up
-    try {
-      const loginUrl = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
-      const dashboardLink = `${loginUrl.replace(/\/+/, '')}/admin/conversations`;
-      notifyAdminsViaEmail(
-        admin,
-        '[MySyntroMed] Call Ended - Follow Up Required',
-        `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #0f172a;">Call Ended - Immediate Follow Up</h2>
-          <p style="color: #475569;">A call has ended. Please follow up with the participant immediately for proper care.</p>
-          <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Messages</a>
-        </div>`
-      );
-    } catch (error: any) {
-      console.error('[SOCKET] callEnded notification error:', error.message);
-    }
   });
 
   socket.on('statusUpdate', (data: {

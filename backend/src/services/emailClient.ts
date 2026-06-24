@@ -109,51 +109,6 @@ export const sendMessageNotification = async (
   }
 };
 
-export const sendCallNotification = async (
-  adminInstance: any,
-  callerName: string,
-  receiverName: string,
-  receiverEmail: string | null | undefined,
-  callType: string,
-  _meetingLink: string,
-  loginUrl: string
-): Promise<void> => {
-  try {
-    const callsLink = `${loginUrl.replace(/\/+$/, '')}/portal/calls`;
-    const dashboardLink = `${loginUrl.replace(/\/+$/, '')}/admin/conversations`;
-
-    // Notify admins
-    notifyAdminsViaEmail(
-      adminInstance,
-      `[MySyntroMed] Call from ${callerName}`,
-      `<div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #0f172a;">New Call Activity</h2>
-        <p style="color: #475569;"><strong>${callerName}</strong> started a ${callType} call with <strong>${receiverName}</strong>.</p>
-        <a href="${callsLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">Open Calls</a>
-        <a href="${dashboardLink}" style="display: inline-block; background: #0d9488; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Conversations</a>
-      </div>`
-    );
-
-    // Send email to receiver
-    if (receiverEmail && EMAIL_SERVICE_KEY) {
-      fetch(`${EMAIL_SERVER_URL}/send-unread-message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${EMAIL_SERVICE_KEY}` },
-        body: JSON.stringify({
-          email: receiverEmail,
-          receiverName,
-          senderName: callerName,
-          messagePreview: `Incoming ${callType} call from ${callerName}`,
-          loginUrl,
-          receiverRole: 'client',
-        }),
-      }).catch(e => console.error('[NOTIFY] Call email failed:', e));
-    }
-  } catch (error: any) {
-    console.error('[SEND CALL NOTIFICATION] Error:', error.message);
-  }
-};
-
 const sendEmailToReceiver = async (
   receiverEmail: string | null | undefined,
   receiverName: string,

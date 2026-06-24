@@ -45,19 +45,6 @@ const ensureListeners = (userId: string) => {
     window.dispatchEvent(new CustomEvent('socket:typing', { detail: data }));
   });
 
-  socket.on('incomingCall', (data: { callerId: string; callerName: string; sessionId: string; callType: string; meetLink?: string }) => {
-    if (data.callerId === currentUserId) return;
-    window.dispatchEvent(new CustomEvent('socket:callInvite', { detail: data }));
-  });
-
-  socket.on('callAnswered', () => {
-    window.dispatchEvent(new CustomEvent('socket:callAnswered'));
-  });
-
-  socket.on('callRejected', (data: { sessionId?: string }) => {
-    window.dispatchEvent(new CustomEvent('socket:callRejected', { detail: data }));
-  });
-
   socket.on('statusUpdated', (data: unknown) => {
     window.dispatchEvent(new CustomEvent('socket:statusUpdated', { detail: data }));
   });
@@ -112,14 +99,6 @@ export const emitMessage = (to: string, message: unknown): void => {
     return;
   }
   socket.emit('sendMessage', { to, message });
-};
-
-export const emitCallInvite = (to: string, data: { callType: string; callerId: string; callerName: string; sessionId: string; meetLink?: string }): void => {
-  if (!socket?.connected) {
-    console.warn('[SOCKET] Cannot emit call invite - not connected');
-    return;
-  }
-  socket.emit('callInvite', { to, ...data });
 };
 
 export const emitStatusUpdate = (data: {

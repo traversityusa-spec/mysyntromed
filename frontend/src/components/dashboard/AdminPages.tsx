@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { collection, limit, onSnapshot, query, orderBy, where, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { db, activityService, messageService, API_BASE_URL } from '@/lib/firestore';
 import type { UserProfile, Request, Message, ActivityItem } from '@/lib/firestore';
-import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone, Star, Phone, Activity, UserPlus, User } from 'lucide-react';
+import { Users, Stethoscope, MessageSquare, ChartBar, Search, CheckCircle, Clock, AlertCircle, Plus, X, ShieldAlert, UserMinus, UserCheck, RefreshCw, Mail, Copy, Check, Trash2, ClipboardList, Shield, Send, Megaphone, Star, Activity, UserPlus, User } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -1253,7 +1253,7 @@ export const AdminSpecialists = () => {
                   {specialistActivity.map(act => (
                     <div key={act.id} className="flex gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-                        {act.type.includes('Call') ? <Clock size={20} /> : act.type.includes('Message') ? <MessageSquare size={20} /> : <CheckCircle size={20} />}
+                        {act.type.includes('Message') ? <MessageSquare size={20} /> : <CheckCircle size={20} />}
                       </div>
                       <div>
                         <p className="font-semibold text-slate-900">{act.title}</p>
@@ -1979,7 +1979,6 @@ export const AdminActivity = () => {
   const iconFor = (type: string) => {
     const t = type.toLowerCase();
     if (t.includes('rating')) return <Star size={18} className="text-amber-500" />;
-    if (t.includes('call')) return <Phone size={18} className="text-emerald-500" />;
     if (t.includes('message')) return <MessageSquare size={18} className="text-blue-500" />;
     if (t.includes('request')) return <ClipboardList size={18} className="text-indigo-500" />;
     if (t.includes('workflow') || t.includes('clinic')) return <CheckCircle size={18} className="text-teal-500" />;
@@ -1991,7 +1990,6 @@ export const AdminActivity = () => {
   const colorFor = (type: string) => {
     const t = type.toLowerCase();
     if (t.includes('rating') || t.includes('group')) return 'bg-amber-50 border-amber-200';
-    if (t.includes('call')) return 'bg-emerald-50 border-emerald-200';
     if (t.includes('message')) return 'bg-blue-50 border-blue-200';
     if (t.includes('request')) return 'bg-indigo-50 border-indigo-200';
     if (t.includes('workflow') || t.includes('clinic')) return 'bg-teal-50 border-teal-200';

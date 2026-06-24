@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import admin from '../firebaseAdmin.js';
 import { requireAuth, type AuthedRequest } from '../middleware/requireAuth.js';
-import { sendMessageNotification, sendCallNotification, notifyAdminsViaEmail } from '../services/emailClient.js';
+import { sendMessageNotification, notifyAdminsViaEmail } from '../services/emailClient.js';
 
 const router = Router();
 

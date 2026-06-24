@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, MessageSquare, ClipboardList, Bell, Video } from 'lucide-react';
+import { X, MessageSquare, ClipboardList, Bell } from 'lucide-react';
 
-type ToastType = 'message' | 'request' | 'system' | 'assignment' | 'call';
+type ToastType = 'message' | 'request' | 'system' | 'assignment';
 
 type Toast = {
   id: string;
@@ -57,12 +57,10 @@ export const ToastContainer = () => {
           <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
               toast.type === 'request' ? 'bg-amber-100' :
               toast.type === 'system' ? 'bg-blue-100' :
-              toast.type === 'call' ? 'bg-purple-100' :
               'bg-teal-100'
             }`}>
             {toast.type === 'request' ? <ClipboardList size={16} className="text-amber-600" /> :
              toast.type === 'system' ? <Bell size={16} className="text-blue-600" /> :
-             toast.type === 'call' ? <Video size={16} className="text-purple-600" /> :
              <MessageSquare size={16} className="text-teal-600" />}
           </div>
           <div className="flex-1">

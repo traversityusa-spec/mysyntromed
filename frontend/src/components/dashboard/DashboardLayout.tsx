@@ -2,7 +2,6 @@ import React, { type ReactNode, useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
-  Calendar,
   ChartBar,
   Check,
   ChevronLeft,
@@ -11,12 +10,10 @@ import {
   List,
   LogOut,
   MessageSquare,
-  Phone,
   Settings,
   Stethoscope,
   User,
   Users,
-  Video,
   Workflow,
   X,
   Shield,
@@ -45,7 +42,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
       { label: 'Dashboard', icon: Home, to: `${portal}/dashboard` },
       { label: 'Messages', icon: MessageSquare, to: `${portal}/messages` },
       { label: 'Requests', icon: Workflow, to: `${portal}/requests` },
-      { label: 'Calls', icon: Phone, to: `${portal}/calls` },
       { label: 'Settings', icon: Settings, to: `${portal}/settings` },
     ];
   }
@@ -68,7 +64,6 @@ const getNavItems = (role: 'client' | 'admin' | 'specialist', pendingAssignments
     { label: 'Dashboard', icon: Home, to: '/portal/dashboard' },
     { label: 'Messages', icon: MessageSquare, to: '/portal/messages' },
     { label: 'Requests', icon: Workflow, to: '/portal/requests' },
-    { label: 'Calls', icon: Phone, to: '/portal/calls' },
     { label: 'Specialist', icon: User, to: '/portal/specialist' },
     { label: 'Activity', icon: ChartBar, to: '/portal/activity' },
     { label: 'Settings', icon: Settings, to: '/portal/settings' },
@@ -118,7 +113,6 @@ const role = sessionUser?.role || 'client';
   };
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [incomingCall, setIncomingCall] = useState<{ callerName: string; sessionId: string; callerId: string; callType: string; meetLink?: string } | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -151,64 +145,11 @@ const role = sessionUser?.role || 'client';
       const newNotifs = items.filter(n => !n.read);
       if (newNotifs.length > 0) {
         const latest = newNotifs[0];
-        if (latest.type === 'call' && latest.data?.sessionId) {
-          const isRecent = Date.now() - latest.createdAt.getTime() < 30000;
-          if (isRecent) {
-            setIncomingCall({
-              callerName: latest.data.callerName as string || 'Someone',
-              sessionId: latest.data.sessionId as string,
-              callerId: (latest.data.callerId as string) || '',
-              callType: (latest.data.callType as string) || 'video',
-              meetLink: (latest.data.meetLink as string) || '',
-            });
-            if (soundEnabled) {
-              playNotificationSound();
-              setTimeout(() => playNotificationSound(), 600);
-              setTimeout(() => playNotificationSound(), 1200);
-            }
-          }
-        } else {
-          showToast(latest.type, latest.title, latest.message);
-        }
+        showToast(latest.type, latest.title, latest.message);
       }
     });
 
-    const handleCallInvite = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail?.sessionId) return;
-      setIncomingCall({
-        callerName: detail.callerName || 'Someone',
-        sessionId: detail.sessionId,
-        callerId: detail.callerId || '',
-        callType: detail.callType || 'video',
-        meetLink: detail.meetLink || '',
-      });
-      if (soundEnabled) {
-        playNotificationSound();
-        setTimeout(() => playNotificationSound(), 600);
-        setTimeout(() => playNotificationSound(), 1200);
-      }
-    };
-    window.addEventListener('socket:callInvite', handleCallInvite);
-
-    const handleCallAnswered = () => {
-      console.log('[CALL] Call was answered');
-      showToast('call', 'Call Connected', 'Your call has been connected');
-    };
-    window.addEventListener('socket:callAnswered', handleCallAnswered);
-
-    const handleCallRejected = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      console.log('[CALL] Call rejected/ended:', detail);
-      setIncomingCall(null);
-      showToast('call', 'Call Ended', 'The call has ended');
-    };
-    window.addEventListener('socket:callRejected', handleCallRejected);
-
     return () => {
-      window.removeEventListener('socket:callInvite', handleCallInvite);
-      window.removeEventListener('socket:callAnswered', handleCallAnswered);
-      window.removeEventListener('socket:callRejected', handleCallRejected);
       messageUnsub();
       notificationUnsub();
     };
@@ -452,33 +393,6 @@ const markAllRead = () => {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {incomingCall && (
-            <div className="mb-4 flex items-center gap-3 rounded-xl border border-purple-200 bg-purple-50 p-4 shadow-sm animate-pulse">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-200">
-                {incomingCall.callType === 'voice' ? <Phone size={18} className="text-purple-700" /> : <Video size={18} className="text-purple-700" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-purple-900">Incoming {incomingCall.callType === 'voice' ? 'Voice' : 'Video'} Call</p>
-                <p className="text-xs text-purple-700 truncate">{incomingCall.callerName} is calling you</p>
-              </div>
-              <a
-                href={incomingCall.meetLink || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setIncomingCall(null)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition shrink-0"
-              >
-                <Video size={16} />
-                Join Google Meet
-              </a>
-              <button
-                onClick={() => setIncomingCall(null)}
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-purple-400 hover:bg-purple-100 shrink-0"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          )}
           {children}
         </main>
       </div>

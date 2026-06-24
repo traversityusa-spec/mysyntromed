@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  Calendar,
   CalendarCheck,
   Check,
   Circle,
@@ -10,7 +9,6 @@ import {
   Clock,
   FileText,
   MessageSquare,
-  Phone,
   Plus,
   RefreshCw,
   Shield,
@@ -32,7 +30,6 @@ import { DateTimeDisplay } from '@/lib/datetime';
 const quickActions = [
   { label: 'Message Specialist', icon: MessageSquare, to: '/portal/messages', color: 'bg-blue-50 text-blue-700' },
   { label: 'Submit Request', icon: Plus, to: '/portal/requests', color: 'bg-teal-50 text-teal-700' },
-  { label: 'Schedule Meeting', icon: Calendar, to: '/portal/calls', color: 'bg-purple-50 text-purple-700' },
   { label: 'Urgent Support', icon: AlertTriangle, to: '/portal/requests', color: 'bg-red-50 text-red-700', urgent: true },
 ];
 
@@ -372,14 +369,7 @@ const ClientDashboardContent = () => {
                 <MessageSquare size={14} />
                 Message
               </Link>
-              <Link to="/portal/calls" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
-                <Phone size={14} />
-                Call
-              </Link>
-              <Link to="/portal/calls" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
-                <Calendar size={14} />
-                Schedule
-              </Link>
+
             </div>
           </div>
         </div>

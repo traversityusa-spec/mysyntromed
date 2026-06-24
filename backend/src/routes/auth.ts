@@ -282,11 +282,6 @@ router.post('/admin/delete-user', requireAuth, requireRole('admin'), async (req,
       .where('userId', '==', uid).get();
     requestsSnap.docs.forEach(doc => batch.delete(doc.ref));
     
-    // Delete user calls
-    const callsSnap = await admin.firestore().collection('calls')
-      .where('userId', '==', uid).get();
-    callsSnap.docs.forEach(doc => batch.delete(doc.ref));
-    
     await batch.commit();
     
     // Delete from Firebase Auth
@@ -420,54 +415,6 @@ router.post('/admin/assign-specialist', requireAuth, requireRole('admin'), async
   } catch (error: unknown) {
     console.error('Assign specialist error:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-router.get('/call-participants', requireAuth, async (req: AuthedRequest, res) => {
-  try {
-    const firestore = admin.firestore();
-    const currentUid = req.user!.uid;
-    const currentRole = req.user!.role;
-
-    if (currentRole === 'admin') {
-      const snap = await firestore.collection('users').get();
-      const users = snap.docs
-        .filter(d => d.id !== currentUid)
-        .map(d => ({ uid: d.id, ...d.data() }));
-      return res.json({ users });
-    }
-
-    if (currentRole === 'specialist') {
-      const [clientsSnap, adminSnap] = await Promise.all([
-        firestore.collection('users').where('assignedSpecialistId', '==', currentUid).get(),
-        firestore.collection('users').where('role', '==', 'admin').get(),
-      ]);
-      const users = [
-        ...clientsSnap.docs.map(d => ({ uid: d.id, ...d.data() })),
-        ...adminSnap.docs.map(d => ({ uid: d.id, ...d.data() })),
-      ];
-      return res.json({ users });
-    }
-
-    // client
-    const profileSnap = await firestore.collection('users').doc(currentUid).get();
-    const assignedSpecialistId = profileSnap.data()?.assignedSpecialistId;
-    const users: any[] = [];
-
-    if (assignedSpecialistId) {
-      const specialistDoc = await firestore.collection('users').doc(assignedSpecialistId).get();
-      if (specialistDoc.exists) {
-        users.push({ uid: specialistDoc.id, ...specialistDoc.data() });
-      }
-    }
-
-    const adminSnap = await firestore.collection('users').where('role', '==', 'admin').get();
-    adminSnap.docs.forEach(d => users.push({ uid: d.id, ...d.data() }));
-
-    return res.json({ users });
-  } catch (e) {
-    console.error('[CALL PARTICIPANTS] Error:', e);
-    res.status(500).json({ error: 'Failed to fetch participants' });
   }
 });
 

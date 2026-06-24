@@ -1,8 +1,8 @@
 import { type FormEvent, useState, useEffect, useRef, type ChangeEvent, useMemo } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  Paperclip, Phone, Plus, Search, Send, Shield, Video, X, MessageSquare, 
-  Check, CheckCheck, MoreVertical, PhoneIncoming, PhoneOutgoing, Lock, Image,
+  Paperclip, Plus, Search, Send, Shield, X, MessageSquare, 
+  Check, CheckCheck, MoreVertical, Lock, Image,
   Users, User
 } from 'lucide-react';
 
@@ -11,7 +11,7 @@ import { messageService, userService, notificationService, typingService, notifi
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { presenceService } from '@/lib/presence';
-import { initSocket, emitMessage, emitTyping, getSocket } from '@/lib/socket';
+import { initSocket, emitMessage, emitTyping } from '@/lib/socket';
 
 type ConversationPreview = {
   id: string;
@@ -1050,230 +1050,53 @@ const Messages = () => {
               </div>
               <div className="flex items-center gap-1 relative">
                 {isGroupChat(selectedConversation) ? (
-                  <>
+                  <div className="relative">
                     <button
-                      onClick={async () => {
-                        const gId = groupIdFromConversation(selectedConversation);
-                        const group = groups.find(g => g.id === gId);
-                        if (!group || !user) return;
-                        const targetId = group.participantIds.find(id => id !== user.uid);
-                        if (!targetId) { alert('No other participants to call'); return; }
-                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        let meetLink = '';
-                        try {
-                          const token = await user.getIdToken();
-                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({ roomName: `MySyntroMed Group Voice - ${group.name}` }),
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            meetLink = data.meetLink;
-                          }
-                        } catch {}
-                        if (!meetLink) return;
-                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
-                        window.open(meetLink, '_blank');
-                        const socket = getSocket();
-                        if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
-                        }
-                        try {
-                          const token = await user.getIdToken();
-                          await fetch(`${API_BASE_URL}/api/notify/create`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({
-                              type: 'call', recipientIds: group.participantIds.filter(id => id !== user.uid && id !== targetId),
-                              title: `Voice Call`, message: `${callerName} started a Google Meet in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice', meetLink },
-                            }),
-                          });
-                        } catch {}
-                      }}
+                      onClick={() => setGroupMenuOpen(!groupMenuOpen)}
                       className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
-                      title="Voice call group"
                     >
-                      <Phone size={20} />
+                      <MoreVertical size={20} />
                     </button>
-                    <button
-                      onClick={async () => {
-                        const gId = groupIdFromConversation(selectedConversation);
-                        const group = groups.find(g => g.id === gId);
-                        if (!group || !user) return;
-                        const targetId = group.participantIds.find(id => id !== user.uid);
-                        if (!targetId) { alert('No other participants to call'); return; }
-                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        let meetLink = '';
-                        try {
-                          const token = await user.getIdToken();
-                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({ roomName: `MySyntroMed Group Video - ${group.name}` }),
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            meetLink = data.meetLink;
-                          }
-                        } catch {}
-                        if (!meetLink) return;
-                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
-                        window.open(meetLink, '_blank');
-                        const socket = getSocket();
-                        if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
-                        }
-                        try {
-                          const token = await user.getIdToken();
-                          await fetch(`${API_BASE_URL}/api/notify/create`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({
-                              type: 'call', recipientIds: group.participantIds.filter(id => id !== user.uid && id !== targetId),
-                              title: `Video Call`, message: `${callerName} started a Google Meet in ${group.name}`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video', meetLink },
-                            }),
-                          });
-                        } catch {}
-                      }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
-                      title="Video call group"
-                    >
-                      <Video size={20} />
-                    </button>
-                    <div className="relative">
-                      <button
-                        onClick={() => setGroupMenuOpen(!groupMenuOpen)}
-                        className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
-                      >
-                        <MoreVertical size={20} />
-                      </button>
-                      {groupMenuOpen && (
-                        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-lg py-1">
-                          <button
-                            onClick={() => { setGroupMenuOpen(false); setRenameValue(currentConversation?.name || ''); setShowRenameGroup(true); }}
-                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                          >
-                            <MessageSquare size={16} /> Rename Group
-                          </button>
-                          <button
-                            onClick={() => { setGroupMenuOpen(false); setSearchUserQuery(''); setShowAddMembers(true); }}
-                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                          >
-                            <Users size={16} /> Add Members
-                          </button>
-                          <button
-                            onClick={() => { setGroupMenuOpen(false); setShowGroupInfo(true); }}
-                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                          >
-                            <User size={16} /> Group Info
-                          </button>
-                          <hr className="my-1 border-slate-100" />
-                          <button
-                            onClick={async () => {
-                              setGroupMenuOpen(false);
-                              const gId = groupIdFromConversation(selectedConversation);
-                              if (!gId || !confirm('Delete this group? This cannot be undone.')) return;
-                              try {
-                                await groupChatService.deleteGroup(gId);
-                                setSelectedConversation(null);
-                              } catch { alert('Failed to delete group'); }
-                            }}
-                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
-                          >
-                            <X size={16} /> Delete Group
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </>
+                    {groupMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-lg py-1">
+                        <button
+                          onClick={() => { setGroupMenuOpen(false); setRenameValue(currentConversation?.name || ''); setShowRenameGroup(true); }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <MessageSquare size={16} /> Rename Group
+                        </button>
+                        <button
+                          onClick={() => { setGroupMenuOpen(false); setSearchUserQuery(''); setShowAddMembers(true); }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <Users size={16} /> Add Members
+                        </button>
+                        <button
+                          onClick={() => { setGroupMenuOpen(false); setShowGroupInfo(true); }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <User size={16} /> Group Info
+                        </button>
+                        <hr className="my-1 border-slate-100" />
+                        <button
+                          onClick={async () => {
+                            setGroupMenuOpen(false);
+                            const gId = groupIdFromConversation(selectedConversation);
+                            if (!gId || !confirm('Delete this group? This cannot be undone.')) return;
+                            try {
+                              await groupChatService.deleteGroup(gId);
+                              setSelectedConversation(null);
+                            } catch { alert('Failed to delete group'); }
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+                        >
+                          <X size={16} /> Delete Group
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <>
-                    <button
-                      onClick={async () => {
-                        if (!selectedConversation || !user) return;
-                        const targetId = selectedConversation;
-                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        let meetLink = '';
-                        try {
-                          const token = await user.getIdToken();
-                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({ roomName: `MySyntroMed Voice - ${callerName}` }),
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            meetLink = data.meetLink;
-                          }
-                        } catch {}
-                        if (!meetLink) return;
-                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
-                        window.open(meetLink, '_blank');
-                        const socket = getSocket();
-                        if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'voice', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
-                        }
-                        try {
-                          const token = await user.getIdToken();
-                          await fetch(`${API_BASE_URL}/api/notify/create`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({
-                              type: 'call', recipientIds: [targetId],
-                              title: `Voice Call`, message: `${callerName} invited you to a Google Meet`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'voice', meetLink },
-                            }),
-                          });
-                        } catch {}
-                      }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
-                      title="Voice call"
-                    >
-                      <Phone size={20} />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!selectedConversation || !user) return;
-                        const targetId = selectedConversation;
-                        const callerName = sessionUser?.displayName || user.email?.split('@')[0] || 'User';
-                        let meetLink = '';
-                        try {
-                          const token = await user.getIdToken();
-                          const res = await fetch(`${API_BASE_URL}/api/calls/create-meet`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({ roomName: `MySyntroMed Video - ${callerName}` }),
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            meetLink = data.meetLink;
-                          }
-                        } catch {}
-                        if (!meetLink) return;
-                        const roomCode = meetLink.split('/').pop() || Date.now().toString(36);
-                        window.open(meetLink, '_blank');
-                        const socket = getSocket();
-                        if (socket?.connected) {
-                          socket.emit('callInvite', { to: targetId, callType: 'video', callerId: user.uid, callerName, sessionId: roomCode, meetLink });
-                        }
-                        try {
-                          const token = await user.getIdToken();
-                          await fetch(`${API_BASE_URL}/api/notify/create`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                            body: JSON.stringify({
-                              type: 'call', recipientIds: [targetId],
-                              title: `Video Call`, message: `${callerName} invited you to a Google Meet`, data: { sessionId: roomCode, callerName, callerId: user.uid, callType: 'video', meetLink },
-                            }),
-                          });
-                        } catch {}
-                      }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
-                      title="Video call"
-                    >
-                      <Video size={20} />
-                    </button>
-                    <div className="relative">
+                  <div className="relative">
                       <button
                         onClick={() => setChatMenuOpen(!chatMenuOpen)}
                         className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
@@ -1335,7 +1158,6 @@ const Messages = () => {
                         </div>
                       )}
                     </div>
-                  </>
                 )}
               </div>
             </div>

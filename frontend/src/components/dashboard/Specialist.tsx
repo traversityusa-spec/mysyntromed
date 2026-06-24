@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar, Check, Clock, Mail, MessageSquare, Phone, Star, RefreshCw } from 'lucide-react';
+import { Check, Clock, Mail, MessageSquare, Phone, Star, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { ratingService, userService, requestService, notificationService, type SpecialistRating, type UserProfile, type AppNotification } from '@/lib/firestore';
@@ -208,15 +208,7 @@ const Specialist = () => {
                     <MessageSquare size={16} />
                     Message
                   </Link>
-                  <Link
-                    to="/portal/calls"
-                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
-                      hasAssignment ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <Calendar size={16} />
-                    Schedule Call
-                  </Link>
+
                 </div>
             </div>
 

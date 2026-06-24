@@ -168,7 +168,7 @@ export type AppNotification = {
   userId: string;
   title: string;
   message: string;
-  type: 'request' | 'message' | 'system' | 'assignment' | 'call';
+  type: 'request' | 'message' | 'system' | 'assignment';
   read: boolean;
   createdAt: Date;
   data?: Record<string, unknown>;

@@ -1,6 +1,6 @@
-import { motion } from 'motion/react';
-import { fadeUp, staggerContainer } from '@/lib/animations';
-import { Quote } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Quote, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export const TestimonialsSection = () => {
   const testimonials = [
@@ -90,6 +90,20 @@ export const TestimonialsSection = () => {
     }
   ];
 
+  const [current, setCurrent] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrent(prev => (prev + 1) % testimonials.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [testimonials.length]);
+
+  const prev = () => setCurrent(prev => (prev - 1 + testimonials.length) % testimonials.length);
+  const next = () => setCurrent(prev => (prev + 1) % testimonials.length);
+
+  const t = testimonials[current];
+
   return (
     <section className="bg-teal-50/50 py-24">
       <div className="max-w-7xl mx-auto px-6 md:px-12">
@@ -97,37 +111,55 @@ export const TestimonialsSection = () => {
           <h2 className="text-display mb-4">Trusted by healthcare professionals</h2>
         </div>
         
-        <motion.div 
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-          className="flex justify-center"
-        >
-          {testimonials.map((t, idx) => (
-            <motion.div 
-              key={idx}
-              variants={fadeUp}
-              className="max-w-xl bg-white p-10 rounded-2xl shadow-sm border-l-4 border-teal-600 relative overflow-hidden"
-            >
-              <Quote className="absolute top-4 left-4 text-teal-100 w-16 h-16 -z-0" />
-              <div className="relative z-10">
-                <p className="text-xl italic text-body mb-8 leading-relaxed">
-                  “{t.quote}”
-                </p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200">
-                    <img src={t.image} alt={t.author} referrerPolicy="no-referrer" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-navy-900">{t.author}</p>
-                    <p className="text-xs text-muted">{t.location}</p>
+        <div className="flex justify-center">
+          <div className="relative w-full max-w-xl">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={current}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                transition={{ duration: 0.4 }}
+                className="bg-white p-10 rounded-2xl shadow-sm border-l-4 border-teal-600 relative overflow-hidden"
+              >
+                <Quote className="absolute top-4 left-4 text-teal-100 w-16 h-16 -z-0" />
+                <div className="relative z-10">
+                  <p className="text-xl italic text-body mb-8 leading-relaxed">
+                    &ldquo;{t.quote}&rdquo;
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200">
+                      <img src={t.image} alt={t.author} referrerPolicy="no-referrer" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-navy-900">{t.author}</p>
+                      <p className="text-xs text-muted">{t.location}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
+              </motion.div>
+            </AnimatePresence>
+
+            <button onClick={prev} className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-14 bg-white rounded-full p-2 shadow-md hover:bg-teal-50 transition text-slate-600">
+              <ChevronLeft size={20} />
+            </button>
+            <button onClick={next} className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-14 bg-white rounded-full p-2 shadow-md hover:bg-teal-50 transition text-slate-600">
+              <ChevronRight size={20} />
+            </button>
+
+            <div className="flex justify-center gap-2 mt-6">
+              {testimonials.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrent(idx)}
+                  className={`h-2 rounded-full transition-all ${
+                    idx === current ? 'w-6 bg-teal-600' : 'w-2 bg-teal-300'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

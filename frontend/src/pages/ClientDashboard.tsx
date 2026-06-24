@@ -17,29 +17,7 @@ import type { AppNotification, Request } from '@/lib/firestore';
 import { query, collection, where, orderBy, getDocs, limit as firestoreLimit } from 'firebase/firestore';
 import { db } from '@/lib/firestore';
 
-const stats = [
-  { label: 'Open Requests', value: '3', sub: '2 in progress' },
-  { label: 'Unread Messages', value: '5', sub: 'From your specialist' },
-  { label: 'Next Call', value: '2:00 PM', sub: 'Tomorrow' },
-  { label: 'Compliance', value: '100%', sub: 'HIPAA-ready workflows' },
-];
 
-const recentUpdates = [
-  { title: 'Prior auth follow-up completed', time: '1h ago', type: 'Request' },
-  { title: 'Specialist sent billing clarification', time: '3h ago', type: 'Message' },
-  { title: 'Patient coordination list updated', time: 'Today', type: 'Task' },
-];
-
-const upcoming = [
-  { title: 'Specialist check-in call', when: 'Tomorrow • 2:00 PM' },
-  { title: 'Weekly workflow review', when: 'Friday • 10:30 AM' },
-];
-
-const quickActions = [
-  { label: 'Create Request', hint: 'Submit a new operational task', to: '/contact' },
-  { label: 'Message Specialist', hint: 'Send an update or question', to: '/contact' },
-  { label: 'Book Consultation', hint: 'Schedule support call', to: '/contact' },
-];
 
 const ClientDashboard = () => {
   const navigate = useNavigate();
@@ -128,7 +106,6 @@ const ClientDashboard = () => {
   const quickActions = [
     { label: 'Create Request', hint: 'Submit a new operational task', to: '/portal/requests' },
     { label: 'Message Specialist', hint: 'Send an update or question', to: '/portal/messages' },
-    { label: 'Book Consultation', hint: 'Schedule support call', to: '/portal/calls' },
   ];
 
   const handleLogout = () => {
@@ -256,7 +233,7 @@ const ClientDashboard = () => {
               <h2 className="text-base font-semibold text-navy-900">Upcoming</h2>
             </div>
             <div className="space-y-3 p-5">
-              <p className="text-sm text-slate-500">Check your <Link to="/portal/calls" className="text-teal-600 hover:underline">scheduled calls</Link> for upcoming events.</p>
+              <p className="text-sm text-slate-500">Check your dashboard for upcoming events and updates.</p>
             </div>
           </article>
         </section>
