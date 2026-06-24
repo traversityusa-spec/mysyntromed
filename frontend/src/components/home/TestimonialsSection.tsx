@@ -9,6 +9,84 @@ export const TestimonialsSection = () => {
       author: "Dr. Abibat",
       location: "USA",
       image: "https://picsum.photos/seed/dr-abibat/100/100"
+    },
+    {
+      quote: "The precision and care MySyntroMed brings to medical coding is unmatched. A true partner in healthcare.",
+      author: "Dr. Benjamin",
+      location: "Canada",
+      image: "https://picsum.photos/seed/dr-benjamin/100/100"
+    },
+    {
+      quote: "We've seen a 40% improvement in turnaround time since switching to MySyntroMed. Absolutely recommend.",
+      author: "Dr. Chen",
+      location: "China",
+      image: "https://picsum.photos/seed/dr-chen/100/100"
+    },
+    {
+      quote: "Outstanding compliance standards and seamless integration with our existing EHR system.",
+      author: "Dr. David",
+      location: "UK",
+      image: "https://picsum.photos/seed/dr-david/100/100"
+    },
+    {
+      quote: "MySyntroMed's AI-powered solutions have drastically reduced our documentation errors.",
+      author: "Dr. Emily",
+      location: "Australia",
+      image: "https://picsum.photos/seed/dr-emily/100/100"
+    },
+    {
+      quote: "Their round-the-clock support and expertise in medical transcription is second to none.",
+      author: "Dr. Fatima",
+      location: "UAE",
+      image: "https://picsum.photos/seed/dr-fatima/100/100"
+    },
+    {
+      quote: "A game-changer for our practice. MySyntroMed handles everything from coding to billing effortlessly.",
+      author: "Dr. George",
+      location: "Germany",
+      image: "https://picsum.photos/seed/dr-george/100/100"
+    },
+    {
+      quote: "Incredible attention to detail and patient data security. We trust MySyntroMed completely.",
+      author: "Dr. Hannah",
+      location: "Netherlands",
+      image: "https://picsum.photos/seed/dr-hannah/100/100"
+    },
+    {
+      quote: "MySyntroMed helped us scale our telehealth services without compromising on quality or turnaround.",
+      author: "Dr. Isaac",
+      location: "Israel",
+      image: "https://picsum.photos/seed/dr-isaac/100/100"
+    },
+    {
+      quote: "The reporting and analytics dashboard gives us insights we never had before. Highly recommended.",
+      author: "Dr. Julia",
+      location: "Brazil",
+      image: "https://picsum.photos/seed/dr-julia/100/100"
+    },
+    {
+      quote: "Fast, accurate, and HIPAA-compliant. MySyntroMed is the gold standard for medical documentation.",
+      author: "Dr. Kevin",
+      location: "Ireland",
+      image: "https://picsum.photos/seed/dr-kevin/100/100"
+    },
+    {
+      quote: "Our entire staff loves the intuitive platform. Training was effortless and the results speak for themselves.",
+      author: "Dr. Laura",
+      location: "Italy",
+      image: "https://picsum.photos/seed/dr-laura/100/100"
+    },
+    {
+      quote: "MySyntroMed's expertise in multispecialty coding has streamlined our revenue cycle management.",
+      author: "Dr. Michael",
+      location: "South Africa",
+      image: "https://picsum.photos/seed/dr-michael/100/100"
+    },
+    {
+      quote: "From onboarding to daily operations, MySyntroMed delivers excellence at every step.",
+      author: "Dr. Nancy",
+      location: "France",
+      image: "https://picsum.photos/seed/dr-nancy/100/100"
     }
   ];
 
